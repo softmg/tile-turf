@@ -69,10 +69,20 @@ export function IsoGrid() {
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
+  const timeoutsRef = useRef<Set<number>>(new Set());
+  const intervalsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { debugRef.current = debug; }, [debug]);
-  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+  useEffect(() => {
+    gameOverRef.current = gameOver;
+    if (gameOver) {
+      for (const id of timeoutsRef.current) window.clearTimeout(id);
+      timeoutsRef.current.clear();
+      for (const id of intervalsRef.current) window.clearInterval(id);
+      intervalsRef.current.clear();
+    }
+  }, [gameOver]);
 
   // Round countdown timer
   useEffect(() => {
@@ -98,6 +108,8 @@ export function IsoGrid() {
     let destroyed = false;
     let keyHandler: ((e: KeyboardEvent) => void) | null = null;
     let resizeHandler: (() => void) | null = null;
+    let scheduledTimeouts: Set<number> | null = null;
+    let scheduledIntervals: Set<number> | null = null;
 
     (async () => {
       try {
@@ -190,7 +202,10 @@ export function IsoGrid() {
         shadow: Graphics;
         gx: number;
         gy: number;
-        anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number } | null;
+        anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number; duration: number } | null;
+        stunnedUntil: number;
+        boostUntil: number;
+        aura: Graphics;
       }
 
       const makeCharacter = (skinId: SkinId, gx: number, gy: number): Character => {
@@ -198,6 +213,10 @@ export function IsoGrid() {
         const shadow = new Graphics();
         shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
         world.addChild(shadow);
+        const aura = new Graphics();
+        aura.circle(0, 0, 36).fill({ color: 0x00ffff, alpha: 0.35 }).stroke({ width: 2, color: 0x00ffff, alpha: 0.9 });
+        aura.visible = false;
+        world.addChild(aura);
         const tex = skinTextures[skinId].player;
         const sprite = new Sprite(tex);
         sprite.anchor.set(0.5, 0.85);
@@ -206,13 +225,19 @@ export function IsoGrid() {
         sprite.scale.set(s);
         sprite.tint = skin.spriteTint;
         world.addChild(sprite);
-        return { skin, sprite, shadow, gx, gy, anim: null };
+        return { skin, sprite, shadow, gx, gy, anim: null, stunnedUntil: 0, boostUntil: 0, aura };
       };
 
       const player = makeCharacter(PLAYER_SKIN, 0, 0);
       const enemy = makeCharacter(ENEMY_SKIN, 7, 7);
 
-      const JUMP_DURATION = 380;
+      const BASE_JUMP_DURATION = 380;
+      const BOOST_JUMP_DURATION = 150;
+      const STUN_DURATION = 2000;
+      const BOOST_DURATION = 12000;
+      const jumpDurationFor = (c: Character) =>
+        performance.now() < c.boostUntil ? BOOST_JUMP_DURATION : BASE_JUMP_DURATION;
+
 
       // ---------- Minimap ----------
       const MINI_CELL = 10;
@@ -392,6 +417,130 @@ export function IsoGrid() {
         return true;
       };
 
+      // ---------- Hazards (Bombs) & Boots ----------
+      const pendingTimeouts = timeoutsRef.current;
+      const pendingIntervals = intervalsRef.current;
+      scheduledTimeouts = pendingTimeouts;
+      scheduledIntervals = pendingIntervals;
+      const setT = (fn: () => void, ms: number) => {
+        const id = window.setTimeout(() => {
+          pendingTimeouts.delete(id);
+          if (gameOverRef.current || destroyed) return;
+          fn();
+        }, ms);
+        pendingTimeouts.add(id);
+        return id;
+      };
+
+      interface Bomb {
+        gx: number; gy: number;
+        warning: Graphics;
+        boom: Graphics | null;
+        phase: "warning" | "explosion";
+      }
+      const bombs: Bomb[] = [];
+
+      const isWarningAt = (gx: number, gy: number) =>
+        bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
+
+      const spawnBomb = () => {
+        const gx = Math.floor(Math.random() * 8);
+        const gy = Math.floor(Math.random() * 8);
+        const p = isoPos(gx, gy);
+        const warning = new Graphics();
+        const drawWarning = (alpha: number) => {
+          warning.clear();
+          warning.circle(0, 0, 36).stroke({ width: 4, color: 0xff2222, alpha });
+          warning.moveTo(-30, 0).lineTo(30, 0).stroke({ width: 3, color: 0xff2222, alpha });
+          warning.moveTo(0, -22).lineTo(0, 22).stroke({ width: 3, color: 0xff2222, alpha });
+        };
+        drawWarning(1);
+        warning.x = p.x;
+        warning.y = p.y;
+        warning.zIndex = gx + gy + 0.06;
+        world.addChild(warning);
+        const bomb: Bomb = { gx, gy, warning, boom: null, phase: "warning" };
+        bombs.push(bomb);
+
+        // Pulse warning
+        let pulseT = 0;
+        const pulseId = window.setInterval(() => {
+          pulseT += 100;
+          const a = 0.5 + 0.5 * Math.abs(Math.sin(pulseT / 180));
+          drawWarning(a);
+        }, 100);
+        pendingIntervals.add(pulseId);
+
+        setT(() => {
+          window.clearInterval(pulseId);
+          pendingIntervals.delete(pulseId);
+          world.removeChild(warning);
+          warning.destroy();
+          bomb.phase = "explosion";
+
+          // Explosion graphic
+          const boom = new Graphics();
+          boom.circle(0, 0, 42).fill({ color: 0xff5500, alpha: 0.9 });
+          boom.circle(0, 0, 26).fill({ color: 0xfff2a0, alpha: 1 });
+          boom.x = p.x; boom.y = p.y;
+          boom.zIndex = gx + gy + 0.5;
+          world.addChild(boom);
+          bomb.boom = boom;
+
+          // Impact: stun anyone on this tile (and not mid-air)
+          for (const c of [player, enemy]) {
+            if (c.gx === gx && c.gy === gy && !c.anim) {
+              c.stunnedUntil = performance.now() + STUN_DURATION;
+              clearOwnedBy(c.skin.id);
+              recomputeScores();
+              updateMinimap();
+            }
+          }
+
+          setT(() => {
+            world.removeChild(boom);
+            boom.destroy();
+            const i = bombs.indexOf(bomb);
+            if (i >= 0) bombs.splice(i, 1);
+          }, 500);
+        }, 2000);
+
+        // Schedule next bomb
+        setT(spawnBomb, 5000 + Math.random() * 3000);
+      };
+
+      // Boots
+      let boots: { gx: number; gy: number; gfx: Graphics } | null = null;
+      const spawnBoots = () => {
+        if (boots) return;
+        const gx = Math.floor(Math.random() * 8);
+        const gy = Math.floor(Math.random() * 8);
+        const p = isoPos(gx, gy);
+        const gfx = new Graphics();
+        // boot body
+        gfx.roundRect(-16, -28, 32, 18, 4).fill(0x00cccc).stroke({ width: 2, color: 0x004444 });
+        gfx.roundRect(-16, -14, 28, 8, 3).fill(0x00ffff).stroke({ width: 2, color: 0x004444 });
+        // wing
+        gfx.moveTo(-18, -22).lineTo(-30, -28).lineTo(-18, -16).fill(0xffffff);
+        // glow
+        gfx.circle(0, -16, 22).stroke({ width: 2, color: 0x00ffff, alpha: 0.6 });
+        gfx.x = p.x; gfx.y = p.y;
+        gfx.zIndex = gx + gy + 0.06;
+        world.addChild(gfx);
+        boots = { gx, gy, gfx };
+      };
+
+      const tryCollectBoots = (c: Character) => {
+        if (!boots) return;
+        if (c.gx !== boots.gx || c.gy !== boots.gy) return;
+        world.removeChild(boots.gfx);
+        boots.gfx.destroy();
+        boots = null;
+        c.boostUntil = performance.now() + BOOST_DURATION;
+        // Schedule next boots after 10-15s
+        setT(spawnBoots, 10000 + Math.random() * 5000);
+      };
+
       // Initial paint
       land(player);
       land(enemy);
@@ -400,11 +549,16 @@ export function IsoGrid() {
       updateMinimap();
       recomputeScores();
 
+      // Kick off bombs and boots
+      setT(spawnBomb, 5000 + Math.random() * 3000);
+      setT(spawnBoots, 8000 + Math.random() * 4000);
+
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       const moveCharacter = (c: Character, direction: Direction) => {
         if (gameOverRef.current) return;
         if (c.anim) return;
+        if (performance.now() < c.stunnedUntil) return;
         let nx = c.gx;
         let ny = c.gy;
         if (direction === "UP") ny -= 1;
@@ -417,7 +571,7 @@ export function IsoGrid() {
         c.gx = nx;
         c.gy = ny;
         updateMinimap();
-        c.anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0 };
+        c.anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0, duration: jumpDurationFor(c) };
       };
 
       const movePlayer = (d: Direction) => moveCharacter(player, d);
@@ -462,7 +616,7 @@ export function IsoGrid() {
         for (const c of [player, enemy]) {
           if (!c.anim) continue;
           c.anim.elapsed += dtMs;
-          const linear = Math.min(1, c.anim.elapsed / JUMP_DURATION);
+          const linear = Math.min(1, c.anim.elapsed / c.anim.duration);
           const t = ease(linear);
           const gx = c.anim.fromX + (c.anim.toX - c.anim.fromX) * t;
           const gy = c.anim.fromY + (c.anim.toY - c.anim.fromY) * t;
@@ -473,6 +627,7 @@ export function IsoGrid() {
             c.anim = null;
             land(c);
             tryCollectChest(c);
+            tryCollectBoots(c);
             landedAny = true;
           }
         }
@@ -481,34 +636,69 @@ export function IsoGrid() {
           recomputeScores();
         }
 
-        // Enemy AI tick
+        // Update auras for boost
+        const nowMs = performance.now();
+        for (const c of [player, enemy]) {
+          const active = nowMs < c.boostUntil;
+          c.aura.visible = active;
+          if (active) {
+            c.aura.x = c.sprite.x;
+            c.aura.y = c.sprite.y - 30;
+            c.aura.zIndex = c.sprite.zIndex - 0.01;
+            c.aura.alpha = 0.6 + 0.3 * Math.sin(nowMs / 120);
+          }
+          // Stunned shake
+          if (nowMs < c.stunnedUntil) {
+            c.sprite.x += Math.sin(nowMs / 30) * 2;
+          }
+        }
+
+        // Enemy AI tick (skip when stunned/animating)
         enemyTimer += dtMs;
-        if (enemyTimer >= ENEMY_INTERVAL && !enemy.anim) {
+        if (
+          enemyTimer >= ENEMY_INTERVAL &&
+          !enemy.anim &&
+          performance.now() >= enemy.stunnedUntil
+        ) {
           enemyTimer = 0;
+          // Avoid bomb-warning tiles
           const valid = DIRS.filter((d) => {
+            let nx = enemy.gx, ny = enemy.gy;
+            if (d === "UP") ny--; else if (d === "DOWN") ny++;
+            else if (d === "LEFT") nx--; else nx++;
+            if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return false;
+            if (isWarningAt(nx, ny)) return false;
+            return true;
+          });
+          // If everything is dangerous, allow any in-bounds direction
+          const safe = valid.length ? valid : DIRS.filter((d) => {
             let nx = enemy.gx, ny = enemy.gy;
             if (d === "UP") ny--; else if (d === "DOWN") ny++;
             else if (d === "LEFT") nx--; else nx++;
             return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
           });
-          if (valid.length) {
+          if (safe.length) {
+            const distTo = (d: Direction, tx: number, ty: number) => {
+              let nx = enemy.gx, ny = enemy.gy;
+              if (d === "UP") ny--; else if (d === "DOWN") ny++;
+              else if (d === "LEFT") nx--; else nx++;
+              return Math.abs(nx - tx) + Math.abs(ny - ty);
+            };
             let chosen: Direction;
+            const bootsDist = boots
+              ? Math.abs(enemy.gx - boots.gx) + Math.abs(enemy.gy - boots.gy)
+              : Infinity;
             const enemyOwned = countOwned(enemy.skin.id);
-            if (enemyOwned > 3) {
-              // Hunt the chest: pick the valid direction that minimizes Manhattan distance
-              chosen = valid.reduce((best, d) => {
-                let nx = enemy.gx, ny = enemy.gy;
-                if (d === "UP") ny--; else if (d === "DOWN") ny++;
-                else if (d === "LEFT") nx--; else nx++;
-                const dist = Math.abs(nx - chest.gx) + Math.abs(ny - chest.gy);
-                let bx = enemy.gx, by = enemy.gy;
-                if (best === "UP") by--; else if (best === "DOWN") by++;
-                else if (best === "LEFT") bx--; else bx++;
-                const bestDist = Math.abs(bx - chest.gx) + Math.abs(by - chest.gy);
-                return dist < bestDist ? d : best;
-              }, valid[0]);
+            if (boots && bootsDist <= 2) {
+              chosen = safe.reduce((best, d) =>
+                distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best,
+                safe[0]);
+            } else if (enemyOwned > 3) {
+              chosen = safe.reduce((best, d) =>
+                distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best,
+                safe[0]);
             } else {
-              chosen = valid[Math.floor(Math.random() * valid.length)];
+              chosen = safe[Math.floor(Math.random() * safe.length)];
             }
             moveCharacter(enemy, chosen);
           }
@@ -617,6 +807,14 @@ export function IsoGrid() {
 
     return () => {
       destroyed = true;
+      if (scheduledTimeouts) {
+        for (const id of scheduledTimeouts) window.clearTimeout(id);
+        scheduledTimeouts.clear();
+      }
+      if (scheduledIntervals) {
+        for (const id of scheduledIntervals) window.clearInterval(id);
+        scheduledIntervals.clear();
+      }
       if (keyHandler) window.removeEventListener("keydown", keyHandler);
       if (resizeHandler) window.removeEventListener("resize", resizeHandler);
       try {
