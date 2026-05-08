@@ -561,6 +561,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         tile.texture = skinTextures[skin.id].tile;
         tile.tint = skin.spriteTint;
         minimapTilesDirty = true;
+        statsAccum.current.paints += 1;
       };
 
       const renderCharacterAt = (c: Character, gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
