@@ -158,14 +158,8 @@ export function IsoGrid() {
           owners[x][y] = null;
         }
       }
-          tile.x = p.x;
-          tile.y = p.y;
-          tile.zIndex = x + y;
-          world.addChild(tile);
-          tiles[x][y] = tile;
-          owners[x][y] = null;
-        }
-      }
+
+
 
       // ---------- Characters ----------
       interface Character {
