@@ -389,16 +389,52 @@ export function IsoGrid() {
   }, []);
 
   return (
-    <div
-      className="fixed inset-0"
-      style={{
-        touchAction: "none",
-        userSelect: "none",
-        backgroundImage: `url(${backgroundUrl})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-      ref={containerRef}
-    />
+    <>
+      <div
+        className="fixed inset-0"
+        style={{
+          touchAction: "none",
+          userSelect: "none",
+          backgroundImage: `url(${backgroundUrl})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+        ref={containerRef}
+      />
+      <div
+        className="fixed left-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
+        style={{ touchAction: "none" }}
+      >
+        <button
+          type="button"
+          onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+          aria-label="Zoom out"
+        >
+          −
+        </button>
+        <input
+          type="range"
+          min={0.4}
+          max={2}
+          step={0.05}
+          value={zoom}
+          onChange={(e) => setZoom(parseFloat(e.target.value))}
+          className="w-28 accent-white"
+          aria-label="Zoom"
+        />
+        <button
+          type="button"
+          onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+          aria-label="Zoom in"
+        >
+          +
+        </button>
+        <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
+          {Math.round(zoom * 100)}%
+        </span>
+      </div>
+    </>
   );
 }
