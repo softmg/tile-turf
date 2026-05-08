@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Settings, Play } from "lucide-react";
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
 import backgroundUrl from "@/assets/background.png";
 import playerUrl from "@/assets/player.png";
