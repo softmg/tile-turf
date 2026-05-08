@@ -672,6 +672,59 @@ export function IsoGrid() {
         </span>
       </div>
 
+      {/* Timer */}
+      <div
+        className="fixed left-1/2 top-16 z-50 -translate-x-1/2 rounded-full bg-black/55 px-4 py-1 backdrop-blur-sm shadow-lg"
+        style={{ touchAction: "none" }}
+      >
+        <span
+          className="font-mono text-2xl font-extrabold tabular-nums tracking-wider"
+          style={{
+            color: urgent ? "#ff3b3b" : "#ffffff",
+            textShadow: urgent ? "0 0 10px rgba(255,59,59,0.7)" : "none",
+            animation: urgent ? "iso-pulse 0.8s ease-in-out infinite" : "none",
+            display: "inline-block",
+          }}
+        >
+          {mm}:{ss}
+        </span>
+        <style>{`@keyframes iso-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.85; } }`}</style>
+      </div>
+
+      {/* Game Over overlay */}
+      {gameOver && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]">
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">End of Round</div>
+            <div className="mt-2 text-3xl font-extrabold text-white">
+              {isTie ? "It's a Tie!" : (
+                <span style={{ color: SKINS[winner].uiColor }}>
+                  {SKINS[winner].name} wins!
+                </span>
+              )}
+            </div>
+            <div className="mt-5 space-y-2 text-left">
+              {[PLAYER_SKIN, ENEMY_SKIN].map((id) => (
+                <div key={id} className="flex items-center justify-between gap-6 rounded-lg bg-white/5 px-3 py-2">
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-3 rounded-full" style={{ background: SKINS[id].uiColor }} />
+                    <span className="font-bold" style={{ color: SKINS[id].uiColor }}>{SKINS[id].name}</span>
+                  </span>
+                  <span className="font-mono text-lg font-bold text-white tabular-nums">{banked[id]}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-6 w-full rounded-full bg-emerald-400 px-4 py-2 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              Play Again
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         className="fixed left-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
         style={{ touchAction: "none" }}
