@@ -792,6 +792,10 @@ export function IsoGrid() {
 
     return () => {
       destroyed = true;
+      if (scheduledTimeouts) {
+        for (const id of scheduledTimeouts) window.clearTimeout(id);
+        scheduledTimeouts.clear();
+      }
       if (keyHandler) window.removeEventListener("keydown", keyHandler);
       if (resizeHandler) window.removeEventListener("resize", resizeHandler);
       try {
