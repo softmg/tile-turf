@@ -607,8 +607,8 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       interface Bomb {
         gx: number; gy: number;
-        warning: Graphics;
-        boom: Graphics | null;
+        warning: Sprite;
+        boom: Sprite | null;
         phase: "warning" | "explosion";
       }
       const bombs: Bomb[] = [];
@@ -616,51 +616,75 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       const isWarningAt = (gx: number, gy: number) =>
         bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
 
+      const BOMB_TARGET_H = 90;
+      const BOOM_TARGET_H = 140;
+      const bombScale = (tex: Texture, target: number) => target / Math.max(tex.height, 1);
+
       const spawnBomb = () => {
         if (gameOverRef.current) return;
         if (pausedRef.current || !startedRef.current) { setT(spawnBomb, 800); return; }
         const gx = Math.floor(Math.random() * 8);
         const gy = Math.floor(Math.random() * 8);
         const p = isoPos(gx, gy);
-        const warning = new Graphics();
-        const drawWarning = (alpha: number) => {
-          warning.clear();
-          warning.circle(0, 0, 36).stroke({ width: 4, color: 0xff2222, alpha });
-          warning.moveTo(-30, 0).lineTo(30, 0).stroke({ width: 3, color: 0xff2222, alpha });
-          warning.moveTo(0, -22).lineTo(0, 22).stroke({ width: 3, color: 0xff2222, alpha });
-        };
-        drawWarning(1);
+
+        const warning = new Sprite(bombTex1);
+        warning.anchor.set(0.5, 1);
+        warning.scale.set(bombScale(bombTex1, BOMB_TARGET_H));
         warning.x = p.x;
-        warning.y = p.y;
+        warning.y = p.y + 14;
         warning.zIndex = gx + gy + 0.06;
         world.addChild(warning);
         const bomb: Bomb = { gx, gy, warning, boom: null, phase: "warning" };
         bombs.push(bomb);
 
-        // Pulse warning
-        let pulseT = 0;
-        const pulseId = window.setInterval(() => {
-          pulseT += 100;
-          const a = 0.5 + 0.5 * Math.abs(Math.sin(pulseT / 180));
-          drawWarning(a);
-        }, 100);
-        pendingIntervals.add(pulseId);
+        // Animate: cycle frames + shake near the end
+        const startedAt = performance.now();
+        const tickId = window.setInterval(() => {
+          const elapsed = performance.now() - startedAt;
+          let tex = bombTex1;
+          if (elapsed > 1400) tex = bombTex3;
+          else if (elapsed > 600) tex = bombTex2;
+          if (warning.texture !== tex) {
+            warning.texture = tex;
+            warning.scale.set(bombScale(tex, BOMB_TARGET_H));
+          }
+          // Shake last 600ms
+          if (elapsed > 1400) {
+            const k = (elapsed - 1400) / 600;
+            const amp = 1 + k * 3;
+            warning.x = p.x + (Math.random() - 0.5) * amp * 2;
+          } else {
+            warning.x = p.x;
+          }
+        }, 60);
+        pendingIntervals.add(tickId);
 
         setT(() => {
-          window.clearInterval(pulseId);
-          pendingIntervals.delete(pulseId);
+          window.clearInterval(tickId);
+          pendingIntervals.delete(tickId);
           world.removeChild(warning);
           warning.destroy();
           bomb.phase = "explosion";
 
-          // Explosion graphic
-          const boom = new Graphics();
-          boom.circle(0, 0, 42).fill({ color: 0xff5500, alpha: 0.9 });
-          boom.circle(0, 0, 26).fill({ color: 0xfff2a0, alpha: 1 });
+          // Explosion sprite
+          const boom = new Sprite(boomTex);
+          boom.anchor.set(0.5, 0.5);
+          boom.scale.set(bombScale(boomTex, BOOM_TARGET_H));
           boom.x = p.x; boom.y = p.y;
           boom.zIndex = gx + gy + 0.5;
           world.addChild(boom);
           bomb.boom = boom;
+
+          // Pop-in tween
+          const boomStart = performance.now();
+          const boomTickId = window.setInterval(() => {
+            const dt = performance.now() - boomStart;
+            const k = Math.min(1, dt / 220);
+            const s = bombScale(boomTex, BOOM_TARGET_H) * (0.4 + 0.6 * k);
+            boom.scale.set(s);
+            boom.alpha = Math.max(0, 1 - Math.max(0, dt - 280) / 220);
+          }, 30);
+          pendingIntervals.add(boomTickId);
 
           // Impact: stun anyone on this tile (and not mid-air)
           for (const c of [player, ...enemies]) {
@@ -673,6 +697,8 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           }
 
           setT(() => {
+            window.clearInterval(boomTickId);
+            pendingIntervals.delete(boomTickId);
             world.removeChild(boom);
             boom.destroy();
             const i = bombs.indexOf(bomb);
