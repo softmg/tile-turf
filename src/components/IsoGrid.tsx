@@ -719,7 +719,7 @@ export function IsoGrid() {
 
       // Initial paint
       land(player);
-      land(enemy);
+      for (const e of enemies) land(e);
       positionMinimap();
       updateMinimap();
       recomputeScores();
