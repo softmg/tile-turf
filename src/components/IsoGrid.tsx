@@ -896,9 +896,10 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
           }
         }
         if (landedAny) {
-          updateMinimap();
           recomputeScores();
         }
+        // Refresh minimap each frame so chest/arrow/bombs stay in sync
+        updateMinimap();
 
         // Update auras for boost
         const nowMs = performance.now();
