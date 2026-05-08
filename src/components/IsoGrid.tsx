@@ -140,13 +140,14 @@ export function IsoGrid() {
 
       // Load uploaded local PNG assets via Pixi's Assets pipeline.
       // Local Vite-served files have proper extensions and no CORS issues.
-      const [unpaintedTex, paintedTex, playerTex] = await Promise.all([
+      const [unpaintedTex, paintedTex, playerTex, chestTex] = await Promise.all([
         Assets.load<Texture>(UNPAINTED_TILE_URL),
         Assets.load<Texture>(tilePaintedUrl),
         Assets.load<Texture>(playerUrl),
+        Assets.load<Texture>(chestUrl),
       ]);
       if (destroyed) return;
-      for (const t of [unpaintedTex, paintedTex, playerTex]) {
+      for (const t of [unpaintedTex, paintedTex, playerTex, chestTex]) {
         if (t?.source) {
           t.source.scaleMode = "linear";
           t.source.autoGenerateMipmaps = true;
