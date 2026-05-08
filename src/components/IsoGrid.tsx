@@ -712,6 +712,7 @@ export function IsoGrid() {
 
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
+        const frozen = !startedRef.current || pausedRef.current || gameOverRef.current;
 
         if (debugRef.current) {
           const s = statsAccum.current;
