@@ -170,11 +170,11 @@ export function IsoGrid() {
         const shadow = new Graphics();
         shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
         world.addChild(shadow);
-        const tex = skinTextures[skinId].player;
-        const sprite = new Sprite(tex);
+        const sprite = new Sprite(whiteTex);
         sprite.anchor.set(0.5, 0.85);
-        const s = 90 / Math.max(tex.width, 1);
-        sprite.scale.set(s);
+        sprite.width = 60;
+        sprite.height = 90;
+        sprite.tint = skin.minimapColor;
         world.addChild(sprite);
         return { skin, sprite, shadow, gx, gy, anim: null };
       };
