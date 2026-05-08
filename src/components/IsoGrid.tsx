@@ -215,8 +215,17 @@ export function IsoGrid() {
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
 
+        // Smooth zoom toward target
+        const zSmooth = 1 - Math.exp(-dtMs / 100);
+        const curScale = world.scale.x;
+        const nextScale = curScale + (zoomRef.current - curScale) * zSmooth;
+        world.scale.set(nextScale);
+
         // Smooth camera lerp toward target, framerate-independent
         computeCameraTarget();
+        const camSmooth = 1 - Math.exp(-dtMs / 80);
+        world.x += (cameraTargetX - world.x) * camSmooth;
+        world.y += (cameraTargetY - world.y) * camSmooth;
         const camSmooth = 1 - Math.exp(-dtMs / 80);
         world.x += (cameraTargetX - world.x) * camSmooth;
         world.y += (cameraTargetY - world.y) * camSmooth;
