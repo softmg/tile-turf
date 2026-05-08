@@ -1,12 +1,10 @@
 import { useEffect, useRef } from "react";
-import { Application, Container, Graphics } from "pixi.js";
-import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Application, Container, Graphics, Rectangle, FederatedPointerEvent } from "pixi.js";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const moveRef = useRef<(d: Direction) => void>(() => {});
 
   useEffect(() => {
     const host = containerRef.current;
@@ -87,7 +85,81 @@ export function IsoGrid() {
         updatePlayer();
       };
 
-      moveRef.current = movePlayer;
+      // ---------- Joystick ----------
+      const joystick = new Container();
+      joystick.zIndex = 1000;
+      joystick.visible = false;
+      joystick.scale.y = 0.5;
+      app.stage.sortableChildren = true;
+      app.stage.addChild(joystick);
+
+      const base = new Graphics();
+      base.circle(0, 0, 50).fill({ color: 0x000000, alpha: 0.3 });
+      joystick.addChild(base);
+
+      const knob = new Graphics();
+      knob.circle(0, 0, 25).fill({ color: 0xffffff, alpha: 0.7 });
+      joystick.addChild(knob);
+
+      app.stage.eventMode = "static";
+      app.stage.hitArea = new Rectangle(0, 0, 800, 600);
+
+      let isDragging = false;
+      let baseX = 0;
+      let baseY = 0;
+      let lastMoveTime = 0;
+      const MAX_RADIUS = 40;
+      const THRESHOLD = 30;
+      const COOLDOWN = 200;
+
+      const onDown = (e: FederatedPointerEvent) => {
+        baseX = e.global.x;
+        baseY = e.global.y;
+        joystick.x = baseX;
+        joystick.y = baseY;
+        knob.x = 0;
+        knob.y = 0;
+        joystick.visible = true;
+        isDragging = true;
+      };
+
+      const onMove = (e: FederatedPointerEvent) => {
+        if (!isDragging) return;
+        // dx/dy in screen space
+        const dx = e.global.x - baseX;
+        const dy = e.global.y - baseY;
+        const dist = Math.hypot(dx, dy);
+        const clamped = Math.min(dist, MAX_RADIUS);
+        const angle = Math.atan2(dy, dx);
+        // knob position is in joystick local space; since scale.y=0.5, divide y by 0.5 to render in screen pixels
+        knob.x = Math.cos(angle) * clamped;
+        knob.y = (Math.sin(angle) * clamped) / 0.5;
+
+        if (dist < THRESHOLD) return;
+        const now = performance.now();
+        if (now - lastMoveTime < COOLDOWN) return;
+
+        // Isometric mapping based on screen-space angle (degrees)
+        const deg = (angle * 180) / Math.PI; // -180..180, 0 = right
+        let dir: Direction;
+        if (deg >= -90 && deg < 0) dir = "UP"; // top-right
+        else if (deg >= 0 && deg < 90) dir = "RIGHT"; // bottom-right
+        else if (deg >= 90 && deg <= 180) dir = "DOWN"; // bottom-left
+        else dir = "LEFT"; // top-left
+
+        movePlayer(dir);
+        lastMoveTime = now;
+      };
+
+      const onUp = () => {
+        isDragging = false;
+        joystick.visible = false;
+      };
+
+      app.stage.on("pointerdown", onDown);
+      app.stage.on("pointermove", onMove);
+      app.stage.on("pointerup", onUp);
+      app.stage.on("pointerupoutside", onUp);
 
       keyHandler = (e: KeyboardEvent) => {
         let dir: Direction | null = null;
@@ -132,64 +204,12 @@ export function IsoGrid() {
     };
   }, []);
 
-  const press = (dir: Direction) => (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    moveRef.current(dir);
-  };
-
-  const btn =
-    "flex items-center justify-center w-14 h-14 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-white shadow-lg active:bg-black/70 active:scale-95 transition";
-
   return (
     <div
       className="relative w-full flex justify-center"
       style={{ touchAction: "none", userSelect: "none" }}
     >
       <div ref={containerRef} className="max-w-full overflow-hidden" />
-      <div
-        className="absolute bottom-4 left-1/2 -translate-x-1/2"
-        style={{ touchAction: "none", userSelect: "none" }}
-      >
-        <div className="grid grid-cols-3 grid-rows-3 gap-2 w-52 h-52 p-2 rounded-3xl bg-black/30 backdrop-blur-md border border-white/10">
-          <div />
-          <button
-            aria-label="Up"
-            className={btn}
-            onPointerDown={press("UP")}
-            onTouchStart={press("UP")}
-          >
-            <ChevronUp />
-          </button>
-          <div />
-          <button
-            aria-label="Left"
-            className={btn}
-            onPointerDown={press("LEFT")}
-            onTouchStart={press("LEFT")}
-          >
-            <ChevronLeft />
-          </button>
-          <div />
-          <button
-            aria-label="Right"
-            className={btn}
-            onPointerDown={press("RIGHT")}
-            onTouchStart={press("RIGHT")}
-          >
-            <ChevronRight />
-          </button>
-          <div />
-          <button
-            aria-label="Down"
-            className={btn}
-            onPointerDown={press("DOWN")}
-            onTouchStart={press("DOWN")}
-          >
-            <ChevronDown />
-          </button>
-          <div />
-        </div>
-      </div>
     </div>
   );
 }
