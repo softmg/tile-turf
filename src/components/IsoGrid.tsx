@@ -103,17 +103,29 @@ export function IsoGrid() {
 
 
 
-      // Use the built-in WHITE texture and tint sprites — bypasses any
-      // texture-creation pitfalls in Pixi v8 with custom canvases.
-      const whiteTex = Texture.WHITE;
+      // Load uploaded local PNG assets via Pixi's Assets pipeline.
+      // Local Vite-served files have proper extensions and no CORS issues.
+      const [unpaintedTex, paintedTex, playerTex] = await Promise.all([
+        Assets.load<Texture>(UNPAINTED_TILE_URL),
+        Assets.load<Texture>(tilePaintedUrl),
+        Assets.load<Texture>(playerUrl),
+      ]);
+      if (destroyed) return;
+      for (const t of [unpaintedTex, paintedTex, playerTex]) {
+        if (t?.source) {
+          t.source.scaleMode = "linear";
+          t.source.autoGenerateMipmaps = true;
+          t.source.updateMipmaps?.();
+        }
+      }
       const skinTextures: Record<SkinId, { tile: Texture; player: Texture }> = {
-        plush:  { tile: whiteTex, player: whiteTex },
-        girl:   { tile: whiteTex, player: whiteTex },
-        alien:  { tile: whiteTex, player: whiteTex },
-        knight: { tile: whiteTex, player: whiteTex },
+        plush:  { tile: paintedTex, player: playerTex },
+        girl:   { tile: paintedTex, player: playerTex },
+        alien:  { tile: paintedTex, player: playerTex },
+        knight: { tile: paintedTex, player: playerTex },
       };
-      const unpaintedTex = whiteTex;
       console.log("[IsoGrid] textures ready");
+
 
 
       const world = new Container();
