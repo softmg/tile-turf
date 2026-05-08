@@ -252,6 +252,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           Assets.load<Texture>(bomb3Url),
           Assets.load<Texture>(bomb4Url),
         ]);
+      if (destroyed) return;
       for (const t of [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex]) {
         if (t?.source) {
           t.source.scaleMode = "linear";
