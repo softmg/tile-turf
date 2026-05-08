@@ -104,6 +104,10 @@ export function IsoGrid() {
       }
       host.appendChild(app.canvas);
       console.log("[IsoGrid] canvas appended", app.canvas.width, app.canvas.height);
+      window.addEventListener("error", (e) => console.error("[IsoGrid] window error", e.error || e.message));
+      window.addEventListener("unhandledrejection", (e) => console.error("[IsoGrid] unhandled rejection", e.reason));
+      try {
+
 
       const hex = (n: number) => "#" + n.toString(16).padStart(6, "0");
       const makeTileTex = (fill: number, edge: number): Texture => {
