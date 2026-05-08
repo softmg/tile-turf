@@ -82,6 +82,12 @@ export function IsoGrid() {
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
+  const [botCount, setBotCount] = useState(1);
+  const botCountRef = useRef(1);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => { botCountRef.current = botCount; }, [botCount]);
+  const activeBotSkins: SkinId[] = BOT_SKINS.slice(0, botCount);
+  const activeSkins: SkinId[] = [PLAYER_SKIN, ...activeBotSkins];
   const timeoutsRef = useRef<Set<number>>(new Set());
   const intervalsRef = useRef<Set<number>>(new Set());
 
