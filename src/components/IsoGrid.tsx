@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Application, Container, Graphics, Rectangle, Sprite, Texture, ImageSource, FederatedPointerEvent } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
 import backgroundUrl from "@/assets/background.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
@@ -85,49 +85,43 @@ export function IsoGrid() {
     let resizeHandler: (() => void) | null = null;
 
     (async () => {
-      await app.init({
-        resizeTo: window,
-        backgroundAlpha: 0,
-        antialias: true,
-        resolution: Math.min(window.devicePixelRatio || 1, 3),
-        autoDensity: true,
-      });
+      try {
+        await app.init({
+          resizeTo: window,
+          backgroundAlpha: 0,
+          antialias: true,
+          resolution: Math.min(window.devicePixelRatio || 1, 3),
+          autoDensity: true,
+          preference: "webgl",
+        });
+      } catch (err) {
+        console.error("[IsoGrid] Pixi init failed", err);
+        return;
+      }
       if (destroyed) {
         app.destroy(true, { children: true });
         return;
       }
       host.appendChild(app.canvas);
+      console.log("[IsoGrid] canvas appended", app.canvas.width, app.canvas.height);
+      window.addEventListener("error", (e) => console.error("[IsoGrid] window error", e.error || e.message));
+      window.addEventListener("unhandledrejection", (e) => console.error("[IsoGrid] unhandled rejection", e.reason));
 
-      // Preload textures: unpainted tile + every skin's tile + every skin's player.
-      // placehold.co URLs have no file extension, so Pixi's Assets parser cannot
-      // auto-detect them. We load via HTMLImageElement and build textures manually.
-      const loadTex = async (url: string): Promise<Texture> => {
-        const res = await fetch(url, { mode: "cors" });
-        const blob = await res.blob();
-        const bitmap = await createImageBitmap(blob);
-        const source = new ImageSource({ resource: bitmap });
-        return new Texture({ source });
+
+
+
+      // Use the built-in WHITE texture and tint sprites — bypasses any
+      // texture-creation pitfalls in Pixi v8 with custom canvases.
+      const whiteTex = Texture.WHITE;
+      const skinTextures: Record<SkinId, { tile: Texture; player: Texture }> = {
+        plush:  { tile: whiteTex, player: whiteTex },
+        girl:   { tile: whiteTex, player: whiteTex },
+        alien:  { tile: whiteTex, player: whiteTex },
+        knight: { tile: whiteTex, player: whiteTex },
       };
+      const unpaintedTex = whiteTex;
+      console.log("[IsoGrid] textures ready");
 
-      const skinList = Object.values(SKINS);
-      const [unpaintedTex, ...rest] = await Promise.all([
-        loadTex(UNPAINTED_TILE_URL),
-        ...skinList.flatMap((s) => [loadTex(s.tileSprite), loadTex(s.playerSprite)]),
-      ]);
-      const skinTextures: Record<SkinId, { tile: Texture; player: Texture }> = {} as never;
-      skinList.forEach((s, i) => {
-        skinTextures[s.id] = { tile: rest[i * 2] as Texture, player: rest[i * 2 + 1] as Texture };
-      });
-
-      const allTex: Texture[] = [unpaintedTex as Texture, ...skinList.flatMap((s) => [skinTextures[s.id].tile, skinTextures[s.id].player])];
-      for (const t of allTex) {
-        if (t && t.source) {
-          t.source.scaleMode = "linear";
-          t.source.autoGenerateMipmaps = true;
-          t.source.updateMipmaps?.();
-        }
-      }
-      if (destroyed) return;
 
       const world = new Container();
       world.sortableChildren = true;
@@ -150,6 +144,7 @@ export function IsoGrid() {
           tile.anchor.set(0.5, 0.5);
           tile.width = TILE_SIZE;
           tile.height = TILE_SIZE;
+          tile.tint = UNPAINTED_MINIMAP_COLOR;
           const p = isoPos(x, y);
           tile.x = p.x;
           tile.y = p.y;
@@ -175,11 +170,11 @@ export function IsoGrid() {
         const shadow = new Graphics();
         shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
         world.addChild(shadow);
-        const tex = skinTextures[skinId].player;
-        const sprite = new Sprite(tex);
+        const sprite = new Sprite(whiteTex);
         sprite.anchor.set(0.5, 0.85);
-        const s = 90 / Math.max(tex.width, 1);
-        sprite.scale.set(s);
+        sprite.width = 60;
+        sprite.height = 90;
+        sprite.tint = skin.minimapColor;
         world.addChild(sprite);
         return { skin, sprite, shadow, gx, gy, anim: null };
       };
@@ -288,7 +283,7 @@ export function IsoGrid() {
 
       const paintAt = (gx: number, gy: number, skin: SkinConfig) => {
         owners[gx][gy] = skin.id;
-        tiles[gx][gy].texture = skinTextures[skin.id].tile;
+        tiles[gx][gy].tint = skin.minimapColor;
       };
 
       const renderCharacterAt = (c: Character, gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
@@ -502,7 +497,9 @@ export function IsoGrid() {
       };
       window.addEventListener("resize", resizeHandler);
       centerCamera();
+
     })();
+
 
     return () => {
       destroyed = true;
