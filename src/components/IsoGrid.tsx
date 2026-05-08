@@ -144,6 +144,7 @@ export function IsoGrid() {
           tile.anchor.set(0.5, 0.5);
           tile.width = TILE_SIZE;
           tile.height = TILE_SIZE;
+          tile.tint = UNPAINTED_MINIMAP_COLOR;
           const p = isoPos(x, y);
           tile.x = p.x;
           tile.y = p.y;
