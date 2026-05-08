@@ -1100,28 +1100,29 @@ export function IsoGrid() {
         </div>
       )}
 
-      {/* Pause / Settings gear (top-right) */}
+      {/* Settings gear (top-right) */}
       <button
         type="button"
         onClick={() => {
-          if (!started) return;
-          setPaused((p) => !p);
+          if (started && !gameOver) setPaused(true);
+          setSettingsOpen(true);
         }}
-        disabled={!started || gameOver}
+        disabled={gameOver}
         className="fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm shadow-lg active:scale-95 disabled:opacity-40"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
-        aria-label={paused ? "Resume" : "Pause"}
+        aria-label="Settings"
       >
         <Settings size={20} />
       </button>
 
       {/* Start overlay */}
-      {!started && !gameOver && (
+      {!started && !gameOver && !settingsOpen && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[260px]">
             <div className="text-xs font-bold uppercase tracking-widest text-white/50">Get Ready</div>
             <div className="mt-2 text-2xl font-extrabold text-white">Paint the Grid!</div>
             <p className="mt-3 text-sm text-white/70">Tap & drag to move. Bank tiles at the chest. 90s round.</p>
+            <p className="mt-1 text-xs text-white/50">Bots: {botCount}</p>
             <button
               type="button"
               onClick={() => setStarted(true)}
@@ -1129,22 +1130,61 @@ export function IsoGrid() {
             >
               <Play size={16} fill="currentColor" /> Start Round
             </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white active:scale-95"
+            >
+              <Settings size={14} /> Settings
+            </button>
           </div>
         </div>
       )}
 
-      {/* Pause overlay */}
-      {paused && started && !gameOver && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[240px]">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paused</div>
-            <div className="mt-2 text-2xl font-extrabold text-white">Take a breath</div>
+      {/* Settings / Pause overlay */}
+      {settingsOpen && !gameOver && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="rounded-2xl bg-zinc-900/95 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]">
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">
+              {started ? "Paused" : "Settings"}
+            </div>
+            <div className="mt-1 text-2xl font-extrabold text-white">Game Setup</div>
+
+            <div className="mt-5 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white/80">Bots</span>
+                <span className="font-mono text-lg font-extrabold text-white tabular-nums">{botCount}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {[1, 2, 3, 4].map((n) => {
+                  const disabled = started; // can only change before round starts
+                  const active = botCount === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setBotCount(n)}
+                      className={`rounded-lg px-3 py-2 text-sm font-bold transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                        active ? "bg-emerald-400 text-black" : "bg-white/10 text-white"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+              {started && (
+                <p className="mt-2 text-[11px] text-white/50">Bot count locks once the round starts.</p>
+              )}
+            </div>
+
             <button
               type="button"
-              onClick={() => setPaused(false)}
+              onClick={() => { setSettingsOpen(false); setPaused(false); }}
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
             >
-              <Play size={16} fill="currentColor" /> Resume
+              <Play size={16} fill="currentColor" /> {started ? "Resume" : "Close"}
             </button>
           </div>
         </div>
