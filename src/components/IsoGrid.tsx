@@ -6,6 +6,10 @@ import playerUrl from "@/assets/player.png";
 import tileUrl from "@/assets/tile.png";
 import tilePaintedUrl from "@/assets/tile-painted.png";
 import chestUrl from "@/assets/chest.png";
+import bomb1Url from "@/assets/bomb/bomb1.png";
+import bomb2Url from "@/assets/bomb/bomb2.png";
+import bomb3Url from "@/assets/bomb/bomb3.png";
+import bomb4Url from "@/assets/bomb/bomb4.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
