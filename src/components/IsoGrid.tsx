@@ -85,18 +85,25 @@ export function IsoGrid() {
     let resizeHandler: (() => void) | null = null;
 
     (async () => {
-      await app.init({
-        resizeTo: window,
-        backgroundAlpha: 0,
-        antialias: true,
-        resolution: Math.min(window.devicePixelRatio || 1, 3),
-        autoDensity: true,
-      });
+      try {
+        await app.init({
+          resizeTo: window,
+          backgroundAlpha: 0,
+          antialias: true,
+          resolution: Math.min(window.devicePixelRatio || 1, 3),
+          autoDensity: true,
+          preference: "webgl",
+        });
+      } catch (err) {
+        console.error("[IsoGrid] Pixi init failed", err);
+        return;
+      }
       if (destroyed) {
         app.destroy(true, { children: true });
         return;
       }
       host.appendChild(app.canvas);
+      console.log("[IsoGrid] canvas appended", app.canvas.width, app.canvas.height);
 
       const hex = (n: number) => "#" + n.toString(16).padStart(6, "0");
       const makeTileTex = (fill: number, edge: number): Texture => {
