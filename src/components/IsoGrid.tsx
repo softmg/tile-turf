@@ -692,10 +692,10 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         const p = isoPos(gx, gy);
 
         const warning = new Sprite(bombTex1);
-        warning.anchor.set(0.5, 1);
+        warning.anchor.set(0.5, 0.5);
         warning.scale.set(bombScale(bombTex1, BOMB_TARGET_H));
         warning.x = p.x;
-        warning.y = p.y + 14;
+        warning.y = p.y;
         warning.zIndex = gx + gy + 0.06;
         world.addChild(warning);
         const bomb: Bomb = { gx, gy, warning, boom: null, phase: "warning" };
