@@ -100,6 +100,7 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
   const botCountRef = useRef(botCount);
   const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   useEffect(() => { botCountRef.current = botCount; levelRef.current = level; }, [botCount, level]);
   const activeBotSkins: SkinId[] = BOT_SKINS.slice(0, botCount);
   const activeSkins: SkinId[] = [PLAYER_SKIN, ...activeBotSkins];
