@@ -313,10 +313,78 @@ export function IsoGrid() {
         renderCharacterAt(c, c.gx, c.gy);
       };
 
+      // ---------- Chest ----------
+      const chestGfx = new Graphics();
+      // Body
+      chestGfx.roundRect(-22, -34, 44, 32, 4).fill(0xb8860b).stroke({ width: 2, color: 0x4a2c0a });
+      // Lid
+      chestGfx.roundRect(-22, -44, 44, 14, 4).fill(0xffd700).stroke({ width: 2, color: 0x4a2c0a });
+      // Lock
+      chestGfx.rect(-4, -28, 8, 8).fill(0x4a2c0a);
+      // Highlight
+      chestGfx.rect(-18, -41, 36, 3).fill({ color: 0xffffff, alpha: 0.4 });
+      world.addChild(chestGfx);
+      const chest = { gx: 0, gy: 0, gfx: chestGfx };
+
+      const spawnChest = () => {
+        // Pick a random tile that is not currently occupied by either character
+        let gx = 0, gy = 0;
+        for (let i = 0; i < 50; i++) {
+          gx = Math.floor(Math.random() * 8);
+          gy = Math.floor(Math.random() * 8);
+          if ((gx !== player.gx || gy !== player.gy) && (gx !== enemy.gx || gy !== enemy.gy)) break;
+        }
+        chest.gx = gx;
+        chest.gy = gy;
+        const p = isoPos(gx, gy);
+        chestGfx.x = p.x;
+        chestGfx.y = p.y + 8;
+        chestGfx.zIndex = gx + gy + 0.05;
+      };
+
+      const recomputeScores = () => {
+        const next: Record<SkinId, number> = { plush: 0, girl: 0, alien: 0, knight: 0 };
+        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
+          const o = owners[x][y];
+          if (o) next[o]++;
+        }
+        setScores(next);
+        return next;
+      };
+
+      const countOwned = (skinId: SkinId) => {
+        let n = 0;
+        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) if (owners[x][y] === skinId) n++;
+        return n;
+      };
+
+      const clearOwnedBy = (skinId: SkinId) => {
+        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
+          if (owners[x][y] === skinId) {
+            owners[x][y] = null;
+            const t = tiles[x][y];
+            t.texture = unpaintedTex;
+            t.tint = 0xffffff;
+          }
+        }
+      };
+
+      const tryCollectChest = (c: Character) => {
+        if (c.gx !== chest.gx || c.gy !== chest.gy) return false;
+        const gained = countOwned(c.skin.id);
+        if (gained > 0) {
+          setBanked((prev) => ({ ...prev, [c.skin.id]: prev[c.skin.id] + gained }));
+          clearOwnedBy(c.skin.id);
+        }
+        spawnChest();
+        return true;
+      };
+
       // Initial paint
       land(player);
       land(enemy);
       positionMinimap();
+      spawnChest();
       updateMinimap();
       recomputeScores();
 
