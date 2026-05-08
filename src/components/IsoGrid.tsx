@@ -94,8 +94,16 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
   const [zoomOpen, setZoomOpen] = useState(false);
   const [debug, setDebug] = useState(false);
   const debugRef = useRef(false);
-  const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
-  const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
+  const [stats, setStats] = useState({
+    fps: 0, frameMs: 0, maxMs: 0,
+    paints: 0, miniCells: 0, miniPasses: 0,
+    anims: 0, bombs: 0, enemies: 0,
+  });
+  const statsAccum = useRef({
+    frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0,
+    paints: 0, miniCells: 0, miniPasses: 0,
+    animSum: 0, animSamples: 0, bombsMax: 0, enemiesActive: 0,
+  });
   const [scores, setScores] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
   const [banked, setBanked] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
   const ROUND_DURATION =
