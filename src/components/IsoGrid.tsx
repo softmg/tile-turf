@@ -791,7 +791,7 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
       // Enemy AI: random walk every ~700ms
       const DIRS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
       let enemyTimer = 0;
-      const ENEMY_INTERVAL = 700;
+      const enemyInterval = () => enemyIntervalForLevel(levelRef.current);
 
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
