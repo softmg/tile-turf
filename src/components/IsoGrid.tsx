@@ -597,6 +597,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       const lastScores: Record<SkinId, number> = ZERO_SCORES();
       let scoresDirty = false;
+      let lastScoresFlush = 0;
       const recomputeScores = () => {
         let changed = false;
         const next: Record<SkinId, number> = ZERO_SCORES();
