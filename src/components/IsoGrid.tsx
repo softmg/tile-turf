@@ -1001,8 +1001,8 @@ export function IsoGrid() {
       )}
 
       <div
-        className="fixed left-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
-        style={{ touchAction: "none" }}
+        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
         <button
           type="button"
