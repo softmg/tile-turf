@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent, Assets } from "pixi.js";
 import tileUrl from "@/assets/tile.png";
 import tilePaintedUrl from "@/assets/tile-painted.png";
@@ -13,6 +13,12 @@ const TILE_SIZE = 120;
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(1);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   useEffect(() => {
     const host = containerRef.current;
@@ -148,28 +154,30 @@ export function IsoGrid() {
       let cameraInitialized = false;
 
       const computeCameraTarget = () => {
+        const z = zoomRef.current;
         const p = isoPos(playerX, playerY);
         const minX = isoPos(0, 7).x;
         const maxX = isoPos(7, 0).x;
         const minY = isoPos(0, 0).y;
         const maxY = isoPos(7, 7).y;
-        const gridW = maxX - minX + TILE_SIZE;
-        const gridH = maxY - minY + TILE_SIZE;
+        const gridW = (maxX - minX + TILE_SIZE) * z;
+        const gridH = (maxY - minY + TILE_SIZE) * z;
         const gridCx = (minX + maxX) / 2;
         const gridCy = (minY + maxY) / 2;
 
         if (gridW <= app.screen.width && gridH <= app.screen.height) {
-          cameraTargetX = app.screen.width / 2 - gridCx;
-          cameraTargetY = app.screen.height / 2 - gridCy;
+          cameraTargetX = app.screen.width / 2 - gridCx * z;
+          cameraTargetY = app.screen.height / 2 - gridCy * z;
         } else {
-          cameraTargetX = app.screen.width / 2 - p.x;
-          cameraTargetY = app.screen.height / 2 - p.y;
+          cameraTargetX = app.screen.width / 2 - p.x * z;
+          cameraTargetY = app.screen.height / 2 - p.y * z;
         }
       };
 
       const centerCamera = () => {
         computeCameraTarget();
         if (!cameraInitialized) {
+          world.scale.set(zoomRef.current);
           world.x = cameraTargetX;
           world.y = cameraTargetY;
           cameraInitialized = true;
@@ -206,6 +214,12 @@ export function IsoGrid() {
 
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
+
+        // Smooth zoom toward target
+        const zSmooth = 1 - Math.exp(-dtMs / 100);
+        const curScale = world.scale.x;
+        const nextScale = curScale + (zoomRef.current - curScale) * zSmooth;
+        world.scale.set(nextScale);
 
         // Smooth camera lerp toward target, framerate-independent
         computeCameraTarget();
@@ -375,16 +389,52 @@ export function IsoGrid() {
   }, []);
 
   return (
-    <div
-      className="fixed inset-0"
-      style={{
-        touchAction: "none",
-        userSelect: "none",
-        backgroundImage: `url(${backgroundUrl})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-      ref={containerRef}
-    />
+    <>
+      <div
+        className="fixed inset-0"
+        style={{
+          touchAction: "none",
+          userSelect: "none",
+          backgroundImage: `url(${backgroundUrl})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+        ref={containerRef}
+      />
+      <div
+        className="fixed left-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
+        style={{ touchAction: "none" }}
+      >
+        <button
+          type="button"
+          onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+          aria-label="Zoom out"
+        >
+          −
+        </button>
+        <input
+          type="range"
+          min={0.4}
+          max={2}
+          step={0.05}
+          value={zoom}
+          onChange={(e) => setZoom(parseFloat(e.target.value))}
+          className="w-28 accent-white"
+          aria-label="Zoom"
+        />
+        <button
+          type="button"
+          onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+          aria-label="Zoom in"
+        >
+          +
+        </button>
+        <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
+          {Math.round(zoom * 100)}%
+        </span>
+      </div>
+    </>
   );
 }
