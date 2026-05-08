@@ -134,11 +134,14 @@ export function IsoGrid() {
         miniPlayer.y = playerY * MINI_CELL + MINI_CELL / 2;
       };
 
-      const centerCamera = () => {
+      let cameraTargetX = 0;
+      let cameraTargetY = 0;
+      let cameraInitialized = false;
+
+      const computeCameraTarget = () => {
         const p = isoPos(playerX, playerY);
-        // Bounds of the whole grid in world coords
-        const minX = isoPos(0, 7).x; // leftmost
-        const maxX = isoPos(7, 0).x; // rightmost
+        const minX = isoPos(0, 7).x;
+        const maxX = isoPos(7, 0).x;
         const minY = isoPos(0, 0).y;
         const maxY = isoPos(7, 7).y;
         const gridW = maxX - minX + TILE_SIZE;
@@ -146,13 +149,21 @@ export function IsoGrid() {
         const gridCx = (minX + maxX) / 2;
         const gridCy = (minY + maxY) / 2;
 
-        // If grid fits on screen, lock camera to grid center
         if (gridW <= app.screen.width && gridH <= app.screen.height) {
-          world.x = app.screen.width / 2 - gridCx;
-          world.y = app.screen.height / 2 - gridCy;
+          cameraTargetX = app.screen.width / 2 - gridCx;
+          cameraTargetY = app.screen.height / 2 - gridCy;
         } else {
-          world.x = app.screen.width / 2 - p.x;
-          world.y = app.screen.height / 2 - p.y;
+          cameraTargetX = app.screen.width / 2 - p.x;
+          cameraTargetY = app.screen.height / 2 - p.y;
+        }
+      };
+
+      const centerCamera = () => {
+        computeCameraTarget();
+        if (!cameraInitialized) {
+          world.x = cameraTargetX;
+          world.y = cameraTargetY;
+          cameraInitialized = true;
         }
       };
 
@@ -186,6 +197,12 @@ export function IsoGrid() {
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       app.ticker.add(() => {
+        // Smooth camera lerp toward target every frame
+        computeCameraTarget();
+        const lerp = 0.12;
+        world.x += (cameraTargetX - world.x) * lerp;
+        world.y += (cameraTargetY - world.y) * lerp;
+
         if (!anim) return;
         const now = performance.now();
         const linear = Math.min(1, (now - anim.start) / JUMP_DURATION);
