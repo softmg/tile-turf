@@ -136,8 +136,24 @@ export function IsoGrid() {
 
       const centerCamera = () => {
         const p = isoPos(playerX, playerY);
-        world.x = app.screen.width / 2 - p.x;
-        world.y = app.screen.height / 2 - p.y;
+        // Bounds of the whole grid in world coords
+        const minX = isoPos(0, 7).x; // leftmost
+        const maxX = isoPos(7, 0).x; // rightmost
+        const minY = isoPos(0, 0).y;
+        const maxY = isoPos(7, 7).y;
+        const gridW = maxX - minX + TILE_SIZE;
+        const gridH = maxY - minY + TILE_SIZE;
+        const gridCx = (minX + maxX) / 2;
+        const gridCy = (minY + maxY) / 2;
+
+        // If grid fits on screen, lock camera to grid center
+        if (gridW <= app.screen.width && gridH <= app.screen.height) {
+          world.x = app.screen.width / 2 - gridCx;
+          world.y = app.screen.height / 2 - gridCy;
+        } else {
+          world.x = app.screen.width / 2 - p.x;
+          world.y = app.screen.height / 2 - p.y;
+        }
       };
 
       const paintAt = (gx: number, gy: number) => {
