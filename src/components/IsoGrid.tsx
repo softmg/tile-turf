@@ -454,7 +454,8 @@ export function IsoGrid() {
         for (let i = 0; i < 50; i++) {
           gx = Math.floor(Math.random() * 8);
           gy = Math.floor(Math.random() * 8);
-          if ((gx !== player.gx || gy !== player.gy) && (gx !== enemy.gx || gy !== enemy.gy)) break;
+          const occupied = [player, ...enemies].some((c) => c.gx === gx && c.gy === gy);
+          if (!occupied) break;
         }
         chest.gx = gx;
         chest.gy = gy;
