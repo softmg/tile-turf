@@ -62,6 +62,10 @@ export function IsoGrid() {
         }
       }
 
+      const shadow = new Graphics();
+      shadow.ellipse(0, 0, 20, 10).fill({ color: 0x000000, alpha: 0.4 });
+      world.addChild(shadow);
+
       const player = new Graphics();
       player.rect(-10, -40, 20, 40);
       player.fill(0x3b82f6);
@@ -70,6 +74,10 @@ export function IsoGrid() {
 
       let playerX = 0;
       let playerY = 0;
+      let anim: {
+        fromX: number; fromY: number; toX: number; toY: number; start: number;
+      } | null = null;
+      const JUMP_DURATION = 300;
 
       // ---------- Minimap ----------
       const MINI_CELL = 10;
@@ -123,21 +131,49 @@ export function IsoGrid() {
         world.y = app.screen.height / 2 - p.y;
       };
 
-      const updatePlayer = () => {
-        painted[playerX][playerY] = true;
-        drawTile(tiles[playerX][playerY], true);
-        const p = isoPos(playerX, playerY);
+      const paintAt = (gx: number, gy: number) => {
+        painted[gx][gy] = true;
+        drawTile(tiles[gx][gy], true);
+      };
+
+      const renderPlayerAt = (gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
+        const p = isoPos(gx, gy);
         player.x = p.x;
-        player.y = p.y;
-        player.zIndex = playerX + playerY + 0.1;
+        player.y = p.y + jumpOffset;
+        player.zIndex = gx + gy + 0.1;
+        shadow.x = p.x;
+        shadow.y = p.y;
+        shadow.zIndex = gx + gy + 0.05;
+        shadow.scale.set(shadowScale, shadowScale);
         centerCamera();
+      };
+
+      const updatePlayer = () => {
+        paintAt(playerX, playerY);
+        renderPlayerAt(playerX, playerY);
         updateMinimap();
       };
 
       positionMinimap();
       updatePlayer();
 
+      app.ticker.add(() => {
+        if (!anim) return;
+        const now = performance.now();
+        const progress = Math.min(1, (now - anim.start) / JUMP_DURATION);
+        const gx = anim.fromX + (anim.toX - anim.fromX) * progress;
+        const gy = anim.fromY + (anim.toY - anim.fromY) * progress;
+        const jumpOffset = Math.sin(progress * Math.PI) * -40;
+        const shadowScale = 1 - Math.sin(progress * Math.PI) * 0.4;
+        renderPlayerAt(gx, gy, jumpOffset, shadowScale);
+        if (progress >= 1) {
+          anim = null;
+          updatePlayer();
+        }
+      });
+
       const movePlayer = (direction: Direction) => {
+        if (anim) return;
         let nx = playerX;
         let ny = playerY;
         if (direction === "UP") ny -= 1;
@@ -145,9 +181,13 @@ export function IsoGrid() {
         else if (direction === "LEFT") nx -= 1;
         else if (direction === "RIGHT") nx += 1;
         if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return;
+        const fromX = playerX;
+        const fromY = playerY;
         playerX = nx;
         playerY = ny;
-        updatePlayer();
+        paintAt(playerX, playerY);
+        updateMinimap();
+        anim = { fromX, fromY, toX: nx, toY: ny, start: performance.now() };
       };
 
       // ---------- Joystick ----------
