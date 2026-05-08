@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Application, CanvasSource, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
 import backgroundUrl from "@/assets/background.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
