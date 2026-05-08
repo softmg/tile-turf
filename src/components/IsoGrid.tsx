@@ -1175,16 +1175,28 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
                 </span>
               )}
             </div>
-            <div className="mt-5 space-y-2 text-left">
-              {activeSkins.map((id) => (
-                <div key={id} className="flex items-center justify-between gap-6 rounded-lg bg-white/5 px-3 py-2">
-                  <span className="flex items-center gap-2">
-                    <span className="inline-block h-3 w-3 rounded-full" style={{ background: SKINS[id].uiColor }} />
-                    <span className="font-bold" style={{ color: SKINS[id].uiColor }}>{SKINS[id].name}</span>
-                  </span>
-                  <span className="font-mono text-lg font-bold text-white tabular-nums">{banked[id]}</span>
-                </div>
-              ))}
+            <div className="mt-4 text-[11px] font-bold uppercase tracking-widest text-white/50 text-left">
+              Match score (first to {WINS_TO_PASS})
+            </div>
+            <div className="mt-2 space-y-2 text-left">
+              {activeSkins.map((id) => {
+                const projectedWins = matchWins[id] + (!isTie && id === winner ? 1 : 0);
+                return (
+                  <div key={id} className="flex items-center justify-between gap-4 rounded-lg bg-white/5 px-3 py-2">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className="inline-block h-3 w-3 rounded-full shrink-0" style={{ background: SKINS[id].uiColor }} />
+                      <span className="font-bold truncate" style={{ color: SKINS[id].uiColor }}>{SKINS[id].name}</span>
+                    </span>
+                    <span className="flex items-center gap-3">
+                      <span className="font-mono text-xs text-white/60 tabular-nums">{banked[id]} pts</span>
+                      <span className="font-mono text-lg font-extrabold text-white tabular-nums">
+                        {projectedWins}
+                        <span className="text-white/40 text-xs font-bold">/{WINS_TO_PASS}</span>
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
             <button
               type="button"
