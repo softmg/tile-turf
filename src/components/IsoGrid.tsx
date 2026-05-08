@@ -577,7 +577,7 @@ export function IsoGrid() {
           bomb.boom = boom;
 
           // Impact: stun anyone on this tile (and not mid-air)
-          for (const c of [player, enemy]) {
+          for (const c of [player, ...enemies]) {
             if (c.gx === gx && c.gy === gy && !c.anim) {
               c.stunnedUntil = performance.now() + STUN_DURATION;
               clearOwnedBy(c.skin.id);
