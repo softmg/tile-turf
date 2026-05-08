@@ -869,7 +869,7 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
 
         // Enemy AI tick (per bot)
         enemyTimer += dtMs;
-        if (enemyTimer >= ENEMY_INTERVAL) {
+        if (enemyTimer >= enemyInterval()) {
           enemyTimer = 0;
           for (const en of enemies) {
             if (en.anim) continue;
