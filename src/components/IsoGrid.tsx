@@ -65,9 +65,30 @@ export function IsoGrid() {
   const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
   const [scores, setScores] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
   const [banked, setBanked] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
+  const ROUND_DURATION = 90;
+  const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
+  const [gameOver, setGameOver] = useState(false);
+  const gameOverRef = useRef(false);
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { debugRef.current = debug; }, [debug]);
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+
+  // Round countdown timer
+  useEffect(() => {
+    if (gameOver) return;
+    const id = window.setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) {
+          window.clearInterval(id);
+          setGameOver(true);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [gameOver]);
 
   useEffect(() => {
     const host = containerRef.current;
@@ -382,6 +403,7 @@ export function IsoGrid() {
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       const moveCharacter = (c: Character, direction: Direction) => {
+        if (gameOverRef.current) return;
         if (c.anim) return;
         let nx = c.gx;
         let ny = c.gy;
@@ -523,6 +545,7 @@ export function IsoGrid() {
       const COOLDOWN = 200;
 
       const onDown = (e: FederatedPointerEvent) => {
+        if (gameOverRef.current) return;
         baseX = e.global.x;
         baseY = e.global.y;
         joystick.x = baseX;
@@ -607,6 +630,13 @@ export function IsoGrid() {
 
   const playerSkin = SKINS[PLAYER_SKIN];
   const enemySkin = SKINS[ENEMY_SKIN];
+  const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
+  const ss = String(timeLeft % 60).padStart(2, "0");
+  const urgent = timeLeft <= 10 && timeLeft > 0;
+  const winner: SkinId = banked[PLAYER_SKIN] === banked[ENEMY_SKIN]
+    ? PLAYER_SKIN
+    : (banked[PLAYER_SKIN] > banked[ENEMY_SKIN] ? PLAYER_SKIN : ENEMY_SKIN);
+  const isTie = banked[PLAYER_SKIN] === banked[ENEMY_SKIN];
 
   return (
     <>
@@ -641,6 +671,59 @@ export function IsoGrid() {
           <span className="text-white/60 tabular-nums text-xs">(+{scores[ENEMY_SKIN]} painted)</span>
         </span>
       </div>
+
+      {/* Timer */}
+      <div
+        className="fixed left-1/2 top-16 z-50 -translate-x-1/2 rounded-full bg-black/55 px-4 py-1 backdrop-blur-sm shadow-lg"
+        style={{ touchAction: "none" }}
+      >
+        <span
+          className="font-mono text-2xl font-extrabold tabular-nums tracking-wider"
+          style={{
+            color: urgent ? "#ff3b3b" : "#ffffff",
+            textShadow: urgent ? "0 0 10px rgba(255,59,59,0.7)" : "none",
+            animation: urgent ? "iso-pulse 0.8s ease-in-out infinite" : "none",
+            display: "inline-block",
+          }}
+        >
+          {mm}:{ss}
+        </span>
+        <style>{`@keyframes iso-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.85; } }`}</style>
+      </div>
+
+      {/* Game Over overlay */}
+      {gameOver && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]">
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">End of Round</div>
+            <div className="mt-2 text-3xl font-extrabold text-white">
+              {isTie ? "It's a Tie!" : (
+                <span style={{ color: SKINS[winner].uiColor }}>
+                  {SKINS[winner].name} wins!
+                </span>
+              )}
+            </div>
+            <div className="mt-5 space-y-2 text-left">
+              {[PLAYER_SKIN, ENEMY_SKIN].map((id) => (
+                <div key={id} className="flex items-center justify-between gap-6 rounded-lg bg-white/5 px-3 py-2">
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block h-3 w-3 rounded-full" style={{ background: SKINS[id].uiColor }} />
+                    <span className="font-bold" style={{ color: SKINS[id].uiColor }}>{SKINS[id].name}</span>
+                  </span>
+                  <span className="font-mono text-lg font-bold text-white tabular-nums">{banked[id]}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-6 w-full rounded-full bg-emerald-400 px-4 py-2 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              Play Again
+            </button>
+          </div>
+        </div>
+      )}
 
       <div
         className="fixed left-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
