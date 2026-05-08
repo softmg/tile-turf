@@ -100,6 +100,7 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
   const botCountRef = useRef(botCount);
   const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
   useEffect(() => { botCountRef.current = botCount; levelRef.current = level; }, [botCount, level]);
   const activeBotSkins: SkinId[] = BOT_SKINS.slice(0, botCount);
   const activeSkins: SkinId[] = [PLAYER_SKIN, ...activeBotSkins];
@@ -1246,9 +1247,17 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
             >
               <Play size={16} fill="currentColor" /> Resume
             </button>
+            <button
+              type="button"
+              onClick={() => setTutorialOpen(true)}
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-white/15 active:scale-95"
+            >
+              Как играть?
+            </button>
           </div>
         </div>
       )}
+      {tutorialOpen && <TutorialModal onClose={() => setTutorialOpen(false)} />}
 
       <div
         className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
