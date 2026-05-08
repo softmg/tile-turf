@@ -424,16 +424,30 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         minimap.y = app.screen.height - MINI_SIZE - 16;
       };
 
-      const updateMinimap = () => {
+      const miniTileColor: number[][] = [];
+      for (let x = 0; x < 8; x++) {
+        miniTileColor[x] = [];
+        for (let y = 0; y < 8; y++) miniTileColor[x][y] = UNPAINTED_MINIMAP_COLOR;
+      }
+      let minimapTilesDirty = true;
+
+      const updateMinimapTiles = () => {
+        if (!minimapTilesDirty) return;
+        minimapTilesDirty = false;
         for (let x = 0; x < 8; x++) {
           for (let y = 0; y < 8; y++) {
-            const m = miniTiles[x][y];
             const o = owners[x][y];
             const color = o ? SKINS[o].minimapColor : UNPAINTED_MINIMAP_COLOR;
+            if (miniTileColor[x][y] === color) continue;
+            miniTileColor[x][y] = color;
+            const m = miniTiles[x][y];
             m.clear();
             m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(color);
           }
         }
+      };
+
+      const updateMinimapMarkers = () => {
         miniPlayer.x = player.gx * MINI_CELL + MINI_CELL / 2;
         miniPlayer.y = player.gy * MINI_CELL + MINI_CELL / 2;
         for (let i = 0; i < enemies.length; i++) {
@@ -441,19 +455,16 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           miniEnemies[i].y = enemies[i].gy * MINI_CELL + MINI_CELL / 2;
         }
 
-        // Chest marker (gold square with outline)
         const cx = chest.gx * MINI_CELL + MINI_CELL / 2;
         const cy = chest.gy * MINI_CELL + MINI_CELL / 2;
         miniChest.clear();
         miniChest.rect(cx - 3, cy - 3, 6, 6).fill(0xffd24a).stroke({ width: 1, color: 0x6a4500 });
         miniChest.visible = true;
 
-        // Arrow marker (white triangle pointing in current dir)
         miniArrow.clear();
         if (arrow) {
           const ax = arrow.gx * MINI_CELL + MINI_CELL / 2;
           const ay = arrow.gy * MINI_CELL + MINI_CELL / 2;
-          // dir: 0=UP,1=RIGHT,2=DOWN,3=LEFT — point along screen axes (matches grid in minimap)
           const tri =
             arrow.dir === 0 ? [0, -4, 3, 2, -3, 2] :
             arrow.dir === 1 ? [4, 0, -2, 3, -2, -3] :
@@ -466,7 +477,6 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           miniArrow.visible = false;
         }
 
-        // Bombs (red dots; brighter when about to explode)
         miniBombs.clear();
         for (const b of bombs) {
           const bx = b.gx * MINI_CELL + MINI_CELL / 2;
@@ -474,6 +484,11 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           const color = b.phase === "explosion" ? 0xfff2a0 : 0xff2222;
           miniBombs.circle(bx, by, 2.5).fill(color).stroke({ width: 1, color: 0x000000 });
         }
+      };
+
+      const updateMinimap = () => {
+        updateMinimapTiles();
+        updateMinimapMarkers();
       };
 
       let cameraTargetX = 0;
