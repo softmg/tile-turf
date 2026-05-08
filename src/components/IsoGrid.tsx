@@ -540,9 +540,7 @@ export function IsoGrid() {
       };
       window.addEventListener("resize", resizeHandler);
       centerCamera();
-      } catch (err) {
-        console.error("[IsoGrid] setup failed", err);
-      }
+
     })();
 
 
