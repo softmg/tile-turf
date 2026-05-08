@@ -622,6 +622,8 @@ export function IsoGrid() {
       };
 
       const spawnArrow = () => {
+        if (gameOverRef.current) return;
+        if (pausedRef.current || !startedRef.current) { setT(spawnArrow, 800); return; }
         if (arrow) removeArrow();
         const gx = Math.floor(Math.random() * 8);
         const gy = Math.floor(Math.random() * 8);
