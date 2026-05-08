@@ -1,11 +1,14 @@
 import { useEffect, useRef } from "react";
-import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent, Assets } from "pixi.js";
+import tileUrl from "@/assets/tile.png";
+import tilePaintedUrl from "@/assets/tile-painted.png";
+import playerUrl from "@/assets/player.png";
+import backgroundUrl from "@/assets/background.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
-const UNPAINTED_TILE_URL = "https://placehold.co/128x64/cccccc/white.png?text=Tile";
-const PAINTED_TILE_URL = "https://placehold.co/128x64/ff7700/white.png?text=Painted";
-const PLAYER_SPRITE_URL = "https://placehold.co/64x128/3b82f6/white.png?text=Player";
+const TILE_W = 110;
+const TILE_H = 55;
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -22,7 +25,7 @@ export function IsoGrid() {
     (async () => {
       await app.init({
         resizeTo: window,
-        backgroundColor: 0x1e293b,
+        backgroundAlpha: 0,
         antialias: true,
       });
       if (destroyed) {
@@ -31,14 +34,22 @@ export function IsoGrid() {
       }
       host.appendChild(app.canvas);
 
+      // Preload textures so sprites have correct dimensions immediately
+      const [tileTex, tilePaintedTex, playerTex] = await Promise.all([
+        Assets.load(tileUrl),
+        Assets.load(tilePaintedUrl),
+        Assets.load(playerUrl),
+      ]);
+      if (destroyed) return;
+
       const world = new Container();
       world.sortableChildren = true;
       app.stage.addChild(world);
       app.stage.sortableChildren = true;
 
       const isoPos = (x: number, y: number) => ({
-        x: (x - y) * 40,
-        y: (x + y) * 20,
+        x: (x - y) * (TILE_W / 2),
+        y: (x + y) * (TILE_H / 2),
       });
 
       const painted: boolean[][] = [];
@@ -47,11 +58,13 @@ export function IsoGrid() {
         tiles[x] = [];
         painted[x] = [];
         for (let y = 0; y < 8; y++) {
-          const tile = Sprite.from(UNPAINTED_TILE_URL);
-          tile.anchor.set(0.5, 1);
+          const tile = new Sprite(tileTex as Texture);
+          tile.anchor.set(0.5, 0.5);
+          tile.width = TILE_W * 1.25;
+          tile.height = TILE_W * 1.25;
           const p = isoPos(x, y);
           tile.x = p.x;
-          tile.y = p.y + 20; // align bottom of sprite with bottom of diamond
+          tile.y = p.y;
           tile.zIndex = x + y;
           world.addChild(tile);
           tiles[x][y] = tile;
@@ -60,18 +73,18 @@ export function IsoGrid() {
       }
 
       const shadow = new Graphics();
-      shadow.ellipse(0, 0, 20, 10).fill({ color: 0x000000, alpha: 0.4 });
+      shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
       world.addChild(shadow);
 
-      const player = Sprite.from(PLAYER_SPRITE_URL);
-      player.anchor.set(0.5, 1);
+      const player = new Sprite(playerTex as Texture);
+      player.anchor.set(0.5, 0.85);
+      const playerScale = 90 / Math.max(player.texture.width, 1);
+      player.scale.set(playerScale);
       world.addChild(player);
 
       let playerX = 0;
       let playerY = 0;
-      let anim: {
-        fromX: number; fromY: number; toX: number; toY: number; start: number;
-      } | null = null;
+      let anim: { fromX: number; fromY: number; toX: number; toY: number; start: number } | null = null;
       const JUMP_DURATION = 300;
 
       // ---------- Minimap ----------
@@ -90,14 +103,14 @@ export function IsoGrid() {
         miniTiles[x] = [];
         for (let y = 0; y < 8; y++) {
           const m = new Graphics();
-          m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(0xcccccc);
+          m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(0xf5d0b0);
           minimap.addChild(m);
           miniTiles[x][y] = m;
         }
       }
 
       const miniPlayer = new Graphics();
-      miniPlayer.circle(0, 0, 3).fill(0x3b82f6);
+      miniPlayer.circle(0, 0, 3).fill(0xffffff);
       miniPlayer.zIndex = 10;
       minimap.addChild(miniPlayer);
 
@@ -112,7 +125,7 @@ export function IsoGrid() {
             const m = miniTiles[x][y];
             m.clear();
             m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(
-              painted[x][y] ? 0xff7700 : 0xcccccc
+              painted[x][y] ? 0xf97464 : 0xf5d0b0
             );
           }
         }
@@ -128,7 +141,7 @@ export function IsoGrid() {
 
       const paintAt = (gx: number, gy: number) => {
         painted[gx][gy] = true;
-        tiles[gx][gy].texture = Texture.from(PAINTED_TILE_URL);
+        tiles[gx][gy].texture = tilePaintedTex as Texture;
       };
 
       const renderPlayerAt = (gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
@@ -158,7 +171,7 @@ export function IsoGrid() {
         const progress = Math.min(1, (now - anim.start) / JUMP_DURATION);
         const gx = anim.fromX + (anim.toX - anim.fromX) * progress;
         const gy = anim.fromY + (anim.toY - anim.fromY) * progress;
-        const jumpOffset = Math.sin(progress * Math.PI) * -40;
+        const jumpOffset = Math.sin(progress * Math.PI) * -45;
         const shadowScale = 1 - Math.sin(progress * Math.PI) * 0.4;
         renderPlayerAt(gx, gy, jumpOffset, shadowScale);
         if (progress >= 1) {
@@ -193,11 +206,11 @@ export function IsoGrid() {
       app.stage.addChild(joystick);
 
       const base = new Graphics();
-      base.circle(0, 0, 50).fill({ color: 0x000000, alpha: 0.3 });
+      base.circle(0, 0, 50).fill({ color: 0x3a1f10, alpha: 0.35 });
       joystick.addChild(base);
 
       const knob = new Graphics();
-      knob.circle(0, 0, 25).fill({ color: 0xffffff, alpha: 0.7 });
+      knob.circle(0, 0, 25).fill({ color: 0xfff2e0, alpha: 0.85 });
       joystick.addChild(knob);
 
       const updateHitArea = () => {
@@ -314,7 +327,13 @@ export function IsoGrid() {
   return (
     <div
       className="fixed inset-0"
-      style={{ touchAction: "none", userSelect: "none" }}
+      style={{
+        touchAction: "none",
+        userSelect: "none",
+        backgroundImage: `url(${backgroundUrl})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }}
       ref={containerRef}
     />
   );
