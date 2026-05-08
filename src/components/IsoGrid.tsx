@@ -94,8 +94,16 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
   const [zoomOpen, setZoomOpen] = useState(false);
   const [debug, setDebug] = useState(false);
   const debugRef = useRef(false);
-  const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
-  const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
+  const [stats, setStats] = useState({
+    fps: 0, frameMs: 0, maxMs: 0,
+    paints: 0, miniCells: 0, miniPasses: 0,
+    anims: 0, bombs: 0, enemies: 0,
+  });
+  const statsAccum = useRef({
+    frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0,
+    paints: 0, miniCells: 0, miniPasses: 0,
+    animSum: 0, animSamples: 0, bombsMax: 0, enemiesActive: 0,
+  });
   const [scores, setScores] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
   const [banked, setBanked] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
   const ROUND_DURATION =
@@ -434,6 +442,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       const updateMinimapTiles = () => {
         if (!minimapTilesDirty) return;
         minimapTilesDirty = false;
+        statsAccum.current.miniPasses += 1;
         for (let x = 0; x < 8; x++) {
           for (let y = 0; y < 8; y++) {
             const o = owners[x][y];
@@ -443,6 +452,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
             const m = miniTiles[x][y];
             m.clear();
             m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(color);
+            statsAccum.current.miniCells += 1;
           }
         }
       };
@@ -551,6 +561,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         tile.texture = skinTextures[skin.id].tile;
         tile.tint = skin.spriteTint;
         minimapTilesDirty = true;
+        statsAccum.current.paints += 1;
       };
 
       const renderCharacterAt = (c: Character, gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
@@ -950,16 +961,37 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           s.frames += 1;
           s.sumMs += dtMs;
           if (dtMs > s.maxMs) s.maxMs = dtMs;
+          // Sample active animations & bombs each frame
+          let animCount = 0;
+          if (player.anim) animCount += 1;
+          let enemiesActive = 0;
+          for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].anim) animCount += 1;
+            enemiesActive += 1;
+          }
+          s.animSum += animCount;
+          s.animSamples += 1;
+          if (bombs.length > s.bombsMax) s.bombsMax = bombs.length;
+          s.enemiesActive = enemiesActive;
           const now = performance.now();
           if (s.lastFlush === 0) s.lastFlush = now;
           if (now - s.lastFlush >= 200) {
             const avg = s.sumMs / Math.max(1, s.frames);
+            const winSec = (now - s.lastFlush) / 1000;
             setStats({
               fps: Math.round(1000 / Math.max(0.001, avg)),
               frameMs: +avg.toFixed(2),
               maxMs: +s.maxMs.toFixed(2),
+              paints: Math.round(s.paints / Math.max(0.001, winSec)),
+              miniCells: Math.round(s.miniCells / Math.max(0.001, winSec)),
+              miniPasses: Math.round(s.miniPasses / Math.max(0.001, winSec)),
+              anims: +(s.animSum / Math.max(1, s.animSamples)).toFixed(1),
+              bombs: s.bombsMax,
+              enemies: enemiesActive,
             });
             s.frames = 0; s.sumMs = 0; s.maxMs = 0; s.lastFlush = now;
+            s.paints = 0; s.miniCells = 0; s.miniPasses = 0;
+            s.animSum = 0; s.animSamples = 0; s.bombsMax = 0;
           }
         }
 
@@ -1459,11 +1491,23 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         </button>
       </div>
       {debug && (
-        <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/70 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums">
-          <div>FPS: {stats.fps}</div>
-          <div>frame: {stats.frameMs.toFixed(2)} ms</div>
-          <div>peak: {stats.maxMs.toFixed(2)} ms</div>
-          <div className="text-white/60">DPR: {Math.min(window.devicePixelRatio || 1, 3)}</div>
+        <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/75 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums shadow-lg">
+          <div className={stats.fps < 50 ? "text-red-400" : "text-emerald-300"}>
+            FPS: {stats.fps} <span className="text-white/60">({stats.frameMs.toFixed(2)}ms)</span>
+          </div>
+          <div className={stats.maxMs > 33 ? "text-amber-300" : "text-white/60"}>
+            peak: {stats.maxMs.toFixed(2)} ms
+          </div>
+          <div className="mt-1 text-cyan-300">paints/s: {stats.paints}</div>
+          <div className="text-cyan-300">
+            mini: {stats.miniPasses}/s · {stats.miniCells} cells/s
+          </div>
+          <div className="text-fuchsia-300">
+            anims: {stats.anims} · bombs: {stats.bombs} · bots: {stats.enemies}
+          </div>
+          <div className="mt-1 text-white/50">
+            DPR: {Math.min(window.devicePixelRatio || 1, 3)} · zoom: {Math.round(zoom * 100)}%
+          </div>
         </div>
       )}
     </>
