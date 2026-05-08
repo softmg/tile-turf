@@ -1,7 +1,11 @@
 import { useEffect, useRef } from "react";
-import { Application, Container, Graphics, Rectangle, FederatedPointerEvent } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
+
+const UNPAINTED_TILE_URL = "https://placehold.co/128x64/cccccc/white.png?text=Tile";
+const PAINTED_TILE_URL = "https://placehold.co/128x64/ff7700/white.png?text=Painted";
+const PLAYER_SPRITE_URL = "https://placehold.co/64x128/3b82f6/white.png?text=Player";
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -37,24 +41,17 @@ export function IsoGrid() {
         y: (x + y) * 20,
       });
 
-      const drawTile = (g: Graphics, painted: boolean) => {
-        g.clear();
-        g.poly([0, -20, 40, 0, 0, 20, -40, 0]);
-        g.fill(painted ? 0xff7700 : 0xcccccc);
-        g.stroke({ width: 2, color: 0x555555 });
-      };
-
       const painted: boolean[][] = [];
-      const tiles: Graphics[][] = [];
+      const tiles: Sprite[][] = [];
       for (let x = 0; x < 8; x++) {
         tiles[x] = [];
         painted[x] = [];
         for (let y = 0; y < 8; y++) {
-          const tile = new Graphics();
-          drawTile(tile, false);
+          const tile = Sprite.from(UNPAINTED_TILE_URL);
+          tile.anchor.set(0.5, 1);
           const p = isoPos(x, y);
           tile.x = p.x;
-          tile.y = p.y;
+          tile.y = p.y + 20; // align bottom of sprite with bottom of diamond
           tile.zIndex = x + y;
           world.addChild(tile);
           tiles[x][y] = tile;
@@ -66,10 +63,8 @@ export function IsoGrid() {
       shadow.ellipse(0, 0, 20, 10).fill({ color: 0x000000, alpha: 0.4 });
       world.addChild(shadow);
 
-      const player = new Graphics();
-      player.rect(-10, -40, 20, 40);
-      player.fill(0x3b82f6);
-      player.stroke({ width: 2, color: 0x1e3a8a });
+      const player = Sprite.from(PLAYER_SPRITE_URL);
+      player.anchor.set(0.5, 1);
       world.addChild(player);
 
       let playerX = 0;
@@ -133,7 +128,7 @@ export function IsoGrid() {
 
       const paintAt = (gx: number, gy: number) => {
         painted[gx][gy] = true;
-        drawTile(tiles[gx][gy], true);
+        tiles[gx][gy].texture = Texture.from(PAINTED_TILE_URL);
       };
 
       const renderPlayerAt = (gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
