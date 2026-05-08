@@ -69,13 +69,21 @@ export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : lv <= 7
 export const enemyIntervalForLevel = (lv: number) =>
   Math.max(220, 750 - (lv - 1) * 60); // bots step faster on higher levels
 
+export interface RoundHistoryEntry {
+  level: number;
+  round: number;
+  winner: SkinId | null;
+  scores: Record<SkinId, number>;
+}
+
 interface IsoRoundProps {
   level: number;
   matchWins: Record<SkinId, number>;
+  history: RoundHistoryEntry[];
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
 }
 
-function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
+function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
@@ -1199,6 +1207,35 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
                 );
               })}
             </div>
+            {history.length > 0 && (
+              <>
+                <div className="mt-5 text-[11px] font-bold uppercase tracking-widest text-white/50 text-left">
+                  Previous rounds
+                </div>
+                <div className="mt-2 space-y-1.5 text-left max-h-48 overflow-y-auto pr-1">
+                  {history.map((h, i) => (
+                    <div key={i} className="rounded-lg bg-white/5 px-3 py-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-white/60">
+                        <span className="font-bold uppercase tracking-wider">
+                          L{h.level} · R{h.round}
+                        </span>
+                        <span className="font-bold" style={{ color: h.winner ? SKINS[h.winner].uiColor : undefined }}>
+                          {h.winner ? `${SKINS[h.winner].name} won` : "Tie"}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                        {activeSkins.map((id) => (
+                          <span key={id} className="flex items-center gap-1 font-mono text-[11px] tabular-nums">
+                            <span className="inline-block h-2 w-2 rounded-full" style={{ background: SKINS[id].uiColor }} />
+                            <span className="text-white/80">{h.scores[id] ?? 0}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             <button
               type="button"
               onClick={() => onRoundEnd(isTie ? null : winner, banked)}
@@ -1344,6 +1381,7 @@ export function IsoGrid() {
   const [phase, setPhase] = useState<"menu" | "playing" | "passed" | "failed">("menu");
   const [roundIdx, setRoundIdx] = useState(0);
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
+  const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("isogrid:tutorial:v1") !== "1";
@@ -1361,11 +1399,12 @@ export function IsoGrid() {
   const startLevel = (lv: number) => {
     setLevel(lv);
     setMatchWins(ZERO_SCORES());
+    setHistory([]);
     setRoundIdx((r) => r + 1);
     setPhase("playing");
   };
 
-  const handleRoundEnd = (winner: SkinId | null) => {
+  const handleRoundEnd = (winner: SkinId | null, banked: Record<SkinId, number>) => {
     const next = { ...matchWins };
     if (winner) next[winner] = (next[winner] || 0) + 1;
     setMatchWins(next);
@@ -1374,6 +1413,9 @@ export function IsoGrid() {
     const playerW = next[PLAYER_SKIN];
     const botMax = Math.max(0, ...bots.map((b) => next[b]));
     setLastWinnerName(winner ? SKINS[winner].name : "Tie");
+
+    const newHistory = [...history, { level, round: history.length + 1, winner, scores: banked }];
+    setHistory(newHistory);
 
     if (playerW >= WINS_TO_PASS) {
       const nextUnlocked = Math.min(MAX_LEVEL, Math.max(unlocked, level + 1));
@@ -1397,6 +1439,7 @@ export function IsoGrid() {
           key={`lvl-${level}-r-${roundIdx}`}
           level={level}
           matchWins={matchWins}
+          history={history}
           onRoundEnd={handleRoundEnd}
         />
         {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
