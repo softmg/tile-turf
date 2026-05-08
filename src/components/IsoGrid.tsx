@@ -610,6 +610,7 @@ export function IsoGrid() {
             c.anim = null;
             land(c);
             tryCollectChest(c);
+            tryCollectBoots(c);
             landedAny = true;
           }
         }
@@ -618,34 +619,69 @@ export function IsoGrid() {
           recomputeScores();
         }
 
-        // Enemy AI tick
+        // Update auras for boost
+        const nowMs = performance.now();
+        for (const c of [player, enemy]) {
+          const active = nowMs < c.boostUntil;
+          c.aura.visible = active;
+          if (active) {
+            c.aura.x = c.sprite.x;
+            c.aura.y = c.sprite.y - 30;
+            c.aura.zIndex = c.sprite.zIndex - 0.01;
+            c.aura.alpha = 0.6 + 0.3 * Math.sin(nowMs / 120);
+          }
+          // Stunned shake
+          if (nowMs < c.stunnedUntil) {
+            c.sprite.x += Math.sin(nowMs / 30) * 2;
+          }
+        }
+
+        // Enemy AI tick (skip when stunned/animating)
         enemyTimer += dtMs;
-        if (enemyTimer >= ENEMY_INTERVAL && !enemy.anim) {
+        if (
+          enemyTimer >= ENEMY_INTERVAL &&
+          !enemy.anim &&
+          performance.now() >= enemy.stunnedUntil
+        ) {
           enemyTimer = 0;
+          // Avoid bomb-warning tiles
           const valid = DIRS.filter((d) => {
+            let nx = enemy.gx, ny = enemy.gy;
+            if (d === "UP") ny--; else if (d === "DOWN") ny++;
+            else if (d === "LEFT") nx--; else nx++;
+            if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return false;
+            if (isWarningAt(nx, ny)) return false;
+            return true;
+          });
+          // If everything is dangerous, allow any in-bounds direction
+          const safe = valid.length ? valid : DIRS.filter((d) => {
             let nx = enemy.gx, ny = enemy.gy;
             if (d === "UP") ny--; else if (d === "DOWN") ny++;
             else if (d === "LEFT") nx--; else nx++;
             return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
           });
-          if (valid.length) {
+          if (safe.length) {
+            const distTo = (d: Direction, tx: number, ty: number) => {
+              let nx = enemy.gx, ny = enemy.gy;
+              if (d === "UP") ny--; else if (d === "DOWN") ny++;
+              else if (d === "LEFT") nx--; else nx++;
+              return Math.abs(nx - tx) + Math.abs(ny - ty);
+            };
             let chosen: Direction;
+            const bootsDist = boots
+              ? Math.abs(enemy.gx - boots.gx) + Math.abs(enemy.gy - boots.gy)
+              : Infinity;
             const enemyOwned = countOwned(enemy.skin.id);
-            if (enemyOwned > 3) {
-              // Hunt the chest: pick the valid direction that minimizes Manhattan distance
-              chosen = valid.reduce((best, d) => {
-                let nx = enemy.gx, ny = enemy.gy;
-                if (d === "UP") ny--; else if (d === "DOWN") ny++;
-                else if (d === "LEFT") nx--; else nx++;
-                const dist = Math.abs(nx - chest.gx) + Math.abs(ny - chest.gy);
-                let bx = enemy.gx, by = enemy.gy;
-                if (best === "UP") by--; else if (best === "DOWN") by++;
-                else if (best === "LEFT") bx--; else bx++;
-                const bestDist = Math.abs(bx - chest.gx) + Math.abs(by - chest.gy);
-                return dist < bestDist ? d : best;
-              }, valid[0]);
+            if (boots && bootsDist <= 2) {
+              chosen = safe.reduce((best, d) =>
+                distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best,
+                safe[0]);
+            } else if (enemyOwned > 3) {
+              chosen = safe.reduce((best, d) =>
+                distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best,
+                safe[0]);
             } else {
-              chosen = valid[Math.floor(Math.random() * valid.length)];
+              chosen = safe[Math.floor(Math.random() * safe.length)];
             }
             moveCharacter(enemy, chosen);
           }
