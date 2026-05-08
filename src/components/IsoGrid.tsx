@@ -1034,19 +1034,17 @@ export function IsoGrid() {
         className="fixed left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: playerSkin.uiColor }} />
-          <span style={{ color: playerSkin.uiColor }}>{playerSkin.name}:</span>
-          <span className="tabular-nums">{banked[PLAYER_SKIN]}</span>
-          <span className="text-white/60 tabular-nums text-xs">(+{scores[PLAYER_SKIN]})</span>
-        </span>
-        <span className="text-white/50">vs</span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: enemySkin.uiColor }} />
-          <span style={{ color: enemySkin.uiColor }}>{enemySkin.name}:</span>
-          <span className="tabular-nums">{banked[ENEMY_SKIN]}</span>
-          <span className="text-white/60 tabular-nums text-xs">(+{scores[ENEMY_SKIN]})</span>
-        </span>
+        {activeSkins.map((id, i) => {
+          const sk = SKINS[id];
+          return (
+            <span key={id} className="flex items-center gap-1.5">
+              {i > 0 && <span className="text-white/40">·</span>}
+              <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: sk.uiColor }} />
+              <span className="tabular-nums" style={{ color: sk.uiColor }}>{banked[id]}</span>
+              <span className="text-white/60 tabular-nums text-xs">+{scores[id]}</span>
+            </span>
+          );
+        })}
       </div>
 
       {/* Timer */}
