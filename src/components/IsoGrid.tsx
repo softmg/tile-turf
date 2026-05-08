@@ -309,11 +309,11 @@ export function IsoGrid() {
       const allEnemies: Character[] = BOT_SKINS.map((sid, i) =>
         makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1])
       );
-      const enemies: Character[] = allEnemies.slice(0, botCountRef.current);
-      // Hide unused bot sprites
-      for (let i = botCountRef.current; i < allEnemies.length; i++) {
-        allEnemies[i].sprite.visible = false;
-        allEnemies[i].shadow.visible = false;
+      const enemies: Character[] = []; // active enemies; populated in kickoff
+      // Hide all bot sprites until activated
+      for (const e of allEnemies) {
+        e.sprite.visible = false;
+        e.shadow.visible = false;
       }
 
       const BASE_JUMP_DURATION = 380;
