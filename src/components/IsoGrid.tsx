@@ -450,6 +450,7 @@ export function IsoGrid() {
           if (linear >= 1) {
             c.anim = null;
             land(c);
+            tryCollectChest(c);
             landedAny = true;
           }
         }
@@ -468,7 +469,27 @@ export function IsoGrid() {
             else if (d === "LEFT") nx--; else nx++;
             return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
           });
-          if (valid.length) moveCharacter(enemy, valid[Math.floor(Math.random() * valid.length)]);
+          if (valid.length) {
+            let chosen: Direction;
+            const enemyOwned = countOwned(enemy.skin.id);
+            if (enemyOwned > 3) {
+              // Hunt the chest: pick the valid direction that minimizes Manhattan distance
+              chosen = valid.reduce((best, d) => {
+                let nx = enemy.gx, ny = enemy.gy;
+                if (d === "UP") ny--; else if (d === "DOWN") ny++;
+                else if (d === "LEFT") nx--; else nx++;
+                const dist = Math.abs(nx - chest.gx) + Math.abs(ny - chest.gy);
+                let bx = enemy.gx, by = enemy.gy;
+                if (best === "UP") by--; else if (best === "DOWN") by++;
+                else if (best === "LEFT") bx--; else bx++;
+                const bestDist = Math.abs(bx - chest.gx) + Math.abs(by - chest.gy);
+                return dist < bestDist ? d : best;
+              }, valid[0]);
+            } else {
+              chosen = valid[Math.floor(Math.random() * valid.length)];
+            }
+            moveCharacter(enemy, chosen);
+          }
         }
       });
 
