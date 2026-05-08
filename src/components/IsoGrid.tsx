@@ -304,7 +304,17 @@ export function IsoGrid() {
       };
 
       const player = makeCharacter(PLAYER_SKIN, 0, 0);
-      const enemy = makeCharacter(ENEMY_SKIN, 7, 7);
+      // Pre-create all 4 possible bot characters; activate first N based on botCount.
+      const ENEMY_SPAWN_POSITIONS: Array<[number, number]> = [[7, 7], [7, 0], [0, 7], [4, 4]];
+      const allEnemies: Character[] = BOT_SKINS.map((sid, i) =>
+        makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1])
+      );
+      const enemies: Character[] = allEnemies.slice(0, botCountRef.current);
+      // Hide unused bot sprites
+      for (let i = botCountRef.current; i < allEnemies.length; i++) {
+        allEnemies[i].sprite.visible = false;
+        allEnemies[i].shadow.visible = false;
+      }
 
       const BASE_JUMP_DURATION = 380;
       const BOOST_JUMP_DURATION = 150;
