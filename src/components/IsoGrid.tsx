@@ -71,8 +71,19 @@ export function IsoGrid() {
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  const kickoffRef = useRef<(() => void) | null>(null);
   const timeoutsRef = useRef<Set<number>>(new Set());
   const intervalsRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => { startedRef.current = started; }, [started]);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => {
+    if (started) kickoffRef.current?.();
+  }, [started]);
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
