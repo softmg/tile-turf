@@ -1335,6 +1335,14 @@ export function IsoGrid() {
   const [phase, setPhase] = useState<"menu" | "playing" | "passed" | "failed">("menu");
   const [roundIdx, setRoundIdx] = useState(0);
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
+  const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem("isogrid:tutorial:v1") !== "1";
+  });
+  const closeTutorial = () => {
+    setTutorialOpen(false);
+    try { window.localStorage.setItem("isogrid:tutorial:v1", "1"); } catch {}
+  };
 
   const persistUnlocked = (lv: number) => {
     setUnlocked(lv);
@@ -1375,17 +1383,21 @@ export function IsoGrid() {
 
   if (phase === "playing") {
     return (
-      <IsoRound
-        key={`lvl-${level}-r-${roundIdx}`}
-        level={level}
-        matchWins={matchWins}
-        onRoundEnd={handleRoundEnd}
-      />
+      <>
+        <IsoRound
+          key={`lvl-${level}-r-${roundIdx}`}
+          level={level}
+          matchWins={matchWins}
+          onRoundEnd={handleRoundEnd}
+        />
+        {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
+      </>
     );
   }
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
       <div className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10">
         {phase === "passed" && (
           <>
@@ -1478,6 +1490,72 @@ export function IsoGrid() {
             </button>
           )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setTutorialOpen(true)}
+          className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 hover:text-white underline-offset-2 hover:underline"
+        >
+          Как играть?
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TutorialModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-6 text-left shadow-2xl ring-1 ring-white/10 max-h-[90vh] overflow-y-auto">
+        <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Туториал</div>
+        <div className="mt-1 text-2xl font-extrabold text-white">Как играть</div>
+
+        <div className="mt-4 space-y-3 text-sm text-white/80 leading-relaxed">
+          <p>
+            <span className="font-bold text-white">Цель:</span> закрашивай как можно больше клеток своим цветом, пока идёт раунд.
+            Чем больше клеток твоего цвета в конце — тем больше очков.
+          </p>
+          <p>
+            <span className="font-bold text-white">Очки:</span> двигаясь по полю, ты автоматически красишь клетки под собой.
+            Можно перекрашивать клетки соперников. По истечении времени побеждает тот, у кого больше своих клеток.
+          </p>
+          <p>
+            <span className="font-bold text-white">Матч:</span> уровень играется до <span className="text-emerald-400 font-bold">{WINS_TO_PASS} побед</span> в раундах.
+            Если бот первым наберёт {WINS_TO_PASS} побед — уровень не пройден, придётся переиграть.
+          </p>
+        </div>
+
+        <div className="mt-5 space-y-2.5 text-sm text-white/85">
+          <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
+            <div className="text-xl leading-none">🎁</div>
+            <div>
+              <div className="font-bold text-white">Сундук</div>
+              <div className="text-xs text-white/70">Подбери, чтобы получить бонусные очки и закрасить клетки вокруг. Появляется в случайном месте.</div>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
+            <div className="text-xl leading-none">➤</div>
+            <div>
+              <div className="font-bold text-white">Стрелка</div>
+              <div className="text-xs text-white/70">Закрашивает целую линию клеток в направлении стрелки твоим цветом — мощный буст.</div>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
+            <div className="text-xl leading-none">💣</div>
+            <div>
+              <div className="font-bold text-white">Бомба</div>
+              <div className="text-xs text-white/70">Опасно! Скоро взорвётся (мигает красным). Взрыв сбрасывает закраску вокруг — держись подальше или подставь соперника.</div>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="mt-6 w-full rounded-full bg-amber-400 px-4 py-3 text-sm font-extrabold uppercase tracking-wider text-black active:scale-95"
+        >
+          Поехали!
+        </button>
       </div>
     </div>
   );
