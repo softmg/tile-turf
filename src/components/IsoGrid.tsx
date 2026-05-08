@@ -214,13 +214,21 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
     (async () => {
       try {
+        // Detect coarse-pointer / mobile to lower resolution and disable AA.
+        const isCoarse = typeof window.matchMedia === "function"
+          && window.matchMedia("(pointer: coarse)").matches;
+        const dpr = window.devicePixelRatio || 1;
+        // High-DPR mobile devices (e.g. iPhone Pro at DPR 3) ate 9× pixels.
+        // Cap aggressively on mobile; cap at 2 on desktop.
+        const resolution = isCoarse ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
         await app.init({
           resizeTo: window,
           backgroundAlpha: 0,
-          antialias: true,
-          resolution: Math.min(window.devicePixelRatio || 1, 3),
+          antialias: !isCoarse,
+          resolution,
           autoDensity: true,
           preference: "webgl",
+          powerPreference: "high-performance",
         });
       } catch (err) {
         console.error("[IsoGrid] Pixi init failed", err);
