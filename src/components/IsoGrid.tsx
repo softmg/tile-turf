@@ -929,8 +929,8 @@ export function IsoGrid() {
 
       {/* Scoreboard */}
       <div
-        className="fixed left-1/2 top-4 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
-        style={{ touchAction: "none" }}
+        className="fixed left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 60px)" }}
       >
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: playerSkin.uiColor }} />
