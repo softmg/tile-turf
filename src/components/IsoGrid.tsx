@@ -62,7 +62,20 @@ const BOT_SKINS: SkinId[] = ["girl", "alien", "knight", "robot"];
 const SKIN_IDS: SkinId[] = ["plush", "girl", "alien", "knight", "robot"];
 const ZERO_SCORES = (): Record<SkinId, number> => ({ plush: 0, girl: 0, alien: 0, knight: 0, robot: 0 });
 
-export function IsoGrid() {
+// Level scaling
+export const MAX_LEVEL = 10;
+export const WINS_TO_PASS = 3;
+export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : lv <= 7 ? 3 : 4);
+export const enemyIntervalForLevel = (lv: number) =>
+  Math.max(220, 750 - (lv - 1) * 60); // bots step faster on higher levels
+
+interface IsoRoundProps {
+  level: number;
+  matchWins: Record<SkinId, number>;
+  onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
+}
+
+function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
@@ -77,15 +90,16 @@ export function IsoGrid() {
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
-  const [started, setStarted] = useState(false);
-  const startedRef = useRef(false);
+  const [started, setStarted] = useState(true);
+  const startedRef = useRef(true);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
-  const [botCount, setBotCount] = useState(1);
-  const botCountRef = useRef(1);
+  const botCount = botsForLevel(level);
+  const botCountRef = useRef(botCount);
+  const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  useEffect(() => { botCountRef.current = botCount; }, [botCount]);
+  useEffect(() => { botCountRef.current = botCount; levelRef.current = level; }, [botCount, level]);
   const activeBotSkins: SkinId[] = BOT_SKINS.slice(0, botCount);
   const activeSkins: SkinId[] = [PLAYER_SKIN, ...activeBotSkins];
   const timeoutsRef = useRef<Set<number>>(new Set());
@@ -777,7 +791,7 @@ export function IsoGrid() {
       // Enemy AI: random walk every ~700ms
       const DIRS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
       let enemyTimer = 0;
-      const ENEMY_INTERVAL = 700;
+      const enemyInterval = () => enemyIntervalForLevel(levelRef.current);
 
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
@@ -855,7 +869,7 @@ export function IsoGrid() {
 
         // Enemy AI tick (per bot)
         enemyTimer += dtMs;
-        if (enemyTimer >= ENEMY_INTERVAL) {
+        if (enemyTimer >= enemyInterval()) {
           enemyTimer = 0;
           for (const en of enemies) {
             if (en.anim) continue;
@@ -1084,11 +1098,25 @@ export function IsoGrid() {
         <style>{`@keyframes iso-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.85; } }`}</style>
       </div>
 
-      {/* Game Over overlay */}
+      {/* Match wins HUD (player vs bots, first to 3) */}
+      <div
+        className="fixed right-4 z-50 rounded-lg bg-black/55 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm shadow-lg"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 56px)" }}
+      >
+        <div className="text-white/60 uppercase tracking-wider text-[9px]">Lvl {level} · BO{WINS_TO_PASS * 2 - 1}</div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span style={{ color: SKINS[PLAYER_SKIN].uiColor }}>You {matchWins[PLAYER_SKIN]}</span>
+          <span className="text-white/40">vs</span>
+          <span className="text-white/90">Bots {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))}</span>
+          <span className="text-white/40">/ {WINS_TO_PASS}</span>
+        </div>
+      </div>
+
+      {/* Round Over overlay */}
       {gameOver && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">End of Round</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">End of Round · Level {level}</div>
             <div className="mt-2 text-3xl font-extrabold text-white">
               {isTie ? "It's a Tie!" : (
                 <span style={{ color: SKINS[winner].uiColor }}>
@@ -1109,10 +1137,10 @@ export function IsoGrid() {
             </div>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => onRoundEnd(isTie ? null : winner, banked)}
               className="mt-6 w-full rounded-full bg-emerald-400 px-4 py-2 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
             >
-              Play Again
+              Continue
             </button>
           </div>
         </div>
@@ -1133,68 +1161,19 @@ export function IsoGrid() {
         <Settings size={20} />
       </button>
 
-      {/* Start overlay */}
-      {!started && !gameOver && !settingsOpen && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[260px]">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Get Ready</div>
-            <div className="mt-2 text-2xl font-extrabold text-white">Paint the Grid!</div>
-            <p className="mt-3 text-sm text-white/70">Tap & drag to move. Bank tiles at the chest. 90s round.</p>
-            <p className="mt-1 text-xs text-white/50">Bots: {botCount}</p>
-            <button
-              type="button"
-              onClick={() => setStarted(true)}
-              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
-            >
-              <Play size={16} fill="currentColor" /> Start Round
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white active:scale-95"
-            >
-              <Settings size={14} /> Settings
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Settings / Pause overlay */}
+      {/* Pause overlay */}
       {settingsOpen && !gameOver && (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="rounded-2xl bg-zinc-900/95 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">
-              {started ? "Paused" : "Settings"}
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paused</div>
+            <div className="mt-1 text-2xl font-extrabold text-white">Level {level}</div>
+            <div className="mt-3 text-sm text-white/70">
+              Bots: <span className="font-bold text-white">{botCount}</span> · Speed{" "}
+              <span className="font-bold text-white">×{(700 / enemyIntervalForLevel(level)).toFixed(2)}</span>
             </div>
-            <div className="mt-1 text-2xl font-extrabold text-white">Game Setup</div>
-
-            <div className="mt-5 text-left">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-white/80">Bots</span>
-                <span className="font-mono text-lg font-extrabold text-white tabular-nums">{botCount}</span>
-              </div>
-              <div className="mt-2 grid grid-cols-4 gap-2">
-                {[1, 2, 3, 4].map((n) => {
-                  const disabled = started; // can only change before round starts
-                  const active = botCount === n;
-                  return (
-                    <button
-                      key={n}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => setBotCount(n)}
-                      className={`rounded-lg px-3 py-2 text-sm font-bold transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
-                        active ? "bg-emerald-400 text-black" : "bg-white/10 text-white"
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  );
-                })}
-              </div>
-              {started && (
-                <p className="mt-2 text-[11px] text-white/50">Bot count locks once the round starts.</p>
-              )}
+            <div className="mt-3 text-xs text-white/60">
+              Match: You {matchWins[PLAYER_SKIN]} — Bots{" "}
+              {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))} / {WINS_TO_PASS}
             </div>
 
             <button
@@ -1202,7 +1181,7 @@ export function IsoGrid() {
               onClick={() => { setSettingsOpen(false); setPaused(false); }}
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
             >
-              <Play size={16} fill="currentColor" /> {started ? "Resume" : "Close"}
+              <Play size={16} fill="currentColor" /> Resume
             </button>
           </div>
         </div>
@@ -1275,5 +1254,168 @@ export function IsoGrid() {
         </div>
       )}
     </>
+  );
+}
+
+// ============= Level Manager Wrapper =============
+
+const LS_UNLOCKED = "iso_unlocked_level";
+
+export function IsoGrid() {
+  const [unlocked, setUnlocked] = useState<number>(() => {
+    if (typeof window === "undefined") return 1;
+    const v = parseInt(window.localStorage.getItem(LS_UNLOCKED) || "1", 10);
+    return Math.min(MAX_LEVEL, Math.max(1, isNaN(v) ? 1 : v));
+  });
+  const [level, setLevel] = useState<number>(1);
+  const [matchWins, setMatchWins] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
+  const [phase, setPhase] = useState<"menu" | "playing" | "passed" | "failed">("menu");
+  const [roundIdx, setRoundIdx] = useState(0);
+  const [lastWinnerName, setLastWinnerName] = useState<string>("");
+
+  const persistUnlocked = (lv: number) => {
+    setUnlocked(lv);
+    try { window.localStorage.setItem(LS_UNLOCKED, String(lv)); } catch {}
+  };
+
+  const startLevel = (lv: number) => {
+    setLevel(lv);
+    setMatchWins(ZERO_SCORES());
+    setRoundIdx((r) => r + 1);
+    setPhase("playing");
+  };
+
+  const handleRoundEnd = (winner: SkinId | null) => {
+    const next = { ...matchWins };
+    if (winner) next[winner] = (next[winner] || 0) + 1;
+    setMatchWins(next);
+
+    const bots = BOT_SKINS.slice(0, botsForLevel(level));
+    const playerW = next[PLAYER_SKIN];
+    const botMax = Math.max(0, ...bots.map((b) => next[b]));
+    setLastWinnerName(winner ? SKINS[winner].name : "Tie");
+
+    if (playerW >= WINS_TO_PASS) {
+      const nextUnlocked = Math.min(MAX_LEVEL, Math.max(unlocked, level + 1));
+      persistUnlocked(nextUnlocked);
+      setPhase("passed");
+      return;
+    }
+    if (botMax >= WINS_TO_PASS) {
+      setPhase("failed");
+      return;
+    }
+    // Continue match: launch next round
+    setRoundIdx((r) => r + 1);
+    setPhase("playing");
+  };
+
+  if (phase === "playing") {
+    return (
+      <IsoRound
+        key={`lvl-${level}-r-${roundIdx}`}
+        level={level}
+        matchWins={matchWins}
+        onRoundEnd={handleRoundEnd}
+      />
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10">
+        {phase === "passed" && (
+          <>
+            <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">Level Passed</div>
+            <div className="mt-1 text-3xl font-extrabold text-white">Level {level} ✓</div>
+            <p className="mt-2 text-sm text-white/70">
+              You won {matchWins[PLAYER_SKIN]}–{Math.max(0, ...BOT_SKINS.slice(0, botsForLevel(level)).map((b) => matchWins[b]))}.
+            </p>
+          </>
+        )}
+        {phase === "failed" && (
+          <>
+            <div className="text-xs font-bold uppercase tracking-widest text-rose-400">Level Failed</div>
+            <div className="mt-1 text-3xl font-extrabold text-white">Level {level} ✗</div>
+            <p className="mt-2 text-sm text-white/70">
+              A bot reached {WINS_TO_PASS} wins first. Try again!
+            </p>
+          </>
+        )}
+        {phase === "menu" && (
+          <>
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paint the Grid</div>
+            <div className="mt-1 text-3xl font-extrabold text-white">Select Level</div>
+            <p className="mt-2 text-xs text-white/60">First to {WINS_TO_PASS} round wins clears the level.</p>
+          </>
+        )}
+
+        <div className="mt-5 grid grid-cols-5 gap-2">
+          {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map((lv) => {
+            const locked = lv > unlocked;
+            const isCurrent = lv === level && phase !== "menu";
+            return (
+              <button
+                key={lv}
+                type="button"
+                disabled={locked}
+                onClick={() => startLevel(lv)}
+                className={`aspect-square rounded-lg text-sm font-extrabold transition active:scale-95 ${
+                  locked
+                    ? "bg-white/5 text-white/30 cursor-not-allowed"
+                    : isCurrent
+                      ? "bg-amber-400 text-black ring-2 ring-amber-200"
+                      : lv <= unlocked
+                        ? "bg-emerald-500/90 text-black hover:bg-emerald-400"
+                        : "bg-white/10 text-white"
+                }`}
+                title={locked ? "Locked" : `Level ${lv} · ${botsForLevel(lv)} bot${botsForLevel(lv) > 1 ? "s" : ""}`}
+              >
+                {locked ? "🔒" : lv}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 text-[11px] text-white/50">
+          Bots scale: lvl 1–2 → 1, 3–4 → 2, 5–7 → 3, 8–10 → 4. Bot speed grows each level.
+        </div>
+
+        <div className="mt-5 flex gap-2">
+          {phase === "passed" && level < MAX_LEVEL && (
+            <button
+              type="button"
+              onClick={() => startLevel(level + 1)}
+              className="flex-1 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              Next Level
+            </button>
+          )}
+          {phase === "passed" && level >= MAX_LEVEL && (
+            <div className="flex-1 rounded-full bg-amber-400 px-4 py-3 text-sm font-extrabold uppercase tracking-wider text-black">
+              🏆 All Levels Cleared!
+            </div>
+          )}
+          {phase === "failed" && (
+            <button
+              type="button"
+              onClick={() => startLevel(level)}
+              className="flex-1 rounded-full bg-rose-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              Retry Level {level}
+            </button>
+          )}
+          {phase === "menu" && (
+            <button
+              type="button"
+              onClick={() => startLevel(unlocked)}
+              className="flex-1 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              Play Level {unlocked}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
