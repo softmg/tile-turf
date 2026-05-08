@@ -418,6 +418,7 @@ export function IsoGrid() {
       const moveCharacter = (c: Character, direction: Direction) => {
         if (gameOverRef.current) return;
         if (c.anim) return;
+        if (performance.now() < c.stunnedUntil) return;
         let nx = c.gx;
         let ny = c.gy;
         if (direction === "UP") ny -= 1;
@@ -430,7 +431,7 @@ export function IsoGrid() {
         c.gx = nx;
         c.gy = ny;
         updateMinimap();
-        c.anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0 };
+        c.anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0, duration: jumpDurationFor(c) };
       };
 
       const movePlayer = (d: Direction) => moveCharacter(player, d);
