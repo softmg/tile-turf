@@ -75,6 +75,54 @@ export function IsoGrid() {
   const intervalsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  // Pinch-to-zoom (two fingers)
+  useEffect(() => {
+    const host = containerRef.current;
+    if (!host) return;
+    const pointers = new Map<number, { x: number; y: number }>();
+    let startDist = 0;
+    let startZoom = 1;
+    const dist = () => {
+      const pts = Array.from(pointers.values());
+      if (pts.length < 2) return 0;
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      return Math.hypot(dx, dy);
+    };
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2) {
+        startDist = dist();
+        startZoom = zoomRef.current;
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2 && startDist > 0) {
+        const d = dist();
+        const next = Math.min(2, Math.max(0.4, +(startZoom * (d / startDist)).toFixed(2)));
+        setZoom(next);
+      }
+    };
+    const onUp = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) startDist = 0;
+    };
+    host.addEventListener("pointerdown", onDown);
+    host.addEventListener("pointermove", onMove);
+    host.addEventListener("pointerup", onUp);
+    host.addEventListener("pointercancel", onUp);
+    return () => {
+      host.removeEventListener("pointerdown", onDown);
+      host.removeEventListener("pointermove", onMove);
+      host.removeEventListener("pointerup", onUp);
+      host.removeEventListener("pointercancel", onUp);
+    };
+  }, []);
+
   useEffect(() => { debugRef.current = debug; }, [debug]);
   useEffect(() => {
     gameOverRef.current = gameOver;
