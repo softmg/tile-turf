@@ -214,13 +214,21 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
     (async () => {
       try {
+        // Detect coarse-pointer / mobile to lower resolution and disable AA.
+        const isCoarse = typeof window.matchMedia === "function"
+          && window.matchMedia("(pointer: coarse)").matches;
+        const dpr = window.devicePixelRatio || 1;
+        // High-DPR mobile devices (e.g. iPhone Pro at DPR 3) ate 9× pixels.
+        // Cap aggressively on mobile; cap at 2 on desktop.
+        const resolution = isCoarse ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
         await app.init({
           resizeTo: window,
           backgroundAlpha: 0,
-          antialias: true,
-          resolution: Math.min(window.devicePixelRatio || 1, 3),
+          antialias: !isCoarse,
+          resolution,
           autoDensity: true,
           preference: "webgl",
+          powerPreference: "high-performance",
         });
       } catch (err) {
         console.error("[IsoGrid] Pixi init failed", err);
@@ -416,16 +424,30 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         minimap.y = app.screen.height - MINI_SIZE - 16;
       };
 
-      const updateMinimap = () => {
+      const miniTileColor: number[][] = [];
+      for (let x = 0; x < 8; x++) {
+        miniTileColor[x] = [];
+        for (let y = 0; y < 8; y++) miniTileColor[x][y] = UNPAINTED_MINIMAP_COLOR;
+      }
+      let minimapTilesDirty = true;
+
+      const updateMinimapTiles = () => {
+        if (!minimapTilesDirty) return;
+        minimapTilesDirty = false;
         for (let x = 0; x < 8; x++) {
           for (let y = 0; y < 8; y++) {
-            const m = miniTiles[x][y];
             const o = owners[x][y];
             const color = o ? SKINS[o].minimapColor : UNPAINTED_MINIMAP_COLOR;
+            if (miniTileColor[x][y] === color) continue;
+            miniTileColor[x][y] = color;
+            const m = miniTiles[x][y];
             m.clear();
             m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(color);
           }
         }
+      };
+
+      const updateMinimapMarkers = () => {
         miniPlayer.x = player.gx * MINI_CELL + MINI_CELL / 2;
         miniPlayer.y = player.gy * MINI_CELL + MINI_CELL / 2;
         for (let i = 0; i < enemies.length; i++) {
@@ -433,19 +455,16 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           miniEnemies[i].y = enemies[i].gy * MINI_CELL + MINI_CELL / 2;
         }
 
-        // Chest marker (gold square with outline)
         const cx = chest.gx * MINI_CELL + MINI_CELL / 2;
         const cy = chest.gy * MINI_CELL + MINI_CELL / 2;
         miniChest.clear();
         miniChest.rect(cx - 3, cy - 3, 6, 6).fill(0xffd24a).stroke({ width: 1, color: 0x6a4500 });
         miniChest.visible = true;
 
-        // Arrow marker (white triangle pointing in current dir)
         miniArrow.clear();
         if (arrow) {
           const ax = arrow.gx * MINI_CELL + MINI_CELL / 2;
           const ay = arrow.gy * MINI_CELL + MINI_CELL / 2;
-          // dir: 0=UP,1=RIGHT,2=DOWN,3=LEFT — point along screen axes (matches grid in minimap)
           const tri =
             arrow.dir === 0 ? [0, -4, 3, 2, -3, 2] :
             arrow.dir === 1 ? [4, 0, -2, 3, -2, -3] :
@@ -458,7 +477,6 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           miniArrow.visible = false;
         }
 
-        // Bombs (red dots; brighter when about to explode)
         miniBombs.clear();
         for (const b of bombs) {
           const bx = b.gx * MINI_CELL + MINI_CELL / 2;
@@ -466,6 +484,11 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           const color = b.phase === "explosion" ? 0xfff2a0 : 0xff2222;
           miniBombs.circle(bx, by, 2.5).fill(color).stroke({ width: 1, color: 0x000000 });
         }
+      };
+
+      const updateMinimap = () => {
+        updateMinimapTiles();
+        updateMinimapMarkers();
       };
 
       let cameraTargetX = 0;
@@ -522,10 +545,12 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
       const paintAt = (gx: number, gy: number, skin: SkinConfig) => {
+        if (owners[gx][gy] === skin.id) return;
         owners[gx][gy] = skin.id;
         const tile = tiles[gx][gy];
         tile.texture = skinTextures[skin.id].tile;
         tile.tint = skin.spriteTint;
+        minimapTilesDirty = true;
       };
 
       const renderCharacterAt = (c: Character, gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
@@ -570,13 +595,20 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
 
+      const lastScores: Record<SkinId, number> = ZERO_SCORES();
+      let scoresDirty = false;
+      let lastScoresFlush = 0;
       const recomputeScores = () => {
+        let changed = false;
         const next: Record<SkinId, number> = ZERO_SCORES();
         for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
           const o = owners[x][y];
           if (o) next[o]++;
         }
-        setScores(next);
+        for (const id of SKIN_IDS) {
+          if (next[id] !== lastScores[id]) { changed = true; lastScores[id] = next[id]; }
+        }
+        if (changed) scoresDirty = true;
         return next;
       };
 
@@ -587,14 +619,17 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
       const clearOwnedBy = (skinId: SkinId) => {
+        let any = false;
         for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
           if (owners[x][y] === skinId) {
             owners[x][y] = null;
             const t = tiles[x][y];
             t.texture = unpaintedTex;
             t.tint = 0xffffff;
+            any = true;
           }
         }
+        if (any) minimapTilesDirty = true;
       };
 
       const tryCollectChest = (c: Character) => {
@@ -674,7 +709,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           } else {
             warning.x = p.x;
           }
-        }, 60);
+        }, 100);
         pendingIntervals.add(tickId);
 
         setT(() => {
@@ -701,7 +736,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
             const s = bombScale(boomTex, BOOM_TARGET_H) * (0.4 + 0.6 * k);
             boom.scale.set(s);
             boom.alpha = Math.max(0, 1 - Math.max(0, dt - 280) / 220);
-          }, 30);
+          }, 50);
           pendingIntervals.add(boomTickId);
 
           // Impact: stun anyone on this tile (and not mid-air)
@@ -940,15 +975,18 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         // Animate characters (frozen when not running)
         let landedAny = false;
         if (!frozen) {
-        for (const c of [player, ...enemies]) {
+        // Iterate stable list (player + active enemies) without per-frame allocation
+        for (let ci = -1; ci < enemies.length; ci++) {
+          const c = ci < 0 ? player : enemies[ci];
           if (!c.anim) continue;
           c.anim.elapsed += dtMs;
           const linear = Math.min(1, c.anim.elapsed / c.anim.duration);
           const t = ease(linear);
           const gx = c.anim.fromX + (c.anim.toX - c.anim.fromX) * t;
           const gy = c.anim.fromY + (c.anim.toY - c.anim.fromY) * t;
-          const jumpOffset = Math.sin(linear * Math.PI) * -55;
-          const shadowScale = 1 - Math.sin(linear * Math.PI) * 0.5;
+          const arc = Math.sin(linear * Math.PI);
+          const jumpOffset = arc * -55;
+          const shadowScale = 1 - arc * 0.5;
           renderCharacterAt(c, gx, gy, jumpOffset, shadowScale);
           if (linear >= 1) {
             c.anim = null;
@@ -961,15 +999,27 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         }
         if (landedAny) {
           recomputeScores();
+          updateMinimapTiles();
         }
-        // Refresh minimap each frame so chest/arrow/bombs stay in sync
-        updateMinimap();
+        // Cheap per-frame: marker positions only (tiles updated on dirty)
+        updateMinimapMarkers();
+
+        // Throttle React score updates to ~5Hz to avoid HUD re-render storms
+        if (scoresDirty) {
+          const nowS = performance.now();
+          if (nowS - lastScoresFlush > 200) {
+            lastScoresFlush = nowS;
+            scoresDirty = false;
+            setScores({ ...lastScores });
+          }
+        }
 
         // Update auras for boost
         const nowMs = performance.now();
-        for (const c of [player, ...enemies]) {
+        for (let ci = -1; ci < enemies.length; ci++) {
+          const c = ci < 0 ? player : enemies[ci];
           const active = nowMs < c.boostUntil;
-          c.aura.visible = active;
+          if (c.aura.visible !== active) c.aura.visible = active;
           if (active) {
             c.aura.x = c.sprite.x;
             c.aura.y = c.sprite.y - 30;
