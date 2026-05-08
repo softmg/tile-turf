@@ -4,6 +4,7 @@ import backgroundUrl from "@/assets/background.png";
 import playerUrl from "@/assets/player.png";
 import tileUrl from "@/assets/tile.png";
 import tilePaintedUrl from "@/assets/tile-painted.png";
+import chestUrl from "@/assets/chest.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
