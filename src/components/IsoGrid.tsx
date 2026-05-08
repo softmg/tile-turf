@@ -408,6 +408,7 @@ export function IsoGrid() {
 
       // ---------- Hazards (Bombs) & Boots ----------
       const pendingTimeouts = new Set<number>();
+      scheduledTimeouts = pendingTimeouts;
       const setT = (fn: () => void, ms: number) => {
         const id = window.setTimeout(() => {
           pendingTimeouts.delete(id);
