@@ -154,28 +154,30 @@ export function IsoGrid() {
       let cameraInitialized = false;
 
       const computeCameraTarget = () => {
+        const z = zoomRef.current;
         const p = isoPos(playerX, playerY);
         const minX = isoPos(0, 7).x;
         const maxX = isoPos(7, 0).x;
         const minY = isoPos(0, 0).y;
         const maxY = isoPos(7, 7).y;
-        const gridW = maxX - minX + TILE_SIZE;
-        const gridH = maxY - minY + TILE_SIZE;
+        const gridW = (maxX - minX + TILE_SIZE) * z;
+        const gridH = (maxY - minY + TILE_SIZE) * z;
         const gridCx = (minX + maxX) / 2;
         const gridCy = (minY + maxY) / 2;
 
         if (gridW <= app.screen.width && gridH <= app.screen.height) {
-          cameraTargetX = app.screen.width / 2 - gridCx;
-          cameraTargetY = app.screen.height / 2 - gridCy;
+          cameraTargetX = app.screen.width / 2 - gridCx * z;
+          cameraTargetY = app.screen.height / 2 - gridCy * z;
         } else {
-          cameraTargetX = app.screen.width / 2 - p.x;
-          cameraTargetY = app.screen.height / 2 - p.y;
+          cameraTargetX = app.screen.width / 2 - p.x * z;
+          cameraTargetY = app.screen.height / 2 - p.y * z;
         }
       };
 
       const centerCamera = () => {
         computeCameraTarget();
         if (!cameraInitialized) {
+          world.scale.set(zoomRef.current);
           world.x = cameraTargetX;
           world.y = cameraTargetY;
           cameraInitialized = true;
