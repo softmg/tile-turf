@@ -494,6 +494,24 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
       const centerCamera = () => {
+        if (!cameraInitialized) {
+          // Fit grid to screen on first render
+          const minX = isoPos(0, 7).x;
+          const maxX = isoPos(7, 0).x;
+          const minY = isoPos(0, 0).y;
+          const maxY = isoPos(7, 7).y;
+          const rawW = maxX - minX + TILE_SIZE;
+          const rawH = maxY - minY + TILE_SIZE;
+          // Reserve some space for HUD/scoreboard (top + bottom)
+          const padX = 24;
+          const padY = 140;
+          const availW = Math.max(100, app.screen.width - padX * 2);
+          const availH = Math.max(100, app.screen.height - padY);
+          const fit = Math.min(availW / rawW, availH / rawH);
+          const fitZoom = Math.max(0.3, Math.min(2, fit));
+          zoomRef.current = fitZoom;
+          setZoom(fitZoom);
+        }
         computeCameraTarget();
         if (!cameraInitialized) {
           world.scale.set(zoomRef.current);
