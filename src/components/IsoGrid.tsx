@@ -595,13 +595,19 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
 
+      const lastScores: Record<SkinId, number> = ZERO_SCORES();
+      let scoresDirty = false;
       const recomputeScores = () => {
+        let changed = false;
         const next: Record<SkinId, number> = ZERO_SCORES();
         for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
           const o = owners[x][y];
           if (o) next[o]++;
         }
-        setScores(next);
+        for (const id of SKIN_IDS) {
+          if (next[id] !== lastScores[id]) { changed = true; lastScores[id] = next[id]; }
+        }
+        if (changed) scoresDirty = true;
         return next;
       };
 
@@ -612,14 +618,17 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
       const clearOwnedBy = (skinId: SkinId) => {
+        let any = false;
         for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
           if (owners[x][y] === skinId) {
             owners[x][y] = null;
             const t = tiles[x][y];
             t.texture = unpaintedTex;
             t.tint = 0xffffff;
+            any = true;
           }
         }
+        if (any) minimapTilesDirty = true;
       };
 
       const tryCollectChest = (c: Character) => {
