@@ -442,6 +442,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       const updateMinimapTiles = () => {
         if (!minimapTilesDirty) return;
         minimapTilesDirty = false;
+        statsAccum.current.miniPasses += 1;
         for (let x = 0; x < 8; x++) {
           for (let y = 0; y < 8; y++) {
             const o = owners[x][y];
@@ -451,6 +452,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
             const m = miniTiles[x][y];
             m.clear();
             m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(color);
+            statsAccum.current.miniCells += 1;
           }
         }
       };
