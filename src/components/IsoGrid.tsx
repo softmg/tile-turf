@@ -69,13 +69,21 @@ export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : lv <= 7
 export const enemyIntervalForLevel = (lv: number) =>
   Math.max(220, 750 - (lv - 1) * 60); // bots step faster on higher levels
 
+export interface RoundHistoryEntry {
+  level: number;
+  round: number;
+  winner: SkinId | null;
+  scores: Record<SkinId, number>;
+}
+
 interface IsoRoundProps {
   level: number;
   matchWins: Record<SkinId, number>;
+  history: RoundHistoryEntry[];
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
 }
 
-function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
+function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
