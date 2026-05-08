@@ -682,8 +682,12 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       const isWarningAt = (gx: number, gy: number) =>
         bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
 
-      const BOMB_TARGET_H = 90;
-      const BOOM_TARGET_H = 140;
+      // All bomb sprites are now normalized to 460x520 with the bomb body
+      // centered at (230, 280) -> anchor (0.5, 0.538). Scaling by canvas height
+      // therefore renders all frames at a consistent visual size & position.
+      const BOMB_TARGET_H = 170;
+      const BOOM_TARGET_H = 220;
+      const BOMB_ANCHOR_Y = 280 / 520;
       const bombScale = (tex: Texture, target: number) => target / Math.max(tex.height, 1);
 
       const spawnBomb = () => {
@@ -694,7 +698,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         const p = isoPos(gx, gy);
 
         const warning = new Sprite(bombTex1);
-        warning.anchor.set(0.5, 0.5);
+        warning.anchor.set(0.5, BOMB_ANCHOR_Y);
         warning.scale.set(bombScale(bombTex1, BOMB_TARGET_H));
         warning.x = p.x;
         warning.y = p.y;
@@ -734,7 +738,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
           // Explosion sprite
           const boom = new Sprite(boomTex);
-          boom.anchor.set(0.5, 0.5);
+          boom.anchor.set(0.5, BOMB_ANCHOR_Y);
           boom.scale.set(bombScale(boomTex, BOOM_TARGET_H));
           boom.x = p.x; boom.y = p.y;
           boom.zIndex = gx + gy + 0.5;
