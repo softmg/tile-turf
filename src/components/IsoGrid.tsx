@@ -758,8 +758,15 @@ export function IsoGrid() {
             const bootsDist = boots
               ? Math.abs(enemy.gx - boots.gx) + Math.abs(enemy.gy - boots.gy)
               : Infinity;
+            const arrowDist = arrow
+              ? Math.abs(enemy.gx - arrow.gx) + Math.abs(enemy.gy - arrow.gy)
+              : Infinity;
             const enemyOwned = countOwned(enemy.skin.id);
-            if (boots && bootsDist <= 2) {
+            if (arrow && arrowDist <= 2) {
+              chosen = safe.reduce((best, d) =>
+                distTo(d, arrow!.gx, arrow!.gy) < distTo(best, arrow!.gx, arrow!.gy) ? d : best,
+                safe[0]);
+            } else if (boots && bootsDist <= 2) {
               chosen = safe.reduce((best, d) =>
                 distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best,
                 safe[0]);
