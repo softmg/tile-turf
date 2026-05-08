@@ -182,18 +182,25 @@ export function IsoGrid() {
       positionMinimap();
       updatePlayer();
 
+      // easeInOutCubic for smoother horizontal motion
+      const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
       app.ticker.add(() => {
         if (!anim) return;
         const now = performance.now();
-        const progress = Math.min(1, (now - anim.start) / JUMP_DURATION);
-        const gx = anim.fromX + (anim.toX - anim.fromX) * progress;
-        const gy = anim.fromY + (anim.toY - anim.fromY) * progress;
-        const jumpOffset = Math.sin(progress * Math.PI) * -45;
-        const shadowScale = 1 - Math.sin(progress * Math.PI) * 0.4;
+        const linear = Math.min(1, (now - anim.start) / JUMP_DURATION);
+        const t = ease(linear);
+        const gx = anim.fromX + (anim.toX - anim.fromX) * t;
+        const gy = anim.fromY + (anim.toY - anim.fromY) * t;
+        const jumpOffset = Math.sin(linear * Math.PI) * -45;
+        const shadowScale = 1 - Math.sin(linear * Math.PI) * 0.4;
         renderPlayerAt(gx, gy, jumpOffset, shadowScale);
-        if (progress >= 1) {
+        if (linear >= 1) {
           anim = null;
-          updatePlayer();
+          // Paint on landing
+          paintAt(playerX, playerY);
+          renderPlayerAt(playerX, playerY);
+          updateMinimap();
         }
       });
 
@@ -210,7 +217,7 @@ export function IsoGrid() {
         const fromY = playerY;
         playerX = nx;
         playerY = ny;
-        paintAt(playerX, playerY);
+        // Update minimap dot immediately, but paint tile only on landing
         updateMinimap();
         anim = { fromX, fromY, toX: nx, toY: ny, start: performance.now() };
       };
