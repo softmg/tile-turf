@@ -1,8 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent, Assets } from "pixi.js";
-import tileUrl from "@/assets/tile.png";
-import tilePaintedUrl from "@/assets/tile-painted.png";
-import playerUrl from "@/assets/player.png";
 import backgroundUrl from "@/assets/background.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
@@ -10,6 +7,60 @@ type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 const TILE_W = 110;
 const TILE_H = 70;
 const TILE_SIZE = 120;
+
+// ---------- Skin System ----------
+export type SkinId = "plush" | "girl" | "alien" | "knight";
+
+export interface SkinConfig {
+  id: SkinId;
+  name: string;
+  playerSprite: string;
+  tileSprite: string;
+  minimapColor: number; // hex 0xRRGGBB
+  uiColor: string;      // CSS color for React UI
+}
+
+// Placeholder art via placehold.co — swap with real assets later.
+export const SKINS: Record<SkinId, SkinConfig> = {
+  plush: {
+    id: "plush",
+    name: "Plush",
+    playerSprite: "https://placehold.co/180x220/8b5a2b/ffffff/png?text=Plush",
+    tileSprite:   "https://placehold.co/240x240/8b5a2b/ffe4b5/png?text=+",
+    minimapColor: 0x8b5a2b,
+    uiColor: "#8b5a2b",
+  },
+  girl: {
+    id: "girl",
+    name: "Girl",
+    playerSprite: "https://placehold.co/180x220/ff69b4/ffffff/png?text=Girl",
+    tileSprite:   "https://placehold.co/240x240/ff69b4/ffe4f1/png?text=+",
+    minimapColor: 0xff69b4,
+    uiColor: "#ff69b4",
+  },
+  alien: {
+    id: "alien",
+    name: "Alien",
+    playerSprite: "https://placehold.co/180x220/32cd32/ffffff/png?text=Alien",
+    tileSprite:   "https://placehold.co/240x240/32cd32/eaffea/png?text=+",
+    minimapColor: 0x32cd32,
+    uiColor: "#32cd32",
+  },
+  knight: {
+    id: "knight",
+    name: "Knight",
+    playerSprite: "https://placehold.co/180x220/708090/ffffff/png?text=Knight",
+    tileSprite:   "https://placehold.co/240x240/708090/e6ecf2/png?text=+",
+    minimapColor: 0x708090,
+    uiColor: "#708090",
+  },
+};
+
+const UNPAINTED_TILE_URL = "https://placehold.co/240x240/f5d0b0/c08a5a/png?text=+";
+const UNPAINTED_MINIMAP_COLOR = 0xf5d0b0;
+
+const PLAYER_SKIN: SkinId = "plush";
+const ENEMY_SKIN: SkinId = "girl";
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,14 +70,10 @@ export function IsoGrid() {
   const debugRef = useRef(false);
   const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
   const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
+  const [scores, setScores] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
 
-  useEffect(() => {
-    zoomRef.current = zoom;
-  }, [zoom]);
-
-  useEffect(() => {
-    debugRef.current = debug;
-  }, [debug]);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  useEffect(() => { debugRef.current = debug; }, [debug]);
 
   useEffect(() => {
     const host = containerRef.current;
@@ -51,17 +98,23 @@ export function IsoGrid() {
       }
       host.appendChild(app.canvas);
 
-      // Preload textures so sprites have correct dimensions immediately
-      const [tileTex, tilePaintedTex, playerTex] = await Promise.all([
-        Assets.load(tileUrl),
-        Assets.load(tilePaintedUrl),
-        Assets.load(playerUrl),
+      // Preload textures: unpainted tile + every skin's tile + every skin's player
+      const skinList = Object.values(SKINS);
+      const [unpaintedTex, ...rest] = await Promise.all([
+        Assets.load(UNPAINTED_TILE_URL),
+        ...skinList.flatMap((s) => [Assets.load(s.tileSprite), Assets.load(s.playerSprite)]),
       ]);
-      for (const t of [tileTex, tilePaintedTex, playerTex]) {
-        if (t && (t as Texture).source) {
-          (t as Texture).source.scaleMode = "linear";
-          (t as Texture).source.autoGenerateMipmaps = true;
-          (t as Texture).source.updateMipmaps?.();
+      const skinTextures: Record<SkinId, { tile: Texture; player: Texture }> = {} as never;
+      skinList.forEach((s, i) => {
+        skinTextures[s.id] = { tile: rest[i * 2] as Texture, player: rest[i * 2 + 1] as Texture };
+      });
+
+      const allTex: Texture[] = [unpaintedTex as Texture, ...skinList.flatMap((s) => [skinTextures[s.id].tile, skinTextures[s.id].player])];
+      for (const t of allTex) {
+        if (t && t.source) {
+          t.source.scaleMode = "linear";
+          t.source.autoGenerateMipmaps = true;
+          t.source.updateMipmaps?.();
         }
       }
       if (destroyed) return;
@@ -76,13 +129,14 @@ export function IsoGrid() {
         y: (x + y) * (TILE_H / 2),
       });
 
-      const painted: boolean[][] = [];
+      // Tile ownership: null = unpainted, else SkinId
+      const owners: (SkinId | null)[][] = [];
       const tiles: Sprite[][] = [];
       for (let x = 0; x < 8; x++) {
         tiles[x] = [];
-        painted[x] = [];
+        owners[x] = [];
         for (let y = 0; y < 8; y++) {
-          const tile = new Sprite(tileTex as Texture);
+          const tile = new Sprite(unpaintedTex as Texture);
           tile.anchor.set(0.5, 0.5);
           tile.width = TILE_SIZE;
           tile.height = TILE_SIZE;
@@ -92,23 +146,37 @@ export function IsoGrid() {
           tile.zIndex = x + y;
           world.addChild(tile);
           tiles[x][y] = tile;
-          painted[x][y] = false;
+          owners[x][y] = null;
         }
       }
 
-      const shadow = new Graphics();
-      shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
-      world.addChild(shadow);
+      // ---------- Characters ----------
+      interface Character {
+        skin: SkinConfig;
+        sprite: Sprite;
+        shadow: Graphics;
+        gx: number;
+        gy: number;
+        anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number } | null;
+      }
 
-      const player = new Sprite(playerTex as Texture);
-      player.anchor.set(0.5, 0.85);
-      const playerScale = 90 / Math.max(player.texture.width, 1);
-      player.scale.set(playerScale);
-      world.addChild(player);
+      const makeCharacter = (skinId: SkinId, gx: number, gy: number): Character => {
+        const skin = SKINS[skinId];
+        const shadow = new Graphics();
+        shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
+        world.addChild(shadow);
+        const tex = skinTextures[skinId].player;
+        const sprite = new Sprite(tex);
+        sprite.anchor.set(0.5, 0.85);
+        const s = 90 / Math.max(tex.width, 1);
+        sprite.scale.set(s);
+        world.addChild(sprite);
+        return { skin, sprite, shadow, gx, gy, anim: null };
+      };
 
-      let playerX = 0;
-      let playerY = 0;
-      let anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number } | null = null;
+      const player = makeCharacter(PLAYER_SKIN, 0, 0);
+      const enemy = makeCharacter(ENEMY_SKIN, 7, 7);
+
       const JUMP_DURATION = 380;
 
       // ---------- Minimap ----------
@@ -127,7 +195,7 @@ export function IsoGrid() {
         miniTiles[x] = [];
         for (let y = 0; y < 8; y++) {
           const m = new Graphics();
-          m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(0xf5d0b0);
+          m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(UNPAINTED_MINIMAP_COLOR);
           minimap.addChild(m);
           miniTiles[x][y] = m;
         }
@@ -138,23 +206,39 @@ export function IsoGrid() {
       miniPlayer.zIndex = 10;
       minimap.addChild(miniPlayer);
 
+      const miniEnemy = new Graphics();
+      miniEnemy.circle(0, 0, 3).stroke({ width: 1.5, color: 0xffffff }).fill(SKINS[ENEMY_SKIN].minimapColor);
+      miniEnemy.zIndex = 10;
+      minimap.addChild(miniEnemy);
+
       const positionMinimap = () => {
         minimap.x = app.screen.width - MINI_SIZE - 20;
         minimap.y = 20;
+      };
+
+      const recomputeScores = () => {
+        const next: Record<SkinId, number> = { plush: 0, girl: 0, alien: 0, knight: 0 };
+        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
+          const o = owners[x][y];
+          if (o) next[o]++;
+        }
+        setScores(next);
       };
 
       const updateMinimap = () => {
         for (let x = 0; x < 8; x++) {
           for (let y = 0; y < 8; y++) {
             const m = miniTiles[x][y];
+            const o = owners[x][y];
+            const color = o ? SKINS[o].minimapColor : UNPAINTED_MINIMAP_COLOR;
             m.clear();
-            m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(
-              painted[x][y] ? 0xf97464 : 0xf5d0b0
-            );
+            m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(color);
           }
         }
-        miniPlayer.x = playerX * MINI_CELL + MINI_CELL / 2;
-        miniPlayer.y = playerY * MINI_CELL + MINI_CELL / 2;
+        miniPlayer.x = player.gx * MINI_CELL + MINI_CELL / 2;
+        miniPlayer.y = player.gy * MINI_CELL + MINI_CELL / 2;
+        miniEnemy.x = enemy.gx * MINI_CELL + MINI_CELL / 2;
+        miniEnemy.y = enemy.gy * MINI_CELL + MINI_CELL / 2;
       };
 
       let cameraTargetX = 0;
@@ -163,7 +247,7 @@ export function IsoGrid() {
 
       const computeCameraTarget = () => {
         const z = zoomRef.current;
-        const p = isoPos(playerX, playerY);
+        const p = isoPos(player.gx, player.gy);
         const minX = isoPos(0, 7).x;
         const maxX = isoPos(7, 0).x;
         const minY = isoPos(0, 0).y;
@@ -192,38 +276,63 @@ export function IsoGrid() {
         }
       };
 
-      const paintAt = (gx: number, gy: number) => {
-        painted[gx][gy] = true;
-        tiles[gx][gy].texture = tilePaintedTex as Texture;
+      const paintAt = (gx: number, gy: number, skin: SkinConfig) => {
+        owners[gx][gy] = skin.id;
+        tiles[gx][gy].texture = skinTextures[skin.id].tile;
       };
 
-      const renderPlayerAt = (gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
+      const renderCharacterAt = (c: Character, gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
         const p = isoPos(gx, gy);
-        player.x = p.x;
-        player.y = p.y + jumpOffset;
-        player.zIndex = gx + gy + 0.1;
-        shadow.x = p.x;
-        shadow.y = p.y;
-        shadow.zIndex = gx + gy + 0.05;
-        shadow.scale.set(shadowScale, shadowScale);
+        c.sprite.x = p.x;
+        c.sprite.y = p.y + jumpOffset;
+        c.sprite.zIndex = gx + gy + 0.1;
+        c.shadow.x = p.x;
+        c.shadow.y = p.y;
+        c.shadow.zIndex = gx + gy + 0.05;
+        c.shadow.scale.set(shadowScale, shadowScale);
       };
 
-      const updatePlayer = () => {
-        paintAt(playerX, playerY);
-        renderPlayerAt(playerX, playerY);
-        updateMinimap();
+      const land = (c: Character) => {
+        paintAt(c.gx, c.gy, c.skin);
+        renderCharacterAt(c, c.gx, c.gy);
       };
 
+      // Initial paint
+      land(player);
+      land(enemy);
       positionMinimap();
-      updatePlayer();
+      updateMinimap();
+      recomputeScores();
 
-      // easeInOutCubic for smoother horizontal motion
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+      const moveCharacter = (c: Character, direction: Direction) => {
+        if (c.anim) return;
+        let nx = c.gx;
+        let ny = c.gy;
+        if (direction === "UP") ny -= 1;
+        else if (direction === "DOWN") ny += 1;
+        else if (direction === "LEFT") nx -= 1;
+        else if (direction === "RIGHT") nx += 1;
+        if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return;
+        const fromX = c.gx;
+        const fromY = c.gy;
+        c.gx = nx;
+        c.gy = ny;
+        updateMinimap();
+        c.anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0 };
+      };
+
+      const movePlayer = (d: Direction) => moveCharacter(player, d);
+
+      // Enemy AI: random walk every ~700ms
+      const DIRS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
+      let enemyTimer = 0;
+      const ENEMY_INTERVAL = 700;
 
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
 
-        // Debug stats sampling (flush ~5x per second)
         if (debugRef.current) {
           const s = statsAccum.current;
           s.frames += 1;
@@ -238,59 +347,55 @@ export function IsoGrid() {
               frameMs: +avg.toFixed(2),
               maxMs: +s.maxMs.toFixed(2),
             });
-            s.frames = 0;
-            s.sumMs = 0;
-            s.maxMs = 0;
-            s.lastFlush = now;
+            s.frames = 0; s.sumMs = 0; s.maxMs = 0; s.lastFlush = now;
           }
         }
 
-        // Smooth zoom toward target
         const zSmooth = 1 - Math.exp(-dtMs / 100);
         const curScale = world.scale.x;
-        const nextScale = curScale + (zoomRef.current - curScale) * zSmooth;
-        world.scale.set(nextScale);
+        world.scale.set(curScale + (zoomRef.current - curScale) * zSmooth);
 
-        // Smooth camera lerp toward target, framerate-independent
         computeCameraTarget();
         const camSmooth = 1 - Math.exp(-dtMs / 80);
         world.x += (cameraTargetX - world.x) * camSmooth;
         world.y += (cameraTargetY - world.y) * camSmooth;
 
-        if (!anim) return;
-        anim.elapsed += dtMs;
-        const linear = Math.min(1, anim.elapsed / JUMP_DURATION);
-        const t = ease(linear);
-        const gx = anim.fromX + (anim.toX - anim.fromX) * t;
-        const gy = anim.fromY + (anim.toY - anim.fromY) * t;
-        const jumpOffset = Math.sin(linear * Math.PI) * -55;
-        const shadowScale = 1 - Math.sin(linear * Math.PI) * 0.5;
-        renderPlayerAt(gx, gy, jumpOffset, shadowScale);
-        if (linear >= 1) {
-          anim = null;
-          paintAt(playerX, playerY);
-          renderPlayerAt(playerX, playerY);
+        // Animate characters
+        let landedAny = false;
+        for (const c of [player, enemy]) {
+          if (!c.anim) continue;
+          c.anim.elapsed += dtMs;
+          const linear = Math.min(1, c.anim.elapsed / JUMP_DURATION);
+          const t = ease(linear);
+          const gx = c.anim.fromX + (c.anim.toX - c.anim.fromX) * t;
+          const gy = c.anim.fromY + (c.anim.toY - c.anim.fromY) * t;
+          const jumpOffset = Math.sin(linear * Math.PI) * -55;
+          const shadowScale = 1 - Math.sin(linear * Math.PI) * 0.5;
+          renderCharacterAt(c, gx, gy, jumpOffset, shadowScale);
+          if (linear >= 1) {
+            c.anim = null;
+            land(c);
+            landedAny = true;
+          }
+        }
+        if (landedAny) {
           updateMinimap();
+          recomputeScores();
+        }
+
+        // Enemy AI tick
+        enemyTimer += dtMs;
+        if (enemyTimer >= ENEMY_INTERVAL && !enemy.anim) {
+          enemyTimer = 0;
+          const valid = DIRS.filter((d) => {
+            let nx = enemy.gx, ny = enemy.gy;
+            if (d === "UP") ny--; else if (d === "DOWN") ny++;
+            else if (d === "LEFT") nx--; else nx++;
+            return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
+          });
+          if (valid.length) moveCharacter(enemy, valid[Math.floor(Math.random() * valid.length)]);
         }
       });
-
-      const movePlayer = (direction: Direction) => {
-        if (anim) return;
-        let nx = playerX;
-        let ny = playerY;
-        if (direction === "UP") ny -= 1;
-        else if (direction === "DOWN") ny += 1;
-        else if (direction === "LEFT") nx -= 1;
-        else if (direction === "RIGHT") nx += 1;
-        if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return;
-        const fromX = playerX;
-        const fromY = playerY;
-        playerX = nx;
-        playerY = ny;
-        // Update minimap dot immediately, but paint tile only on landing
-        updateMinimap();
-        anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0 };
-      };
 
       // ---------- Joystick ----------
       const joystick = new Container();
@@ -326,8 +431,7 @@ export function IsoGrid() {
         baseY = e.global.y;
         joystick.x = baseX;
         joystick.y = baseY;
-        knob.x = 0;
-        knob.y = 0;
+        knob.x = 0; knob.y = 0;
         joystick.visible = true;
         isDragging = true;
       };
@@ -370,26 +474,10 @@ export function IsoGrid() {
       keyHandler = (e: KeyboardEvent) => {
         let dir: Direction | null = null;
         switch (e.key) {
-          case "ArrowUp":
-          case "w":
-          case "W":
-            dir = "UP";
-            break;
-          case "ArrowDown":
-          case "s":
-          case "S":
-            dir = "DOWN";
-            break;
-          case "ArrowLeft":
-          case "a":
-          case "A":
-            dir = "LEFT";
-            break;
-          case "ArrowRight":
-          case "d":
-          case "D":
-            dir = "RIGHT";
-            break;
+          case "ArrowUp": case "w": case "W": dir = "UP"; break;
+          case "ArrowDown": case "s": case "S": dir = "DOWN"; break;
+          case "ArrowLeft": case "a": case "A": dir = "LEFT"; break;
+          case "ArrowRight": case "d": case "D": dir = "RIGHT"; break;
         }
         if (!dir) return;
         e.preventDefault();
@@ -403,6 +491,7 @@ export function IsoGrid() {
         centerCamera();
       };
       window.addEventListener("resize", resizeHandler);
+      centerCamera();
     })();
 
     return () => {
@@ -418,6 +507,9 @@ export function IsoGrid() {
     };
   }, []);
 
+  const playerSkin = SKINS[PLAYER_SKIN];
+  const enemySkin = SKINS[ENEMY_SKIN];
+
   return (
     <>
       <div
@@ -431,6 +523,25 @@ export function IsoGrid() {
         }}
         ref={containerRef}
       />
+
+      {/* Scoreboard */}
+      <div
+        className="fixed left-1/2 top-4 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
+        style={{ touchAction: "none" }}
+      >
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: playerSkin.uiColor }} />
+          <span style={{ color: playerSkin.uiColor }}>{playerSkin.name}</span>
+          <span className="tabular-nums">{scores[PLAYER_SKIN]}</span>
+        </span>
+        <span className="text-white/50">vs</span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: enemySkin.uiColor }} />
+          <span style={{ color: enemySkin.uiColor }}>{enemySkin.name}</span>
+          <span className="tabular-nums">{scores[ENEMY_SKIN]}</span>
+        </span>
+      </div>
+
       <div
         className="fixed left-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
         style={{ touchAction: "none" }}
