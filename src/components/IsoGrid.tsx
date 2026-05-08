@@ -60,6 +60,7 @@ export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
+  const [zoomOpen, setZoomOpen] = useState(false);
   const [debug, setDebug] = useState(false);
   const debugRef = useRef(false);
   const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
@@ -74,6 +75,54 @@ export function IsoGrid() {
   const intervalsRef = useRef<Set<number>>(new Set());
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  // Pinch-to-zoom (two fingers)
+  useEffect(() => {
+    const host = containerRef.current;
+    if (!host) return;
+    const pointers = new Map<number, { x: number; y: number }>();
+    let startDist = 0;
+    let startZoom = 1;
+    const dist = () => {
+      const pts = Array.from(pointers.values());
+      if (pts.length < 2) return 0;
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      return Math.hypot(dx, dy);
+    };
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2) {
+        startDist = dist();
+        startZoom = zoomRef.current;
+      }
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 2 && startDist > 0) {
+        const d = dist();
+        const next = Math.min(2, Math.max(0.4, +(startZoom * (d / startDist)).toFixed(2)));
+        setZoom(next);
+      }
+    };
+    const onUp = (e: PointerEvent) => {
+      pointers.delete(e.pointerId);
+      if (pointers.size < 2) startDist = 0;
+    };
+    host.addEventListener("pointerdown", onDown);
+    host.addEventListener("pointermove", onMove);
+    host.addEventListener("pointerup", onUp);
+    host.addEventListener("pointercancel", onUp);
+    return () => {
+      host.removeEventListener("pointerdown", onDown);
+      host.removeEventListener("pointermove", onMove);
+      host.removeEventListener("pointerup", onUp);
+      host.removeEventListener("pointercancel", onUp);
+    };
+  }, []);
+
   useEffect(() => { debugRef.current = debug; }, [debug]);
   useEffect(() => {
     gameOverRef.current = gameOver;
@@ -1001,38 +1050,51 @@ export function IsoGrid() {
       )}
 
       <div
-        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
+        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
         <button
           type="button"
-          onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
-          aria-label="Zoom out"
+          onClick={() => setZoomOpen((o) => !o)}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-sm font-bold text-black active:scale-95"
+          aria-label={zoomOpen ? "Collapse zoom" : "Expand zoom"}
+          aria-expanded={zoomOpen}
         >
-          −
+          {zoomOpen ? "×" : "⌕"}
         </button>
-        <input
-          type="range"
-          min={0.4}
-          max={2}
-          step={0.05}
-          value={zoom}
-          onChange={(e) => setZoom(parseFloat(e.target.value))}
-          className="w-28 accent-white"
-          aria-label="Zoom"
-        />
-        <button
-          type="button"
-          onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
-          aria-label="Zoom in"
-        >
-          +
-        </button>
-        <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
-          {Math.round(zoom * 100)}%
-        </span>
+        {zoomOpen && (
+          <>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={0.4}
+              max={2}
+              step={0.05}
+              value={zoom}
+              onChange={(e) => setZoom(parseFloat(e.target.value))}
+              className="w-28 accent-white"
+              aria-label="Zoom"
+            />
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+            <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
+              {Math.round(zoom * 100)}%
+            </span>
+          </>
+        )}
         <button
           type="button"
           onClick={() => setDebug((d) => !d)}
