@@ -502,7 +502,8 @@ export function IsoGrid() {
         bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
 
       const spawnBomb = () => {
-        const gx = Math.floor(Math.random() * 8);
+        if (gameOverRef.current) return;
+        if (pausedRef.current || !startedRef.current) { setT(spawnBomb, 800); return; }
         const gy = Math.floor(Math.random() * 8);
         const p = isoPos(gx, gy);
         const warning = new Graphics();
