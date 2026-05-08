@@ -741,8 +741,9 @@ export function IsoGrid() {
         world.x += (cameraTargetX - world.x) * camSmooth;
         world.y += (cameraTargetY - world.y) * camSmooth;
 
-        // Animate characters
+        // Animate characters (frozen when not running)
         let landedAny = false;
+        if (!frozen) {
         for (const c of [player, enemy]) {
           if (!c.anim) continue;
           c.anim.elapsed += dtMs;
