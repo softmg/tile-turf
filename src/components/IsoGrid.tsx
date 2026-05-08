@@ -351,10 +351,13 @@ export function IsoGrid() {
       miniPlayer.zIndex = 10;
       minimap.addChild(miniPlayer);
 
-      const miniEnemy = new Graphics();
-      miniEnemy.circle(0, 0, 3).stroke({ width: 1.5, color: 0xffffff }).fill(SKINS[ENEMY_SKIN].minimapColor);
-      miniEnemy.zIndex = 10;
-      minimap.addChild(miniEnemy);
+      const miniEnemies: Graphics[] = enemies.map((e) => {
+        const g = new Graphics();
+        g.circle(0, 0, 3).stroke({ width: 1.5, color: 0xffffff }).fill(SKINS[e.skin.id].minimapColor);
+        g.zIndex = 10;
+        minimap.addChild(g);
+        return g;
+      });
 
       const positionMinimap = () => {
         minimap.x = app.screen.width - MINI_SIZE - 16;
@@ -373,8 +376,10 @@ export function IsoGrid() {
         }
         miniPlayer.x = player.gx * MINI_CELL + MINI_CELL / 2;
         miniPlayer.y = player.gy * MINI_CELL + MINI_CELL / 2;
-        miniEnemy.x = enemy.gx * MINI_CELL + MINI_CELL / 2;
-        miniEnemy.y = enemy.gy * MINI_CELL + MINI_CELL / 2;
+        for (let i = 0; i < enemies.length; i++) {
+          miniEnemies[i].x = enemies[i].gx * MINI_CELL + MINI_CELL / 2;
+          miniEnemies[i].y = enemies[i].gy * MINI_CELL + MINI_CELL / 2;
+        }
       };
 
       let cameraTargetX = 0;
