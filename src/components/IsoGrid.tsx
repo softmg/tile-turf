@@ -245,9 +245,24 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         Assets.load<Texture>(tilePaintedUrl),
         Assets.load<Texture>(playerUrl),
         Assets.load<Texture>(chestUrl),
+        Assets.load<Texture>(bomb1Url),
+        Assets.load<Texture>(bomb2Url),
+        Assets.load<Texture>(bomb3Url),
+        Assets.load<Texture>(bomb4Url),
       ]);
       if (destroyed) return;
-      for (const t of [unpaintedTex, paintedTex, playerTex, chestTex]) {
+      const [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex] =
+        await Promise.all([
+          Assets.load<Texture>(UNPAINTED_TILE_URL),
+          Assets.load<Texture>(tilePaintedUrl),
+          Assets.load<Texture>(playerUrl),
+          Assets.load<Texture>(chestUrl),
+          Assets.load<Texture>(bomb1Url),
+          Assets.load<Texture>(bomb2Url),
+          Assets.load<Texture>(bomb3Url),
+          Assets.load<Texture>(bomb4Url),
+        ]);
+      for (const t of [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex]) {
         if (t?.source) {
           t.source.scaleMode = "linear";
           t.source.autoGenerateMipmaps = true;
