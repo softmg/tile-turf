@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent, Assets } from "pixi.js";
 import tileUrl from "@/assets/tile.png";
 import tilePaintedUrl from "@/assets/tile-painted.png";
