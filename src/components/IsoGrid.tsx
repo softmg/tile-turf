@@ -190,7 +190,10 @@ export function IsoGrid() {
         shadow: Graphics;
         gx: number;
         gy: number;
-        anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number } | null;
+        anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number; duration: number } | null;
+        stunnedUntil: number;
+        boostUntil: number;
+        aura: Graphics;
       }
 
       const makeCharacter = (skinId: SkinId, gx: number, gy: number): Character => {
@@ -198,6 +201,10 @@ export function IsoGrid() {
         const shadow = new Graphics();
         shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
         world.addChild(shadow);
+        const aura = new Graphics();
+        aura.circle(0, 0, 36).fill({ color: 0x00ffff, alpha: 0.35 }).stroke({ width: 2, color: 0x00ffff, alpha: 0.9 });
+        aura.visible = false;
+        world.addChild(aura);
         const tex = skinTextures[skinId].player;
         const sprite = new Sprite(tex);
         sprite.anchor.set(0.5, 0.85);
@@ -206,13 +213,19 @@ export function IsoGrid() {
         sprite.scale.set(s);
         sprite.tint = skin.spriteTint;
         world.addChild(sprite);
-        return { skin, sprite, shadow, gx, gy, anim: null };
+        return { skin, sprite, shadow, gx, gy, anim: null, stunnedUntil: 0, boostUntil: 0, aura };
       };
 
       const player = makeCharacter(PLAYER_SKIN, 0, 0);
       const enemy = makeCharacter(ENEMY_SKIN, 7, 7);
 
-      const JUMP_DURATION = 380;
+      const BASE_JUMP_DURATION = 380;
+      const BOOST_JUMP_DURATION = 150;
+      const STUN_DURATION = 2000;
+      const BOOST_DURATION = 12000;
+      const jumpDurationFor = (c: Character) =>
+        performance.now() < c.boostUntil ? BOOST_JUMP_DURATION : BASE_JUMP_DURATION;
+
 
       // ---------- Minimap ----------
       const MINI_CELL = 10;
