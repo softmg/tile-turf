@@ -197,6 +197,12 @@ export function IsoGrid() {
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       app.ticker.add(() => {
+        // Smooth camera lerp toward target every frame
+        computeCameraTarget();
+        const lerp = 0.12;
+        world.x += (cameraTargetX - world.x) * lerp;
+        world.y += (cameraTargetY - world.y) * lerp;
+
         if (!anim) return;
         const now = performance.now();
         const linear = Math.min(1, (now - anim.start) / JUMP_DURATION);
