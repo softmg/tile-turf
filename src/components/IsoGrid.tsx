@@ -110,62 +110,18 @@ export function IsoGrid() {
 
 
 
-      const hex = (n: number) => "#" + n.toString(16).padStart(6, "0");
-      const makeTileTex = (fill: number, edge: number): Texture => {
-        const c = document.createElement("canvas");
-        c.width = 256; c.height = 256;
-        const ctx = c.getContext("2d")!;
-        ctx.fillStyle = hex(fill);
-        ctx.fillRect(0, 0, 256, 256);
-        ctx.strokeStyle = hex(edge);
-        ctx.lineWidth = 8;
-        ctx.strokeRect(4, 4, 248, 248);
-        return new Texture({ source: new CanvasSource({ resource: c }) });
+      // Use the built-in WHITE texture and tint sprites — bypasses any
+      // texture-creation pitfalls in Pixi v8 with custom canvases.
+      const whiteTex = Texture.WHITE;
+      const skinTextures: Record<SkinId, { tile: Texture; player: Texture }> = {
+        plush:  { tile: whiteTex, player: whiteTex },
+        girl:   { tile: whiteTex, player: whiteTex },
+        alien:  { tile: whiteTex, player: whiteTex },
+        knight: { tile: whiteTex, player: whiteTex },
       };
-      const makePlayerTex = (color: number, label: string): Texture => {
-        const c = document.createElement("canvas");
-        c.width = 180; c.height = 220;
-        const ctx = c.getContext("2d")!;
-        ctx.fillStyle = hex(color);
-        ctx.beginPath();
-        ctx.ellipse(90, 140, 55, 70, 0, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(90, 60, 42, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "rgba(0,0,0,0.5)";
-        ctx.lineWidth = 4;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.ellipse(90, 140, 55, 70, 0, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.fillStyle = "#fff";
-        ctx.font = "bold 22px sans-serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(label, 90, 60);
-        return new Texture({ source: new CanvasSource({ resource: c }) });
-      };
+      const unpaintedTex = whiteTex;
+      console.log("[IsoGrid] textures ready");
 
-      const skinList = Object.values(SKINS);
-      const unpaintedTex = makeTileTex(UNPAINTED_MINIMAP_COLOR, 0xc08a5a);
-      const skinTextures: Record<SkinId, { tile: Texture; player: Texture }> = {} as never;
-      for (const s of skinList) {
-        skinTextures[s.id] = {
-          tile: makeTileTex(s.minimapColor, 0xffffff),
-          player: makePlayerTex(s.minimapColor, s.name),
-        };
-      }
-
-      const allTex: Texture[] = [unpaintedTex as Texture, ...skinList.flatMap((s) => [skinTextures[s.id].tile, skinTextures[s.id].player])];
-      for (const t of allTex) {
-        if (t && t.source) {
-          t.source.scaleMode = "linear";
-          t.source.autoGenerateMipmaps = true;
-          t.source.updateMipmaps?.();
-        }
-      }
-      if (destroyed) return;
 
       const world = new Container();
       world.sortableChildren = true;
