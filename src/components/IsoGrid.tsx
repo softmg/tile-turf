@@ -115,7 +115,7 @@ export function IsoGrid() {
         ctx.strokeStyle = hex(edge);
         ctx.lineWidth = 8;
         ctx.strokeRect(4, 4, 248, 248);
-        return Texture.from(c);
+        return new Texture({ source: new CanvasSource({ resource: c }) });
       };
       const makePlayerTex = (color: number, label: string): Texture => {
         const c = document.createElement("canvas");
@@ -139,7 +139,7 @@ export function IsoGrid() {
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(label, 90, 60);
-        return Texture.from(c);
+        return new Texture({ source: new CanvasSource({ resource: c }) });
       };
 
       const skinList = Object.values(SKINS);
