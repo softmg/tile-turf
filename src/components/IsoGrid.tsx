@@ -539,6 +539,76 @@ export function IsoGrid() {
         setT(spawnBoots, 10000 + Math.random() * 5000);
       };
 
+      // ---------- Rotating Arrow ----------
+      // dir: 0=UP, 1=RIGHT, 2=DOWN, 3=LEFT
+      let arrow: {
+        gx: number; gy: number; dir: number;
+        gfx: Graphics; rotateId: number; despawnId: number;
+      } | null = null;
+
+      const removeArrow = () => {
+        if (!arrow) return;
+        window.clearInterval(arrow.rotateId);
+        intervalsRef.current.delete(arrow.rotateId);
+        window.clearTimeout(arrow.despawnId);
+        timeoutsRef.current.delete(arrow.despawnId);
+        world.removeChild(arrow.gfx);
+        arrow.gfx.destroy();
+        arrow = null;
+      };
+
+      const spawnArrow = () => {
+        if (arrow) removeArrow();
+        const gx = Math.floor(Math.random() * 8);
+        const gy = Math.floor(Math.random() * 8);
+        const p = isoPos(gx, gy);
+        const gfx = new Graphics();
+        // Arrow pointing UP (towards -y) so rotation 0 = UP
+        gfx.poly([0, -22, 14, 0, 6, 0, 6, 22, -6, 22, -6, 0, -14, 0]).fill(0xffffff).stroke({ width: 2, color: 0x222222 });
+        gfx.circle(0, 0, 26).stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
+        gfx.x = p.x;
+        gfx.y = p.y;
+        gfx.zIndex = gx + gy + 0.1;
+        gfx.rotation = 0;
+        world.addChild(gfx);
+
+        const rotateId = window.setInterval(() => {
+          if (!arrow) return;
+          arrow.dir = (arrow.dir + 1) % 4;
+          arrow.gfx.rotation = arrow.dir * (Math.PI / 2);
+        }, 2000);
+        intervalsRef.current.add(rotateId);
+
+        const despawnId = window.setTimeout(() => {
+          timeoutsRef.current.delete(despawnId);
+          if (gameOverRef.current || destroyed) return;
+          removeArrow();
+        }, 15000);
+        timeoutsRef.current.add(despawnId);
+
+        arrow = { gx, gy, dir: 0, gfx, rotateId, despawnId };
+
+        // Schedule next arrow
+        setT(spawnArrow, 20000);
+      };
+
+      const tryTriggerArrow = (c: Character) => {
+        if (!arrow) return;
+        if (c.gx !== arrow.gx || c.gy !== arrow.gy) return;
+        const dir = arrow.dir;
+        const dx = dir === 1 ? 1 : dir === 3 ? -1 : 0;
+        const dy = dir === 0 ? -1 : dir === 2 ? 1 : 0;
+        let x = c.gx + dx;
+        let y = c.gy + dy;
+        while (x >= 0 && x < 8 && y >= 0 && y < 8) {
+          paintAt(x, y, c.skin);
+          x += dx; y += dy;
+        }
+        // Also paint the arrow tile itself
+        paintAt(c.gx, c.gy, c.skin);
+        removeArrow();
+      };
+
       // Initial paint
       land(player);
       land(enemy);
@@ -547,9 +617,10 @@ export function IsoGrid() {
       updateMinimap();
       recomputeScores();
 
-      // Kick off bombs and boots
+      // Kick off bombs, boots, arrow
       setT(spawnBomb, 5000 + Math.random() * 3000);
       setT(spawnBoots, 8000 + Math.random() * 4000);
+      setT(spawnArrow, 15000);
 
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
@@ -626,6 +697,7 @@ export function IsoGrid() {
             land(c);
             tryCollectChest(c);
             tryCollectBoots(c);
+            tryTriggerArrow(c);
             landedAny = true;
           }
         }
@@ -686,8 +758,15 @@ export function IsoGrid() {
             const bootsDist = boots
               ? Math.abs(enemy.gx - boots.gx) + Math.abs(enemy.gy - boots.gy)
               : Infinity;
+            const arrowDist = arrow
+              ? Math.abs(enemy.gx - arrow.gx) + Math.abs(enemy.gy - arrow.gy)
+              : Infinity;
             const enemyOwned = countOwned(enemy.skin.id);
-            if (boots && bootsDist <= 2) {
+            if (arrow && arrowDist <= 2) {
+              chosen = safe.reduce((best, d) =>
+                distTo(d, arrow!.gx, arrow!.gy) < distTo(best, arrow!.gx, arrow!.gy) ? d : best,
+                safe[0]);
+            } else if (boots && bootsDist <= 2) {
               chosen = safe.reduce((best, d) =>
                 distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best,
                 safe[0]);
