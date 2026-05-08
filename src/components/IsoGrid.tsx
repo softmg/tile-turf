@@ -1079,7 +1079,7 @@ export function IsoGrid() {
               )}
             </div>
             <div className="mt-5 space-y-2 text-left">
-              {[PLAYER_SKIN, ENEMY_SKIN].map((id) => (
+              {activeSkins.map((id) => (
                 <div key={id} className="flex items-center justify-between gap-6 rounded-lg bg-white/5 px-3 py-2">
                   <span className="flex items-center gap-2">
                     <span className="inline-block h-3 w-3 rounded-full" style={{ background: SKINS[id].uiColor }} />
