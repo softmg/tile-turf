@@ -85,8 +85,8 @@ export function IsoGrid() {
 
       let playerX = 0;
       let playerY = 0;
-      let anim: { fromX: number; fromY: number; toX: number; toY: number; start: number } | null = null;
-      const JUMP_DURATION = 300;
+      let anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number } | null = null;
+      const JUMP_DURATION = 380;
 
       // ---------- Minimap ----------
       const MINI_CELL = 10;
@@ -181,7 +181,6 @@ export function IsoGrid() {
         shadow.y = p.y;
         shadow.zIndex = gx + gy + 0.05;
         shadow.scale.set(shadowScale, shadowScale);
-        centerCamera();
       };
 
       const updatePlayer = () => {
@@ -196,25 +195,26 @@ export function IsoGrid() {
       // easeInOutCubic for smoother horizontal motion
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-      app.ticker.add(() => {
-        // Smooth camera lerp toward target every frame
+      app.ticker.add((ticker) => {
+        const dtMs = ticker.deltaMS;
+
+        // Smooth camera lerp toward target, framerate-independent
         computeCameraTarget();
-        const lerp = 0.12;
-        world.x += (cameraTargetX - world.x) * lerp;
-        world.y += (cameraTargetY - world.y) * lerp;
+        const camSmooth = 1 - Math.exp(-dtMs / 80);
+        world.x += (cameraTargetX - world.x) * camSmooth;
+        world.y += (cameraTargetY - world.y) * camSmooth;
 
         if (!anim) return;
-        const now = performance.now();
-        const linear = Math.min(1, (now - anim.start) / JUMP_DURATION);
+        anim.elapsed += dtMs;
+        const linear = Math.min(1, anim.elapsed / JUMP_DURATION);
         const t = ease(linear);
         const gx = anim.fromX + (anim.toX - anim.fromX) * t;
         const gy = anim.fromY + (anim.toY - anim.fromY) * t;
-        const jumpOffset = Math.sin(linear * Math.PI) * -45;
-        const shadowScale = 1 - Math.sin(linear * Math.PI) * 0.4;
+        const jumpOffset = Math.sin(linear * Math.PI) * -55;
+        const shadowScale = 1 - Math.sin(linear * Math.PI) * 0.5;
         renderPlayerAt(gx, gy, jumpOffset, shadowScale);
         if (linear >= 1) {
           anim = null;
-          // Paint on landing
           paintAt(playerX, playerY);
           renderPlayerAt(playerX, playerY);
           updateMinimap();
@@ -236,7 +236,7 @@ export function IsoGrid() {
         playerY = ny;
         // Update minimap dot immediately, but paint tile only on landing
         updateMinimap();
-        anim = { fromX, fromY, toX: nx, toY: ny, start: performance.now() };
+        anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0 };
       };
 
       // ---------- Joystick ----------
