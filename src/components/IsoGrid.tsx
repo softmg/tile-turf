@@ -1207,6 +1207,35 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
                 );
               })}
             </div>
+            {history.length > 0 && (
+              <>
+                <div className="mt-5 text-[11px] font-bold uppercase tracking-widest text-white/50 text-left">
+                  Previous rounds
+                </div>
+                <div className="mt-2 space-y-1.5 text-left max-h-48 overflow-y-auto pr-1">
+                  {history.map((h, i) => (
+                    <div key={i} className="rounded-lg bg-white/5 px-3 py-1.5">
+                      <div className="flex items-center justify-between text-[11px] text-white/60">
+                        <span className="font-bold uppercase tracking-wider">
+                          L{h.level} · R{h.round}
+                        </span>
+                        <span className="font-bold" style={{ color: h.winner ? SKINS[h.winner].uiColor : undefined }}>
+                          {h.winner ? `${SKINS[h.winner].name} won` : "Tie"}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                        {activeSkins.map((id) => (
+                          <span key={id} className="flex items-center gap-1 font-mono text-[11px] tabular-nums">
+                            <span className="inline-block h-2 w-2 rounded-full" style={{ background: SKINS[id].uiColor }} />
+                            <span className="text-white/80">{h.scores[id] ?? 0}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             <button
               type="button"
               onClick={() => onRoundEnd(isTie ? null : winner, banked)}
