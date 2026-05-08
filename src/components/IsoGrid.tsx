@@ -8,7 +8,8 @@ import backgroundUrl from "@/assets/background.png";
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
 const TILE_W = 110;
-const TILE_H = 55;
+const TILE_H = 70;
+const TILE_SIZE = 120;
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -60,8 +61,8 @@ export function IsoGrid() {
         for (let y = 0; y < 8; y++) {
           const tile = new Sprite(tileTex as Texture);
           tile.anchor.set(0.5, 0.5);
-          tile.width = TILE_W * 1.25;
-          tile.height = TILE_W * 1.25;
+          tile.width = TILE_SIZE;
+          tile.height = TILE_SIZE;
           const p = isoPos(x, y);
           tile.x = p.x;
           tile.y = p.y;
