@@ -801,6 +801,10 @@ export function IsoGrid() {
         for (const id of scheduledTimeouts) window.clearTimeout(id);
         scheduledTimeouts.clear();
       }
+      if (scheduledIntervals) {
+        for (const id of scheduledIntervals) window.clearInterval(id);
+        scheduledIntervals.clear();
+      }
       if (keyHandler) window.removeEventListener("keydown", keyHandler);
       if (resizeHandler) window.removeEventListener("resize", resizeHandler);
       try {
