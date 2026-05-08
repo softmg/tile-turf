@@ -697,6 +697,7 @@ export function IsoGrid() {
             land(c);
             tryCollectChest(c);
             tryCollectBoots(c);
+            tryTriggerArrow(c);
             landedAny = true;
           }
         }
