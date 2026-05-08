@@ -673,14 +673,17 @@ export function IsoGrid() {
       land(player);
       land(enemy);
       positionMinimap();
-      spawnChest();
       updateMinimap();
       recomputeScores();
 
-      // Kick off bombs, boots, arrow
-      setT(spawnBomb, 5000 + Math.random() * 3000);
-      setT(spawnBoots, 8000 + Math.random() * 4000);
-      setT(spawnArrow, 15000);
+      // Defer game-loop spawns until user presses Start
+      kickoffRef.current = () => {
+        spawnChest();
+        setT(spawnBomb, 5000 + Math.random() * 3000);
+        setT(spawnBoots, 8000 + Math.random() * 4000);
+        setT(spawnArrow, 15000);
+      };
+      if (startedRef.current) kickoffRef.current();
 
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
