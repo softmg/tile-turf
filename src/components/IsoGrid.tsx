@@ -10,6 +10,7 @@ import bomb1Url from "@/assets/bomb/bomb1.png";
 import bomb2Url from "@/assets/bomb/bomb2.png";
 import bomb3Url from "@/assets/bomb/bomb3.png";
 import bomb4Url from "@/assets/bomb/bomb4.png";
+import bootsUrl from "@/assets/boots.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
@@ -257,7 +258,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       // Load uploaded local PNG assets via Pixi's Assets pipeline.
       // Local Vite-served files have proper extensions and no CORS issues.
       
-      const [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex] =
+      const [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex, bootsTex] =
         await Promise.all([
           Assets.load<Texture>(UNPAINTED_TILE_URL),
           Assets.load<Texture>(tilePaintedUrl),
@@ -267,9 +268,10 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           Assets.load<Texture>(bomb2Url),
           Assets.load<Texture>(bomb3Url),
           Assets.load<Texture>(bomb4Url),
+          Assets.load<Texture>(bootsUrl),
         ]);
       if (destroyed) return;
-      for (const t of [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex]) {
+      for (const t of [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex, bootsTex]) {
         if (t?.source) {
           t.source.scaleMode = "linear";
           t.source.autoGenerateMipmaps = true;
@@ -775,7 +777,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
       // Boots
-      let boots: { gx: number; gy: number; gfx: Graphics } | null = null;
+      let boots: { gx: number; gy: number; gfx: Sprite } | null = null;
       const spawnBoots = () => {
         if (gameOverRef.current) return;
         if (pausedRef.current || !startedRef.current) { setT(spawnBoots, 800); return; }
@@ -783,14 +785,11 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         const gx = Math.floor(Math.random() * 8);
         const gy = Math.floor(Math.random() * 8);
         const p = isoPos(gx, gy);
-        const gfx = new Graphics();
-        // boot body
-        gfx.roundRect(-16, -28, 32, 18, 4).fill(0x00cccc).stroke({ width: 2, color: 0x004444 });
-        gfx.roundRect(-16, -14, 28, 8, 3).fill(0x00ffff).stroke({ width: 2, color: 0x004444 });
-        // wing
-        gfx.moveTo(-18, -22).lineTo(-30, -28).lineTo(-18, -16).fill(0xffffff);
-        // glow
-        gfx.circle(0, -16, 22).stroke({ width: 2, color: 0x00ffff, alpha: 0.6 });
+        const gfx = new Sprite(bootsTex);
+        gfx.anchor.set(0.5, 0.5);
+        const targetH = 70;
+        const s = targetH / Math.max(bootsTex.height, 1);
+        gfx.scale.set(s);
         gfx.x = p.x; gfx.y = p.y;
         gfx.zIndex = gx + gy + 0.06;
         world.addChild(gfx);
