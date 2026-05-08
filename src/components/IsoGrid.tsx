@@ -1186,6 +1186,8 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
           </div>
         </div>
       )}
+
+      <div
         className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
