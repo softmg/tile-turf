@@ -14,7 +14,7 @@ const TILE_H = 70;
 const TILE_SIZE = 120;
 
 // ---------- Skin System ----------
-export type SkinId = "plush" | "girl" | "alien" | "knight";
+export type SkinId = "plush" | "girl" | "alien" | "knight" | "robot";
 
 export interface SkinConfig {
   id: SkinId;
@@ -23,8 +23,6 @@ export interface SkinConfig {
   tileSprite: string;
   minimapColor: number;
   uiColor: string;
-  // Tint applied to shared sprites so each skin reads visually distinct
-  // (the user uploaded one plush set; other skins reuse it with a tint).
   spriteTint: number;
 }
 
@@ -49,13 +47,20 @@ export const SKINS: Record<SkinId, SkinConfig> = {
     playerSprite: playerUrl, tileSprite: tilePaintedUrl,
     minimapColor: 0x9aa6b8, uiColor: "#9aa6b8", spriteTint: 0xd0d8e4,
   },
+  robot: {
+    id: "robot", name: "Robot",
+    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
+    minimapColor: 0x9b87f5, uiColor: "#9b87f5", spriteTint: 0xc4b4ff,
+  },
 };
 
 const UNPAINTED_TILE_URL = tileUrl;
 const UNPAINTED_MINIMAP_COLOR = 0xf5d0b0;
 
 const PLAYER_SKIN: SkinId = "plush";
-const ENEMY_SKIN: SkinId = "girl";
+const BOT_SKINS: SkinId[] = ["girl", "alien", "knight", "robot"];
+const SKIN_IDS: SkinId[] = ["plush", "girl", "alien", "knight", "robot"];
+const ZERO_SCORES = (): Record<SkinId, number> => ({ plush: 0, girl: 0, alien: 0, knight: 0, robot: 0 });
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
