@@ -1381,6 +1381,7 @@ export function IsoGrid() {
   const [phase, setPhase] = useState<"menu" | "playing" | "passed" | "failed">("menu");
   const [roundIdx, setRoundIdx] = useState(0);
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
+  const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
   const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem("isogrid:tutorial:v1") !== "1";
