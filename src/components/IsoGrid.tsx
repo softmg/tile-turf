@@ -1491,11 +1491,23 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         </button>
       </div>
       {debug && (
-        <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/70 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums">
-          <div>FPS: {stats.fps}</div>
-          <div>frame: {stats.frameMs.toFixed(2)} ms</div>
-          <div>peak: {stats.maxMs.toFixed(2)} ms</div>
-          <div className="text-white/60">DPR: {Math.min(window.devicePixelRatio || 1, 3)}</div>
+        <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/75 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums shadow-lg">
+          <div className={stats.fps < 50 ? "text-red-400" : "text-emerald-300"}>
+            FPS: {stats.fps} <span className="text-white/60">({stats.frameMs.toFixed(2)}ms)</span>
+          </div>
+          <div className={stats.maxMs > 33 ? "text-amber-300" : "text-white/60"}>
+            peak: {stats.maxMs.toFixed(2)} ms
+          </div>
+          <div className="mt-1 text-cyan-300">paints/s: {stats.paints}</div>
+          <div className="text-cyan-300">
+            mini: {stats.miniPasses}/s · {stats.miniCells} cells/s
+          </div>
+          <div className="text-fuchsia-300">
+            anims: {stats.anims} · bombs: {stats.bombs} · bots: {stats.enemies}
+          </div>
+          <div className="mt-1 text-white/50">
+            DPR: {Math.min(window.devicePixelRatio || 1, 3)} · zoom: {Math.round(zoom * 100)}%
+          </div>
         </div>
       )}
     </>
