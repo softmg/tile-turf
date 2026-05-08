@@ -99,6 +99,7 @@ export function IsoGrid() {
     let keyHandler: ((e: KeyboardEvent) => void) | null = null;
     let resizeHandler: (() => void) | null = null;
     let scheduledTimeouts: Set<number> | null = null;
+    let scheduledIntervals: Set<number> | null = null;
 
     (async () => {
       try {
