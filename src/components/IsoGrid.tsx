@@ -65,9 +65,30 @@ export function IsoGrid() {
   const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
   const [scores, setScores] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
   const [banked, setBanked] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
+  const ROUND_DURATION = 90;
+  const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
+  const [gameOver, setGameOver] = useState(false);
+  const gameOverRef = useRef(false);
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { debugRef.current = debug; }, [debug]);
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+
+  // Round countdown timer
+  useEffect(() => {
+    if (gameOver) return;
+    const id = window.setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) {
+          window.clearInterval(id);
+          setGameOver(true);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [gameOver]);
 
   useEffect(() => {
     const host = containerRef.current;
