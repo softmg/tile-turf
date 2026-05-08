@@ -240,17 +240,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       // Load uploaded local PNG assets via Pixi's Assets pipeline.
       // Local Vite-served files have proper extensions and no CORS issues.
-      const [unpaintedTex, paintedTex, playerTex, chestTex] = await Promise.all([
-        Assets.load<Texture>(UNPAINTED_TILE_URL),
-        Assets.load<Texture>(tilePaintedUrl),
-        Assets.load<Texture>(playerUrl),
-        Assets.load<Texture>(chestUrl),
-        Assets.load<Texture>(bomb1Url),
-        Assets.load<Texture>(bomb2Url),
-        Assets.load<Texture>(bomb3Url),
-        Assets.load<Texture>(bomb4Url),
-      ]);
-      if (destroyed) return;
+      
       const [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex] =
         await Promise.all([
           Assets.load<Texture>(UNPAINTED_TILE_URL),
