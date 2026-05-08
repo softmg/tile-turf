@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
+import { Application, Container, Graphics, Rectangle, Sprite, Texture, ImageSource, FederatedPointerEvent } from "pixi.js";
 import backgroundUrl from "@/assets/background.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
@@ -101,14 +101,13 @@ export function IsoGrid() {
       // Preload textures: unpainted tile + every skin's tile + every skin's player.
       // placehold.co URLs have no file extension, so Pixi's Assets parser cannot
       // auto-detect them. We load via HTMLImageElement and build textures manually.
-      const loadTex = (url: string): Promise<Texture> =>
-        new Promise((resolve, reject) => {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.onload = () => resolve(Texture.from(img));
-          img.onerror = reject;
-          img.src = url;
-        });
+      const loadTex = async (url: string): Promise<Texture> => {
+        const res = await fetch(url, { mode: "cors" });
+        const blob = await res.blob();
+        const bitmap = await createImageBitmap(blob);
+        const source = new ImageSource({ resource: bitmap });
+        return new Texture({ source });
+      };
 
       const skinList = Object.values(SKINS);
       const [unpaintedTex, ...rest] = await Promise.all([
