@@ -685,7 +685,7 @@ export function IsoGrid() {
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       const moveCharacter = (c: Character, direction: Direction) => {
-        if (gameOverRef.current) return;
+        if (gameOverRef.current || !startedRef.current || pausedRef.current) return;
         if (c.anim) return;
         if (performance.now() < c.stunnedUntil) return;
         let nx = c.gx;
