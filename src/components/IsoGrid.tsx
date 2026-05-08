@@ -572,6 +572,8 @@ export function IsoGrid() {
       // Boots
       let boots: { gx: number; gy: number; gfx: Graphics } | null = null;
       const spawnBoots = () => {
+        if (gameOverRef.current) return;
+        if (pausedRef.current || !startedRef.current) { setT(spawnBoots, 800); return; }
         if (boots) return;
         const gx = Math.floor(Math.random() * 8);
         const gy = Math.floor(Math.random() * 8);
