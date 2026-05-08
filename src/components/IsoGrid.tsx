@@ -283,7 +283,7 @@ export function IsoGrid() {
 
       const paintAt = (gx: number, gy: number, skin: SkinConfig) => {
         owners[gx][gy] = skin.id;
-        tiles[gx][gy].texture = skinTextures[skin.id].tile;
+        tiles[gx][gy].tint = skin.minimapColor;
       };
 
       const renderCharacterAt = (c: Character, gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
