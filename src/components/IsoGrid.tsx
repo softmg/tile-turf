@@ -464,7 +464,26 @@ export function IsoGrid() {
         <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
           {Math.round(zoom * 100)}%
         </span>
+        <button
+          type="button"
+          onClick={() => setDebug((d) => !d)}
+          className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider active:scale-95 ${
+            debug ? "bg-emerald-400 text-black" : "bg-white/80 text-black"
+          }`}
+          aria-label="Toggle debug"
+          aria-pressed={debug}
+        >
+          DBG
+        </button>
       </div>
+      {debug && (
+        <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/70 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums">
+          <div>FPS: {stats.fps}</div>
+          <div>frame: {stats.frameMs.toFixed(2)} ms</div>
+          <div>peak: {stats.maxMs.toFixed(2)} ms</div>
+          <div className="text-white/60">DPR: {Math.min(window.devicePixelRatio || 1, 3)}</div>
+        </div>
+      )}
     </>
   );
 }
