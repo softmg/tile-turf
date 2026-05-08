@@ -949,8 +949,8 @@ export function IsoGrid() {
 
       {/* Timer */}
       <div
-        className="fixed left-1/2 top-16 z-50 -translate-x-1/2 rounded-full bg-black/55 px-4 py-1 backdrop-blur-sm shadow-lg"
-        style={{ touchAction: "none" }}
+        className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-black/55 px-4 py-1 backdrop-blur-sm shadow-lg"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 110px)" }}
       >
         <span
           className="font-mono text-2xl font-extrabold tabular-nums tracking-wider"
