@@ -636,13 +636,26 @@ export function IsoGrid() {
         gfx.x = p.x;
         gfx.y = p.y;
         gfx.zIndex = gx + gy + 0.1;
-        gfx.rotation = 0;
+        // Map dir → screen vector along iso grid axes
+        const dirVec = (d: number): [number, number] => {
+          // 0=UP(gy-1), 1=RIGHT(gx+1), 2=DOWN(gy+1), 3=LEFT(gx-1)
+          if (d === 0) return [-TILE_W / 2, -TILE_H / 2];
+          if (d === 1) return [ TILE_W / 2, -TILE_H / 2];
+          if (d === 2) return [ TILE_W / 2,  TILE_H / 2];
+          return [-TILE_W / 2,  TILE_H / 2];
+        };
+        const isoRotation = (d: number) => {
+          const [vx, vy] = dirVec(d);
+          // Arrow art points to (0,-1) at rotation 0
+          return Math.atan2(vx, -vy);
+        };
+        gfx.rotation = isoRotation(0);
         world.addChild(gfx);
 
         const rotateId = window.setInterval(() => {
           if (!arrow) return;
           arrow.dir = (arrow.dir + 1) % 4;
-          arrow.gfx.rotation = arrow.dir * (Math.PI / 2);
+          arrow.gfx.rotation = isoRotation(arrow.dir);
         }, 2000);
         intervalsRef.current.add(rotateId);
 
