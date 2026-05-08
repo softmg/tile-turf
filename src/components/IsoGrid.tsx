@@ -709,7 +709,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           } else {
             warning.x = p.x;
           }
-        }, 60);
+        }, 100);
         pendingIntervals.add(tickId);
 
         setT(() => {
