@@ -975,15 +975,18 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         // Animate characters (frozen when not running)
         let landedAny = false;
         if (!frozen) {
-        for (const c of [player, ...enemies]) {
+        // Iterate stable list (player + active enemies) without per-frame allocation
+        for (let ci = -1; ci < enemies.length; ci++) {
+          const c = ci < 0 ? player : enemies[ci];
           if (!c.anim) continue;
           c.anim.elapsed += dtMs;
           const linear = Math.min(1, c.anim.elapsed / c.anim.duration);
           const t = ease(linear);
           const gx = c.anim.fromX + (c.anim.toX - c.anim.fromX) * t;
           const gy = c.anim.fromY + (c.anim.toY - c.anim.fromY) * t;
-          const jumpOffset = Math.sin(linear * Math.PI) * -55;
-          const shadowScale = 1 - Math.sin(linear * Math.PI) * 0.5;
+          const arc = Math.sin(linear * Math.PI);
+          const jumpOffset = arc * -55;
+          const shadowScale = 1 - arc * 0.5;
           renderCharacterAt(c, gx, gy, jumpOffset, shadowScale);
           if (linear >= 1) {
             c.anim = null;
@@ -1013,9 +1016,10 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
         // Update auras for boost
         const nowMs = performance.now();
-        for (const c of [player, ...enemies]) {
+        for (let ci = -1; ci < enemies.length; ci++) {
+          const c = ci < 0 ? player : enemies[ci];
           const active = nowMs < c.boostUntil;
-          c.aura.visible = active;
+          if (c.aura.visible !== active) c.aura.visible = active;
           if (active) {
             c.aura.x = c.sprite.x;
             c.aura.y = c.sprite.y - 30;
