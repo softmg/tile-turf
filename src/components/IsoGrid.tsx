@@ -545,10 +545,12 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
       const paintAt = (gx: number, gy: number, skin: SkinConfig) => {
+        if (owners[gx][gy] === skin.id) return;
         owners[gx][gy] = skin.id;
         const tile = tiles[gx][gy];
         tile.texture = skinTextures[skin.id].tile;
         tile.tint = skin.spriteTint;
+        minimapTilesDirty = true;
       };
 
       const renderCharacterAt = (c: Character, gx: number, gy: number, jumpOffset = 0, shadowScale = 1) => {
