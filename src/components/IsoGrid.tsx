@@ -145,12 +145,19 @@ export function IsoGrid() {
         tiles[x] = [];
         owners[x] = [];
         for (let y = 0; y < 8; y++) {
-          const tile = new Sprite(unpaintedTex as Texture);
+          const tile = new Sprite(unpaintedTex);
           tile.anchor.set(0.5, 0.5);
           tile.width = TILE_SIZE;
           tile.height = TILE_SIZE;
-          tile.tint = UNPAINTED_MINIMAP_COLOR;
           const p = isoPos(x, y);
+          tile.x = p.x;
+          tile.y = p.y;
+          tile.zIndex = x + y;
+          world.addChild(tile);
+          tiles[x][y] = tile;
+          owners[x][y] = null;
+        }
+      }
           tile.x = p.x;
           tile.y = p.y;
           tile.zIndex = x + y;
