@@ -1007,14 +1007,13 @@ export function IsoGrid() {
   }, []);
 
   const playerSkin = SKINS[PLAYER_SKIN];
-  const enemySkin = SKINS[ENEMY_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
   const ss = String(timeLeft % 60).padStart(2, "0");
   const urgent = timeLeft <= 10 && timeLeft > 0;
-  const winner: SkinId = banked[PLAYER_SKIN] === banked[ENEMY_SKIN]
-    ? PLAYER_SKIN
-    : (banked[PLAYER_SKIN] > banked[ENEMY_SKIN] ? PLAYER_SKIN : ENEMY_SKIN);
-  const isTie = banked[PLAYER_SKIN] === banked[ENEMY_SKIN];
+  const winner: SkinId = activeSkins.reduce((best, id) =>
+    banked[id] > banked[best] ? id : best, activeSkins[0]);
+  const topScore = banked[winner];
+  const isTie = activeSkins.filter((id) => banked[id] === topScore).length > 1;
 
   return (
     <>
