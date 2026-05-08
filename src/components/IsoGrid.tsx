@@ -418,8 +418,8 @@ export function IsoGrid() {
       };
 
       // ---------- Hazards (Bombs) & Boots ----------
-      const pendingTimeouts = new Set<number>();
-      const pendingIntervals = new Set<number>();
+      const pendingTimeouts = timeoutsRef.current;
+      const pendingIntervals = intervalsRef.current;
       scheduledTimeouts = pendingTimeouts;
       scheduledIntervals = pendingIntervals;
       const setT = (fn: () => void, ms: number) => {
