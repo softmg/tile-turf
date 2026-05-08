@@ -225,6 +225,7 @@ export function IsoGrid() {
         girl:   { tile: paintedTex, player: playerTex },
         alien:  { tile: paintedTex, player: playerTex },
         knight: { tile: paintedTex, player: playerTex },
+        robot:  { tile: paintedTex, player: playerTex },
       };
       console.log("[IsoGrid] textures ready");
 
