@@ -60,6 +60,7 @@ export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
+  const [zoomOpen, setZoomOpen] = useState(false);
   const [debug, setDebug] = useState(false);
   const debugRef = useRef(false);
   const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
