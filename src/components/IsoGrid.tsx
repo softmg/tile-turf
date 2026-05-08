@@ -629,14 +629,16 @@ export function IsoGrid() {
       >
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: playerSkin.uiColor }} />
-          <span style={{ color: playerSkin.uiColor }}>{playerSkin.name}</span>
-          <span className="tabular-nums">{scores[PLAYER_SKIN]}</span>
+          <span style={{ color: playerSkin.uiColor }}>{playerSkin.name}:</span>
+          <span className="tabular-nums">{banked[PLAYER_SKIN]} banked</span>
+          <span className="text-white/60 tabular-nums text-xs">(+{scores[PLAYER_SKIN]} painted)</span>
         </span>
         <span className="text-white/50">vs</span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: enemySkin.uiColor }} />
-          <span style={{ color: enemySkin.uiColor }}>{enemySkin.name}</span>
-          <span className="tabular-nums">{scores[ENEMY_SKIN]}</span>
+          <span style={{ color: enemySkin.uiColor }}>{enemySkin.name}:</span>
+          <span className="tabular-nums">{banked[ENEMY_SKIN]} banked</span>
+          <span className="text-white/60 tabular-nums text-xs">(+{scores[ENEMY_SKIN]} painted)</span>
         </span>
       </div>
 
