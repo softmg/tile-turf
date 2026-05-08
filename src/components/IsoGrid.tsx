@@ -842,6 +842,7 @@ export function IsoGrid() {
             moveCharacter(enemy, chosen);
           }
         }
+        }
       });
 
       // ---------- Joystick ----------
