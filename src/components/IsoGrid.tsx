@@ -1256,3 +1256,166 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
     </>
   );
 }
+
+// ============= Level Manager Wrapper =============
+
+const LS_UNLOCKED = "iso_unlocked_level";
+
+export function IsoGrid() {
+  const [unlocked, setUnlocked] = useState<number>(() => {
+    if (typeof window === "undefined") return 1;
+    const v = parseInt(window.localStorage.getItem(LS_UNLOCKED) || "1", 10);
+    return Math.min(MAX_LEVEL, Math.max(1, isNaN(v) ? 1 : v));
+  });
+  const [level, setLevel] = useState<number>(1);
+  const [matchWins, setMatchWins] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
+  const [phase, setPhase] = useState<"menu" | "playing" | "passed" | "failed">("menu");
+  const [roundIdx, setRoundIdx] = useState(0);
+  const [lastWinnerName, setLastWinnerName] = useState<string>("");
+
+  const persistUnlocked = (lv: number) => {
+    setUnlocked(lv);
+    try { window.localStorage.setItem(LS_UNLOCKED, String(lv)); } catch {}
+  };
+
+  const startLevel = (lv: number) => {
+    setLevel(lv);
+    setMatchWins(ZERO_SCORES());
+    setRoundIdx((r) => r + 1);
+    setPhase("playing");
+  };
+
+  const handleRoundEnd = (winner: SkinId | null) => {
+    const next = { ...matchWins };
+    if (winner) next[winner] = (next[winner] || 0) + 1;
+    setMatchWins(next);
+
+    const bots = BOT_SKINS.slice(0, botsForLevel(level));
+    const playerW = next[PLAYER_SKIN];
+    const botMax = Math.max(0, ...bots.map((b) => next[b]));
+    setLastWinnerName(winner ? SKINS[winner].name : "Tie");
+
+    if (playerW >= WINS_TO_PASS) {
+      const nextUnlocked = Math.min(MAX_LEVEL, Math.max(unlocked, level + 1));
+      persistUnlocked(nextUnlocked);
+      setPhase("passed");
+      return;
+    }
+    if (botMax >= WINS_TO_PASS) {
+      setPhase("failed");
+      return;
+    }
+    // Continue match: launch next round
+    setRoundIdx((r) => r + 1);
+    setPhase("playing");
+  };
+
+  if (phase === "playing") {
+    return (
+      <IsoRound
+        key={`lvl-${level}-r-${roundIdx}`}
+        level={level}
+        matchWins={matchWins}
+        onRoundEnd={handleRoundEnd}
+      />
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10">
+        {phase === "passed" && (
+          <>
+            <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">Level Passed</div>
+            <div className="mt-1 text-3xl font-extrabold text-white">Level {level} ✓</div>
+            <p className="mt-2 text-sm text-white/70">
+              You won {matchWins[PLAYER_SKIN]}–{Math.max(0, ...BOT_SKINS.slice(0, botsForLevel(level)).map((b) => matchWins[b]))}.
+            </p>
+          </>
+        )}
+        {phase === "failed" && (
+          <>
+            <div className="text-xs font-bold uppercase tracking-widest text-rose-400">Level Failed</div>
+            <div className="mt-1 text-3xl font-extrabold text-white">Level {level} ✗</div>
+            <p className="mt-2 text-sm text-white/70">
+              A bot reached {WINS_TO_PASS} wins first. Try again!
+            </p>
+          </>
+        )}
+        {phase === "menu" && (
+          <>
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paint the Grid</div>
+            <div className="mt-1 text-3xl font-extrabold text-white">Select Level</div>
+            <p className="mt-2 text-xs text-white/60">First to {WINS_TO_PASS} round wins clears the level.</p>
+          </>
+        )}
+
+        <div className="mt-5 grid grid-cols-5 gap-2">
+          {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map((lv) => {
+            const locked = lv > unlocked;
+            const isCurrent = lv === level && phase !== "menu";
+            return (
+              <button
+                key={lv}
+                type="button"
+                disabled={locked}
+                onClick={() => startLevel(lv)}
+                className={`aspect-square rounded-lg text-sm font-extrabold transition active:scale-95 ${
+                  locked
+                    ? "bg-white/5 text-white/30 cursor-not-allowed"
+                    : isCurrent
+                      ? "bg-amber-400 text-black ring-2 ring-amber-200"
+                      : lv <= unlocked
+                        ? "bg-emerald-500/90 text-black hover:bg-emerald-400"
+                        : "bg-white/10 text-white"
+                }`}
+                title={locked ? "Locked" : `Level ${lv} · ${botsForLevel(lv)} bot${botsForLevel(lv) > 1 ? "s" : ""}`}
+              >
+                {locked ? "🔒" : lv}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 text-[11px] text-white/50">
+          Bots scale: lvl 1–2 → 1, 3–4 → 2, 5–7 → 3, 8–10 → 4. Bot speed grows each level.
+        </div>
+
+        <div className="mt-5 flex gap-2">
+          {phase === "passed" && level < MAX_LEVEL && (
+            <button
+              type="button"
+              onClick={() => startLevel(level + 1)}
+              className="flex-1 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              Next Level
+            </button>
+          )}
+          {phase === "passed" && level >= MAX_LEVEL && (
+            <div className="flex-1 rounded-full bg-amber-400 px-4 py-3 text-sm font-extrabold uppercase tracking-wider text-black">
+              🏆 All Levels Cleared!
+            </div>
+          )}
+          {phase === "failed" && (
+            <button
+              type="button"
+              onClick={() => startLevel(level)}
+              className="flex-1 rounded-full bg-rose-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              Retry Level {level}
+            </button>
+          )}
+          {phase === "menu" && (
+            <button
+              type="button"
+              onClick={() => startLevel(unlocked)}
+              className="flex-1 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              Play Level {unlocked}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
