@@ -720,15 +720,30 @@ export function IsoGrid() {
         removeArrow();
       };
 
-      // Initial paint
+      // Initial paint (player only; bots activated on kickoff)
       land(player);
-      for (const e of enemies) land(e);
       positionMinimap();
       updateMinimap();
       recomputeScores();
 
-      // Defer game-loop spawns until user presses Start
+      // Defer game-loop spawns + bot activation until user presses Start
       kickoffRef.current = () => {
+        // Activate bots based on current setting
+        const n = Math.min(botCountRef.current, allEnemies.length);
+        enemies.length = 0;
+        miniEnemies.length = 0;
+        for (let i = 0; i < allEnemies.length; i++) {
+          const active = i < n;
+          allEnemies[i].sprite.visible = active;
+          allEnemies[i].shadow.visible = active;
+          allMiniEnemies[i].visible = active;
+          if (active) {
+            enemies.push(allEnemies[i]);
+            miniEnemies.push(allMiniEnemies[i]);
+            land(allEnemies[i]);
+          }
+        }
+        updateMinimap();
         spawnChest();
         setT(spawnBomb, 5000 + Math.random() * 3000);
         setT(spawnBoots, 8000 + Math.random() * 4000);
