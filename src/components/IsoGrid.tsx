@@ -504,6 +504,7 @@ export function IsoGrid() {
       const spawnBomb = () => {
         if (gameOverRef.current) return;
         if (pausedRef.current || !startedRef.current) { setT(spawnBomb, 800); return; }
+        const gx = Math.floor(Math.random() * 8);
         const gy = Math.floor(Math.random() * 8);
         const p = isoPos(gx, gy);
         const warning = new Graphics();
