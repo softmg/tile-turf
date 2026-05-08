@@ -64,6 +64,7 @@ export function IsoGrid() {
   const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
   const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
   const [scores, setScores] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
+  const [banked, setBanked] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { debugRef.current = debug; }, [debug]);
