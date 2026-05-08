@@ -329,7 +329,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         shadow: Graphics;
         gx: number;
         gy: number;
-        anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number; duration: number } | null;
+        anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number; duration: number; arrowDir: number | null } | null;
         stunnedUntil: number;
         boostUntil: number;
         aura: Graphics;
@@ -875,20 +875,21 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         setT(spawnArrow, 20000);
       };
 
-      const tryTriggerArrow = (c: Character) => {
+      const tryTriggerArrow = (c: Character, snapshotDir: number | null) => {
         if (!arrow) return;
         if (c.gx !== arrow.gx || c.gy !== arrow.gy) return;
-        const dir = arrow.dir;
+        const dir = snapshotDir ?? arrow.dir;
         const dx = dir === 1 ? 1 : dir === 3 ? -1 : 0;
         const dy = dir === 0 ? -1 : dir === 2 ? 1 : 0;
+        // Paint the arrow tile itself
+        paintAt(c.gx, c.gy, c.skin);
+        // Paint the full line in the chosen direction to the edge of the field
         let x = c.gx + dx;
         let y = c.gy + dy;
         while (x >= 0 && x < 8 && y >= 0 && y < 8) {
           paintAt(x, y, c.skin);
           x += dx; y += dy;
         }
-        // Also paint the arrow tile itself
-        paintAt(c.gx, c.gy, c.skin);
         removeArrow();
       };
 
@@ -941,7 +942,11 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         c.gx = nx;
         c.gy = ny;
         updateMinimap();
-        c.anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0, duration: jumpDurationFor(c) };
+        // Snapshot arrow direction at jump start so the painted line matches
+        // the visible arrow at the moment the player committed to the tile,
+        // not whatever the rotation happens to be when they land.
+        const arrowDir = (arrow && arrow.gx === nx && arrow.gy === ny) ? arrow.dir : null;
+        c.anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0, duration: jumpDurationFor(c), arrowDir };
       };
 
       const movePlayer = (d: Direction) => moveCharacter(player, d);
@@ -1020,11 +1025,12 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           const shadowScale = 1 - arc * 0.5;
           renderCharacterAt(c, gx, gy, jumpOffset, shadowScale);
           if (linear >= 1) {
+            const arrowDir = c.anim.arrowDir;
             c.anim = null;
             land(c);
             tryCollectChest(c);
             tryCollectBoots(c);
-            tryTriggerArrow(c);
+            tryTriggerArrow(c, arrowDir);
             landedAny = true;
           }
         }
