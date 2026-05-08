@@ -13,6 +13,12 @@ const TILE_SIZE = 120;
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(1);
+  const [zoom, setZoom] = useState(1);
+
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
 
   useEffect(() => {
     const host = containerRef.current;
