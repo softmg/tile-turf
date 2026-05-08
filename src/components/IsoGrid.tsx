@@ -147,7 +147,7 @@ export function IsoGrid() {
 
   // Round countdown timer
   useEffect(() => {
-    if (gameOver) return;
+    if (gameOver || !started || paused) return;
     const id = window.setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
@@ -159,7 +159,7 @@ export function IsoGrid() {
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [gameOver]);
+  }, [gameOver, started, paused]);
 
   useEffect(() => {
     const host = containerRef.current;
