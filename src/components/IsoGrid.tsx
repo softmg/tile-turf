@@ -961,16 +961,37 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           s.frames += 1;
           s.sumMs += dtMs;
           if (dtMs > s.maxMs) s.maxMs = dtMs;
+          // Sample active animations & bombs each frame
+          let animCount = 0;
+          if (player.anim) animCount += 1;
+          let enemiesActive = 0;
+          for (let i = 0; i < enemies.length; i++) {
+            if (enemies[i].anim) animCount += 1;
+            enemiesActive += 1;
+          }
+          s.animSum += animCount;
+          s.animSamples += 1;
+          if (bombs.length > s.bombsMax) s.bombsMax = bombs.length;
+          s.enemiesActive = enemiesActive;
           const now = performance.now();
           if (s.lastFlush === 0) s.lastFlush = now;
           if (now - s.lastFlush >= 200) {
             const avg = s.sumMs / Math.max(1, s.frames);
+            const winSec = (now - s.lastFlush) / 1000;
             setStats({
               fps: Math.round(1000 / Math.max(0.001, avg)),
               frameMs: +avg.toFixed(2),
               maxMs: +s.maxMs.toFixed(2),
+              paints: Math.round(s.paints / Math.max(0.001, winSec)),
+              miniCells: Math.round(s.miniCells / Math.max(0.001, winSec)),
+              miniPasses: Math.round(s.miniPasses / Math.max(0.001, winSec)),
+              anims: +(s.animSum / Math.max(1, s.animSamples)).toFixed(1),
+              bombs: s.bombsMax,
+              enemies: enemiesActive,
             });
             s.frames = 0; s.sumMs = 0; s.maxMs = 0; s.lastFlush = now;
+            s.paints = 0; s.miniCells = 0; s.miniPasses = 0;
+            s.animSum = 0; s.animSamples = 0; s.bombsMax = 0;
           }
         }
 
