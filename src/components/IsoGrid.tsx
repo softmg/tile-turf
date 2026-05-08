@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Application, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
+import { Application, Assets, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
 import backgroundUrl from "@/assets/background.png";
+import playerUrl from "@/assets/player.png";
+import tileUrl from "@/assets/tile.png";
+import tilePaintedUrl from "@/assets/tile-painted.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
@@ -16,47 +19,37 @@ export interface SkinConfig {
   name: string;
   playerSprite: string;
   tileSprite: string;
-  minimapColor: number; // hex 0xRRGGBB
-  uiColor: string;      // CSS color for React UI
+  minimapColor: number;
+  uiColor: string;
+  // Tint applied to shared sprites so each skin reads visually distinct
+  // (the user uploaded one plush set; other skins reuse it with a tint).
+  spriteTint: number;
 }
 
-// Placeholder art via placehold.co — swap with real assets later.
 export const SKINS: Record<SkinId, SkinConfig> = {
   plush: {
-    id: "plush",
-    name: "Plush",
-    playerSprite: "https://placehold.co/180x220/8b5a2b/ffffff/png?text=Plush",
-    tileSprite:   "https://placehold.co/240x240/8b5a2b/ffe4b5/png?text=+",
-    minimapColor: 0x8b5a2b,
-    uiColor: "#8b5a2b",
+    id: "plush", name: "Plush",
+    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
+    minimapColor: 0xe89a6a, uiColor: "#e89a6a", spriteTint: 0xffffff,
   },
   girl: {
-    id: "girl",
-    name: "Girl",
-    playerSprite: "https://placehold.co/180x220/ff69b4/ffffff/png?text=Girl",
-    tileSprite:   "https://placehold.co/240x240/ff69b4/ffe4f1/png?text=+",
-    minimapColor: 0xff69b4,
-    uiColor: "#ff69b4",
+    id: "girl", name: "Girl",
+    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
+    minimapColor: 0xff7fb3, uiColor: "#ff7fb3", spriteTint: 0xffb6d4,
   },
   alien: {
-    id: "alien",
-    name: "Alien",
-    playerSprite: "https://placehold.co/180x220/32cd32/ffffff/png?text=Alien",
-    tileSprite:   "https://placehold.co/240x240/32cd32/eaffea/png?text=+",
-    minimapColor: 0x32cd32,
-    uiColor: "#32cd32",
+    id: "alien", name: "Alien",
+    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
+    minimapColor: 0x6ed36e, uiColor: "#6ed36e", spriteTint: 0xb8f2b8,
   },
   knight: {
-    id: "knight",
-    name: "Knight",
-    playerSprite: "https://placehold.co/180x220/708090/ffffff/png?text=Knight",
-    tileSprite:   "https://placehold.co/240x240/708090/e6ecf2/png?text=+",
-    minimapColor: 0x708090,
-    uiColor: "#708090",
+    id: "knight", name: "Knight",
+    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
+    minimapColor: 0x9aa6b8, uiColor: "#9aa6b8", spriteTint: 0xd0d8e4,
   },
 };
 
-const UNPAINTED_TILE_URL = "https://placehold.co/240x240/f5d0b0/c08a5a/png?text=+";
+const UNPAINTED_TILE_URL = tileUrl;
 const UNPAINTED_MINIMAP_COLOR = 0xf5d0b0;
 
 const PLAYER_SKIN: SkinId = "plush";
