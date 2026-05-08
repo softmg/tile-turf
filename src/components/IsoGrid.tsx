@@ -15,10 +15,18 @@ export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
+  const [debug, setDebug] = useState(false);
+  const debugRef = useRef(false);
+  const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
+  const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
 
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+
+  useEffect(() => {
+    debugRef.current = debug;
+  }, [debug]);
 
   useEffect(() => {
     const host = containerRef.current;
@@ -214,6 +222,28 @@ export function IsoGrid() {
 
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
+
+        // Debug stats sampling (flush ~5x per second)
+        if (debugRef.current) {
+          const s = statsAccum.current;
+          s.frames += 1;
+          s.sumMs += dtMs;
+          if (dtMs > s.maxMs) s.maxMs = dtMs;
+          const now = performance.now();
+          if (s.lastFlush === 0) s.lastFlush = now;
+          if (now - s.lastFlush >= 200) {
+            const avg = s.sumMs / Math.max(1, s.frames);
+            setStats({
+              fps: Math.round(1000 / Math.max(0.001, avg)),
+              frameMs: +avg.toFixed(2),
+              maxMs: +s.maxMs.toFixed(2),
+            });
+            s.frames = 0;
+            s.sumMs = 0;
+            s.maxMs = 0;
+            s.lastFlush = now;
+          }
+        }
 
         // Smooth zoom toward target
         const zSmooth = 1 - Math.exp(-dtMs / 100);
@@ -434,7 +464,26 @@ export function IsoGrid() {
         <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
           {Math.round(zoom * 100)}%
         </span>
+        <button
+          type="button"
+          onClick={() => setDebug((d) => !d)}
+          className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider active:scale-95 ${
+            debug ? "bg-emerald-400 text-black" : "bg-white/80 text-black"
+          }`}
+          aria-label="Toggle debug"
+          aria-pressed={debug}
+        >
+          DBG
+        </button>
       </div>
+      {debug && (
+        <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/70 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums">
+          <div>FPS: {stats.fps}</div>
+          <div>frame: {stats.frameMs.toFixed(2)} ms</div>
+          <div>peak: {stats.maxMs.toFixed(2)} ms</div>
+          <div className="text-white/60">DPR: {Math.min(window.devicePixelRatio || 1, 3)}</div>
+        </div>
+      )}
     </>
   );
 }
