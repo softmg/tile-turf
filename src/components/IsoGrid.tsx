@@ -459,9 +459,11 @@ export function IsoGrid() {
           const a = 0.5 + 0.5 * Math.abs(Math.sin(pulseT / 180));
           drawWarning(a);
         }, 100);
+        pendingIntervals.add(pulseId);
 
         setT(() => {
           window.clearInterval(pulseId);
+          pendingIntervals.delete(pulseId);
           world.removeChild(warning);
           warning.destroy();
           bomb.phase = "explosion";
