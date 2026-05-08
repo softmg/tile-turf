@@ -979,20 +979,20 @@ export function IsoGrid() {
       {/* Scoreboard */}
       <div
         className="fixed left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
-        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 60px)" }}
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: playerSkin.uiColor }} />
           <span style={{ color: playerSkin.uiColor }}>{playerSkin.name}:</span>
-          <span className="tabular-nums">{banked[PLAYER_SKIN]} banked</span>
-          <span className="text-white/60 tabular-nums text-xs">(+{scores[PLAYER_SKIN]} painted)</span>
+          <span className="tabular-nums">{banked[PLAYER_SKIN]}</span>
+          <span className="text-white/60 tabular-nums text-xs">(+{scores[PLAYER_SKIN]})</span>
         </span>
         <span className="text-white/50">vs</span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: enemySkin.uiColor }} />
           <span style={{ color: enemySkin.uiColor }}>{enemySkin.name}:</span>
-          <span className="tabular-nums">{banked[ENEMY_SKIN]} banked</span>
-          <span className="text-white/60 tabular-nums text-xs">(+{scores[ENEMY_SKIN]} painted)</span>
+          <span className="tabular-nums">{banked[ENEMY_SKIN]}</span>
+          <span className="text-white/60 tabular-nums text-xs">(+{scores[ENEMY_SKIN]})</span>
         </span>
       </div>
 
@@ -1051,7 +1051,7 @@ export function IsoGrid() {
 
       <div
         className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
-        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
+        style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
         <button
           type="button"
