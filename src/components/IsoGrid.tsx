@@ -1073,6 +1073,56 @@ export function IsoGrid() {
         </div>
       )}
 
+      {/* Pause / Settings gear (top-right) */}
+      <button
+        type="button"
+        onClick={() => {
+          if (!started) return;
+          setPaused((p) => !p);
+        }}
+        disabled={!started || gameOver}
+        className="fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm shadow-lg active:scale-95 disabled:opacity-40"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+        aria-label={paused ? "Resume" : "Pause"}
+      >
+        <Settings size={20} />
+      </button>
+
+      {/* Start overlay */}
+      {!started && !gameOver && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[260px]">
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Get Ready</div>
+            <div className="mt-2 text-2xl font-extrabold text-white">Paint the Grid!</div>
+            <p className="mt-3 text-sm text-white/70">Tap & drag to move. Bank tiles at the chest. 90s round.</p>
+            <button
+              type="button"
+              onClick={() => setStarted(true)}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              <Play size={16} fill="currentColor" /> Start Round
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pause overlay */}
+      {paused && started && !gameOver && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[240px]">
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paused</div>
+            <div className="mt-2 text-2xl font-extrabold text-white">Take a breath</div>
+            <button
+              type="button"
+              onClick={() => setPaused(false)}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              <Play size={16} fill="currentColor" /> Resume
+            </button>
+          </div>
+        </div>
+      )}
+
       <div
         className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
