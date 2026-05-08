@@ -13,9 +13,14 @@ export function IsoGrid() {
     const app = new Application();
     let destroyed = false;
     let keyHandler: ((e: KeyboardEvent) => void) | null = null;
+    let resizeHandler: (() => void) | null = null;
 
     (async () => {
-      await app.init({ width: 800, height: 600, backgroundColor: 0x1e293b, antialias: true });
+      await app.init({
+        resizeTo: window,
+        backgroundColor: 0x1e293b,
+        antialias: true,
+      });
       if (destroyed) {
         app.destroy(true, { children: true });
         return;
@@ -25,10 +30,11 @@ export function IsoGrid() {
       const world = new Container();
       world.sortableChildren = true;
       app.stage.addChild(world);
+      app.stage.sortableChildren = true;
 
       const isoPos = (x: number, y: number) => ({
-        x: (x - y) * 40 + 400,
-        y: (x + y) * 20 + 150,
+        x: (x - y) * 40,
+        y: (x + y) * 20,
       });
 
       const drawTile = (g: Graphics, painted: boolean) => {
@@ -38,9 +44,11 @@ export function IsoGrid() {
         g.stroke({ width: 2, color: 0x555555 });
       };
 
+      const painted: boolean[][] = [];
       const tiles: Graphics[][] = [];
       for (let x = 0; x < 8; x++) {
         tiles[x] = [];
+        painted[x] = [];
         for (let y = 0; y < 8; y++) {
           const tile = new Graphics();
           drawTile(tile, false);
@@ -50,6 +58,7 @@ export function IsoGrid() {
           tile.zIndex = x + y;
           world.addChild(tile);
           tiles[x][y] = tile;
+          painted[x][y] = false;
         }
       }
 
@@ -62,14 +71,70 @@ export function IsoGrid() {
       let playerX = 0;
       let playerY = 0;
 
+      // ---------- Minimap ----------
+      const MINI_CELL = 10;
+      const MINI_SIZE = 8 * MINI_CELL;
+      const minimap = new Container();
+      minimap.zIndex = 999;
+      app.stage.addChild(minimap);
+
+      const miniBg = new Graphics();
+      miniBg.rect(-4, -4, MINI_SIZE + 8, MINI_SIZE + 8).fill({ color: 0x000000, alpha: 0.5 });
+      minimap.addChild(miniBg);
+
+      const miniTiles: Graphics[][] = [];
+      for (let x = 0; x < 8; x++) {
+        miniTiles[x] = [];
+        for (let y = 0; y < 8; y++) {
+          const m = new Graphics();
+          m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(0xcccccc);
+          minimap.addChild(m);
+          miniTiles[x][y] = m;
+        }
+      }
+
+      const miniPlayer = new Graphics();
+      miniPlayer.circle(0, 0, 3).fill(0x3b82f6);
+      miniPlayer.zIndex = 10;
+      minimap.addChild(miniPlayer);
+
+      const positionMinimap = () => {
+        minimap.x = app.screen.width - MINI_SIZE - 20;
+        minimap.y = 20;
+      };
+
+      const updateMinimap = () => {
+        for (let x = 0; x < 8; x++) {
+          for (let y = 0; y < 8; y++) {
+            const m = miniTiles[x][y];
+            m.clear();
+            m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(
+              painted[x][y] ? 0xff7700 : 0xcccccc
+            );
+          }
+        }
+        miniPlayer.x = playerX * MINI_CELL + MINI_CELL / 2;
+        miniPlayer.y = playerY * MINI_CELL + MINI_CELL / 2;
+      };
+
+      const centerCamera = () => {
+        const p = isoPos(playerX, playerY);
+        world.x = app.screen.width / 2 - p.x;
+        world.y = app.screen.height / 2 - p.y;
+      };
+
       const updatePlayer = () => {
+        painted[playerX][playerY] = true;
         drawTile(tiles[playerX][playerY], true);
         const p = isoPos(playerX, playerY);
         player.x = p.x;
         player.y = p.y;
         player.zIndex = playerX + playerY + 0.1;
+        centerCamera();
+        updateMinimap();
       };
 
+      positionMinimap();
       updatePlayer();
 
       const movePlayer = (direction: Direction) => {
@@ -90,7 +155,6 @@ export function IsoGrid() {
       joystick.zIndex = 1000;
       joystick.visible = false;
       joystick.scale.y = 0.5;
-      app.stage.sortableChildren = true;
       app.stage.addChild(joystick);
 
       const base = new Graphics();
@@ -101,8 +165,11 @@ export function IsoGrid() {
       knob.circle(0, 0, 25).fill({ color: 0xffffff, alpha: 0.7 });
       joystick.addChild(knob);
 
+      const updateHitArea = () => {
+        app.stage.hitArea = new Rectangle(0, 0, app.screen.width, app.screen.height);
+      };
       app.stage.eventMode = "static";
-      app.stage.hitArea = new Rectangle(0, 0, 800, 600);
+      updateHitArea();
 
       let isDragging = false;
       let baseX = 0;
@@ -125,13 +192,11 @@ export function IsoGrid() {
 
       const onMove = (e: FederatedPointerEvent) => {
         if (!isDragging) return;
-        // dx/dy in screen space
         const dx = e.global.x - baseX;
         const dy = e.global.y - baseY;
         const dist = Math.hypot(dx, dy);
         const clamped = Math.min(dist, MAX_RADIUS);
         const angle = Math.atan2(dy, dx);
-        // knob position is in joystick local space; since scale.y=0.5, divide y by 0.5 to render in screen pixels
         knob.x = Math.cos(angle) * clamped;
         knob.y = (Math.sin(angle) * clamped) / 0.5;
 
@@ -139,13 +204,12 @@ export function IsoGrid() {
         const now = performance.now();
         if (now - lastMoveTime < COOLDOWN) return;
 
-        // Isometric mapping based on screen-space angle (degrees)
-        const deg = (angle * 180) / Math.PI; // -180..180, 0 = right
+        const deg = (angle * 180) / Math.PI;
         let dir: Direction;
-        if (deg >= -90 && deg < 0) dir = "UP"; // top-right
-        else if (deg >= 0 && deg < 90) dir = "RIGHT"; // bottom-right
-        else if (deg >= 90 && deg <= 180) dir = "DOWN"; // bottom-left
-        else dir = "LEFT"; // top-left
+        if (deg >= -90 && deg < 0) dir = "UP";
+        else if (deg >= 0 && deg < 90) dir = "RIGHT";
+        else if (deg >= 90 && deg <= 180) dir = "DOWN";
+        else dir = "LEFT";
 
         movePlayer(dir);
         lastMoveTime = now;
@@ -190,11 +254,19 @@ export function IsoGrid() {
         movePlayer(dir);
       };
       window.addEventListener("keydown", keyHandler);
+
+      resizeHandler = () => {
+        updateHitArea();
+        positionMinimap();
+        centerCamera();
+      };
+      window.addEventListener("resize", resizeHandler);
     })();
 
     return () => {
       destroyed = true;
       if (keyHandler) window.removeEventListener("keydown", keyHandler);
+      if (resizeHandler) window.removeEventListener("resize", resizeHandler);
       try {
         if (app.canvas && app.canvas.parentNode === host) host.removeChild(app.canvas);
         app.destroy(true, { children: true, texture: true });
@@ -206,10 +278,9 @@ export function IsoGrid() {
 
   return (
     <div
-      className="relative w-full flex justify-center"
+      className="fixed inset-0"
       style={{ touchAction: "none", userSelect: "none" }}
-    >
-      <div ref={containerRef} className="max-w-full overflow-hidden" />
-    </div>
+      ref={containerRef}
+    />
   );
 }
