@@ -1,8 +1,12 @@
 import { useEffect, useRef } from "react";
 import { Application, Container, Graphics } from "pixi.js";
+import { ChevronUp, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+
+type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
+  const moveRef = useRef<(d: Direction) => void>(() => {});
 
   useEffect(() => {
     const host = containerRef.current;
@@ -51,7 +55,6 @@ export function IsoGrid() {
         }
       }
 
-      // Player
       const player = new Graphics();
       player.rect(-10, -40, 20, 40);
       player.fill(0x3b82f6);
@@ -61,7 +64,7 @@ export function IsoGrid() {
       let playerX = 0;
       let playerY = 0;
 
-      const paintAndPlace = () => {
+      const updatePlayer = () => {
         drawTile(tiles[playerX][playerY], true);
         const p = isoPos(playerX, playerY);
         player.x = p.x;
@@ -69,40 +72,50 @@ export function IsoGrid() {
         player.zIndex = playerX + playerY + 0.1;
       };
 
-      paintAndPlace();
+      updatePlayer();
 
-      keyHandler = (e: KeyboardEvent) => {
+      const movePlayer = (direction: Direction) => {
         let nx = playerX;
         let ny = playerY;
+        if (direction === "UP") ny -= 1;
+        else if (direction === "DOWN") ny += 1;
+        else if (direction === "LEFT") nx -= 1;
+        else if (direction === "RIGHT") nx += 1;
+        if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return;
+        playerX = nx;
+        playerY = ny;
+        updatePlayer();
+      };
+
+      moveRef.current = movePlayer;
+
+      keyHandler = (e: KeyboardEvent) => {
+        let dir: Direction | null = null;
         switch (e.key) {
           case "ArrowUp":
           case "w":
           case "W":
-            ny -= 1;
+            dir = "UP";
             break;
           case "ArrowDown":
           case "s":
           case "S":
-            ny += 1;
+            dir = "DOWN";
             break;
           case "ArrowLeft":
           case "a":
           case "A":
-            nx -= 1;
+            dir = "LEFT";
             break;
           case "ArrowRight":
           case "d":
           case "D":
-            nx += 1;
+            dir = "RIGHT";
             break;
-          default:
-            return;
         }
-        if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return;
+        if (!dir) return;
         e.preventDefault();
-        playerX = nx;
-        playerY = ny;
-        paintAndPlace();
+        movePlayer(dir);
       };
       window.addEventListener("keydown", keyHandler);
     })();
@@ -119,5 +132,64 @@ export function IsoGrid() {
     };
   }, []);
 
-  return <div ref={containerRef} className="flex justify-center" />;
+  const press = (dir: Direction) => (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    moveRef.current(dir);
+  };
+
+  const btn =
+    "flex items-center justify-center w-14 h-14 rounded-full bg-black/50 backdrop-blur-md border border-white/15 text-white shadow-lg active:bg-black/70 active:scale-95 transition";
+
+  return (
+    <div
+      className="relative w-full flex justify-center"
+      style={{ touchAction: "none", userSelect: "none" }}
+    >
+      <div ref={containerRef} className="max-w-full overflow-hidden" />
+      <div
+        className="absolute bottom-4 left-1/2 -translate-x-1/2"
+        style={{ touchAction: "none", userSelect: "none" }}
+      >
+        <div className="grid grid-cols-3 grid-rows-3 gap-2 w-52 h-52 p-2 rounded-3xl bg-black/30 backdrop-blur-md border border-white/10">
+          <div />
+          <button
+            aria-label="Up"
+            className={btn}
+            onPointerDown={press("UP")}
+            onTouchStart={press("UP")}
+          >
+            <ChevronUp />
+          </button>
+          <div />
+          <button
+            aria-label="Left"
+            className={btn}
+            onPointerDown={press("LEFT")}
+            onTouchStart={press("LEFT")}
+          >
+            <ChevronLeft />
+          </button>
+          <div />
+          <button
+            aria-label="Right"
+            className={btn}
+            onPointerDown={press("RIGHT")}
+            onTouchStart={press("RIGHT")}
+          >
+            <ChevronRight />
+          </button>
+          <div />
+          <button
+            aria-label="Down"
+            className={btn}
+            onPointerDown={press("DOWN")}
+            onTouchStart={press("DOWN")}
+          >
+            <ChevronDown />
+          </button>
+          <div />
+        </div>
+      </div>
+    </div>
+  );
 }
