@@ -28,6 +28,8 @@ export function IsoGrid() {
         resizeTo: window,
         backgroundAlpha: 0,
         antialias: true,
+        resolution: Math.min(window.devicePixelRatio || 1, 3),
+        autoDensity: true,
       });
       if (destroyed) {
         app.destroy(true, { children: true });
