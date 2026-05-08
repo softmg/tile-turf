@@ -335,8 +335,8 @@ export function IsoGrid() {
       minimap.addChild(miniEnemy);
 
       const positionMinimap = () => {
-        minimap.x = app.screen.width - MINI_SIZE - 20;
-        minimap.y = 20;
+        minimap.x = app.screen.width - MINI_SIZE - 16;
+        minimap.y = app.screen.height - MINI_SIZE - 16;
       };
 
       const updateMinimap = () => {
