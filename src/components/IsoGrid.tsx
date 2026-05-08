@@ -467,7 +467,7 @@ export function IsoGrid() {
 
 
       const recomputeScores = () => {
-        const next: Record<SkinId, number> = { plush: 0, girl: 0, alien: 0, knight: 0 };
+        const next: Record<SkinId, number> = ZERO_SCORES();
         for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
           const o = owners[x][y];
           if (o) next[o]++;
