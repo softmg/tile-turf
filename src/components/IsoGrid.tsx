@@ -1383,17 +1383,21 @@ export function IsoGrid() {
 
   if (phase === "playing") {
     return (
-      <IsoRound
-        key={`lvl-${level}-r-${roundIdx}`}
-        level={level}
-        matchWins={matchWins}
-        onRoundEnd={handleRoundEnd}
-      />
+      <>
+        <IsoRound
+          key={`lvl-${level}-r-${roundIdx}`}
+          level={level}
+          matchWins={matchWins}
+          onRoundEnd={handleRoundEnd}
+        />
+        {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
+      </>
     );
   }
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
       <div className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10">
         {phase === "passed" && (
           <>
