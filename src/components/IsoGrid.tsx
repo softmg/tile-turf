@@ -1399,11 +1399,12 @@ export function IsoGrid() {
   const startLevel = (lv: number) => {
     setLevel(lv);
     setMatchWins(ZERO_SCORES());
+    setHistory([]);
     setRoundIdx((r) => r + 1);
     setPhase("playing");
   };
 
-  const handleRoundEnd = (winner: SkinId | null) => {
+  const handleRoundEnd = (winner: SkinId | null, banked: Record<SkinId, number>) => {
     const next = { ...matchWins };
     if (winner) next[winner] = (next[winner] || 0) + 1;
     setMatchWins(next);
@@ -1412,6 +1413,9 @@ export function IsoGrid() {
     const playerW = next[PLAYER_SKIN];
     const botMax = Math.max(0, ...bots.map((b) => next[b]));
     setLastWinnerName(winner ? SKINS[winner].name : "Tie");
+
+    const newHistory = [...history, { level, round: history.length + 1, winner, scores: banked }];
+    setHistory(newHistory);
 
     if (playerW >= WINS_TO_PASS) {
       const nextUnlocked = Math.min(MAX_LEVEL, Math.max(unlocked, level + 1));
@@ -1435,6 +1439,7 @@ export function IsoGrid() {
           key={`lvl-${level}-r-${roundIdx}`}
           level={level}
           matchWins={matchWins}
+          history={history}
           onRoundEnd={handleRoundEnd}
         />
         {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
