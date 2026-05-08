@@ -62,7 +62,20 @@ const BOT_SKINS: SkinId[] = ["girl", "alien", "knight", "robot"];
 const SKIN_IDS: SkinId[] = ["plush", "girl", "alien", "knight", "robot"];
 const ZERO_SCORES = (): Record<SkinId, number> => ({ plush: 0, girl: 0, alien: 0, knight: 0, robot: 0 });
 
-export function IsoGrid() {
+// Level scaling
+export const MAX_LEVEL = 10;
+export const WINS_TO_PASS = 3;
+export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : lv <= 7 ? 3 : 4);
+export const enemyIntervalForLevel = (lv: number) =>
+  Math.max(220, 750 - (lv - 1) * 60); // bots step faster on higher levels
+
+interface IsoRoundProps {
+  level: number;
+  matchWins: Record<SkinId, number>;
+  onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
+}
+
+function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
@@ -77,15 +90,16 @@ export function IsoGrid() {
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
-  const [started, setStarted] = useState(false);
-  const startedRef = useRef(false);
+  const [started, setStarted] = useState(true);
+  const startedRef = useRef(true);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
-  const [botCount, setBotCount] = useState(1);
-  const botCountRef = useRef(1);
+  const botCount = botsForLevel(level);
+  const botCountRef = useRef(botCount);
+  const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  useEffect(() => { botCountRef.current = botCount; }, [botCount]);
+  useEffect(() => { botCountRef.current = botCount; levelRef.current = level; }, [botCount, level]);
   const activeBotSkins: SkinId[] = BOT_SKINS.slice(0, botCount);
   const activeSkins: SkinId[] = [PLAYER_SKIN, ...activeBotSkins];
   const timeoutsRef = useRef<Set<number>>(new Set());
