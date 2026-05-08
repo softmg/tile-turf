@@ -4,6 +4,7 @@ import backgroundUrl from "@/assets/background.png";
 import playerUrl from "@/assets/player.png";
 import tileUrl from "@/assets/tile.png";
 import tilePaintedUrl from "@/assets/tile-painted.png";
+import chestUrl from "@/assets/chest.png";
 
 type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
 
@@ -139,13 +140,14 @@ export function IsoGrid() {
 
       // Load uploaded local PNG assets via Pixi's Assets pipeline.
       // Local Vite-served files have proper extensions and no CORS issues.
-      const [unpaintedTex, paintedTex, playerTex] = await Promise.all([
+      const [unpaintedTex, paintedTex, playerTex, chestTex] = await Promise.all([
         Assets.load<Texture>(UNPAINTED_TILE_URL),
         Assets.load<Texture>(tilePaintedUrl),
         Assets.load<Texture>(playerUrl),
+        Assets.load<Texture>(chestUrl),
       ]);
       if (destroyed) return;
-      for (const t of [unpaintedTex, paintedTex, playerTex]) {
+      for (const t of [unpaintedTex, paintedTex, playerTex, chestTex]) {
         if (t?.source) {
           t.source.scaleMode = "linear";
           t.source.autoGenerateMipmaps = true;
@@ -351,20 +353,15 @@ export function IsoGrid() {
       };
 
       // ---------- Chest ----------
-      const chestGfx = new Graphics();
-      // Body
-      chestGfx.roundRect(-22, -34, 44, 32, 4).fill(0xb8860b).stroke({ width: 2, color: 0x4a2c0a });
-      // Lid
-      chestGfx.roundRect(-22, -44, 44, 14, 4).fill(0xffd700).stroke({ width: 2, color: 0x4a2c0a });
-      // Lock
-      chestGfx.rect(-4, -28, 8, 8).fill(0x4a2c0a);
-      // Highlight
-      chestGfx.rect(-18, -41, 36, 3).fill({ color: 0xffffff, alpha: 0.4 });
-      world.addChild(chestGfx);
-      const chest = { gx: 0, gy: 0, gfx: chestGfx };
+      const chestSprite = new Sprite(chestTex);
+      chestSprite.anchor.set(0.5, 1);
+      const chestTargetH = 80;
+      const chestScale = chestTargetH / Math.max(chestTex.height, 1);
+      chestSprite.scale.set(chestScale);
+      world.addChild(chestSprite);
+      const chest = { gx: 0, gy: 0, gfx: chestSprite };
 
       const spawnChest = () => {
-        // Pick a random tile that is not currently occupied by either character
         let gx = 0, gy = 0;
         for (let i = 0; i < 50; i++) {
           gx = Math.floor(Math.random() * 8);
@@ -374,10 +371,11 @@ export function IsoGrid() {
         chest.gx = gx;
         chest.gy = gy;
         const p = isoPos(gx, gy);
-        chestGfx.x = p.x;
-        chestGfx.y = p.y + 8;
-        chestGfx.zIndex = gx + gy + 0.05;
+        chestSprite.x = p.x;
+        chestSprite.y = p.y + 14;
+        chestSprite.zIndex = gx + gy + 0.05;
       };
+
 
       const recomputeScores = () => {
         const next: Record<SkinId, number> = { plush: 0, girl: 0, alien: 0, knight: 0 };
