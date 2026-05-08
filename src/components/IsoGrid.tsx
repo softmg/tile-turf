@@ -929,8 +929,8 @@ export function IsoGrid() {
 
       {/* Scoreboard */}
       <div
-        className="fixed left-1/2 top-4 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
-        style={{ touchAction: "none" }}
+        className="fixed left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 60px)" }}
       >
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: playerSkin.uiColor }} />
@@ -949,8 +949,8 @@ export function IsoGrid() {
 
       {/* Timer */}
       <div
-        className="fixed left-1/2 top-16 z-50 -translate-x-1/2 rounded-full bg-black/55 px-4 py-1 backdrop-blur-sm shadow-lg"
-        style={{ touchAction: "none" }}
+        className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-black/55 px-4 py-1 backdrop-blur-sm shadow-lg"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 110px)" }}
       >
         <span
           className="font-mono text-2xl font-extrabold tabular-nums tracking-wider"
@@ -1001,8 +1001,8 @@ export function IsoGrid() {
       )}
 
       <div
-        className="fixed left-4 top-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
-        style={{ touchAction: "none" }}
+        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
         <button
           type="button"
