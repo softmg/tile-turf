@@ -1098,11 +1098,25 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
         <style>{`@keyframes iso-pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.15); opacity: 0.85; } }`}</style>
       </div>
 
-      {/* Game Over overlay */}
+      {/* Match wins HUD (player vs bots, first to 3) */}
+      <div
+        className="fixed right-4 z-50 rounded-lg bg-black/55 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm shadow-lg"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 56px)" }}
+      >
+        <div className="text-white/60 uppercase tracking-wider text-[9px]">Lvl {level} · BO{WINS_TO_PASS * 2 - 1}</div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span style={{ color: SKINS[PLAYER_SKIN].uiColor }}>You {matchWins[PLAYER_SKIN]}</span>
+          <span className="text-white/40">vs</span>
+          <span className="text-white/90">Bots {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))}</span>
+          <span className="text-white/40">/ {WINS_TO_PASS}</span>
+        </div>
+      </div>
+
+      {/* Round Over overlay */}
       {gameOver && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">End of Round</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">End of Round · Level {level}</div>
             <div className="mt-2 text-3xl font-extrabold text-white">
               {isTie ? "It's a Tie!" : (
                 <span style={{ color: SKINS[winner].uiColor }}>
@@ -1123,10 +1137,10 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
             </div>
             <button
               type="button"
-              onClick={() => window.location.reload()}
+              onClick={() => onRoundEnd(isTie ? null : winner, banked)}
               className="mt-6 w-full rounded-full bg-emerald-400 px-4 py-2 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
             >
-              Play Again
+              Continue
             </button>
           </div>
         </div>
@@ -1147,68 +1161,19 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
         <Settings size={20} />
       </button>
 
-      {/* Start overlay */}
-      {!started && !gameOver && !settingsOpen && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[260px]">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Get Ready</div>
-            <div className="mt-2 text-2xl font-extrabold text-white">Paint the Grid!</div>
-            <p className="mt-3 text-sm text-white/70">Tap & drag to move. Bank tiles at the chest. 90s round.</p>
-            <p className="mt-1 text-xs text-white/50">Bots: {botCount}</p>
-            <button
-              type="button"
-              onClick={() => setStarted(true)}
-              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
-            >
-              <Play size={16} fill="currentColor" /> Start Round
-            </button>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen(true)}
-              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white active:scale-95"
-            >
-              <Settings size={14} /> Settings
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Settings / Pause overlay */}
+      {/* Pause overlay */}
       {settingsOpen && !gameOver && (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="rounded-2xl bg-zinc-900/95 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">
-              {started ? "Paused" : "Settings"}
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paused</div>
+            <div className="mt-1 text-2xl font-extrabold text-white">Level {level}</div>
+            <div className="mt-3 text-sm text-white/70">
+              Bots: <span className="font-bold text-white">{botCount}</span> · Speed{" "}
+              <span className="font-bold text-white">×{(700 / enemyIntervalForLevel(level)).toFixed(2)}</span>
             </div>
-            <div className="mt-1 text-2xl font-extrabold text-white">Game Setup</div>
-
-            <div className="mt-5 text-left">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-white/80">Bots</span>
-                <span className="font-mono text-lg font-extrabold text-white tabular-nums">{botCount}</span>
-              </div>
-              <div className="mt-2 grid grid-cols-4 gap-2">
-                {[1, 2, 3, 4].map((n) => {
-                  const disabled = started; // can only change before round starts
-                  const active = botCount === n;
-                  return (
-                    <button
-                      key={n}
-                      type="button"
-                      disabled={disabled}
-                      onClick={() => setBotCount(n)}
-                      className={`rounded-lg px-3 py-2 text-sm font-bold transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
-                        active ? "bg-emerald-400 text-black" : "bg-white/10 text-white"
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  );
-                })}
-              </div>
-              {started && (
-                <p className="mt-2 text-[11px] text-white/50">Bot count locks once the round starts.</p>
-              )}
+            <div className="mt-3 text-xs text-white/60">
+              Match: You {matchWins[PLAYER_SKIN]} — Bots{" "}
+              {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))} / {WINS_TO_PASS}
             </div>
 
             <button
@@ -1216,13 +1181,11 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
               onClick={() => { setSettingsOpen(false); setPaused(false); }}
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
             >
-              <Play size={16} fill="currentColor" /> {started ? "Resume" : "Close"}
+              <Play size={16} fill="currentColor" /> Resume
             </button>
           </div>
         </div>
       )}
-
-      <div
         className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
