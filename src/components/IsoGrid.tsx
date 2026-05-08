@@ -15,10 +15,18 @@ export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
+  const [debug, setDebug] = useState(false);
+  const debugRef = useRef(false);
+  const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
+  const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
 
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+
+  useEffect(() => {
+    debugRef.current = debug;
+  }, [debug]);
 
   useEffect(() => {
     const host = containerRef.current;
