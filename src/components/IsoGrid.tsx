@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Settings, Play } from "lucide-react";
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
 import backgroundUrl from "@/assets/background.png";
 import playerUrl from "@/assets/player.png";
@@ -71,8 +72,19 @@ export function IsoGrid() {
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  const kickoffRef = useRef<(() => void) | null>(null);
   const timeoutsRef = useRef<Set<number>>(new Set());
   const intervalsRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => { startedRef.current = started; }, [started]);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => {
+    if (started) kickoffRef.current?.();
+  }, [started]);
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
@@ -136,7 +148,7 @@ export function IsoGrid() {
 
   // Round countdown timer
   useEffect(() => {
-    if (gameOver) return;
+    if (gameOver || !started || paused) return;
     const id = window.setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
@@ -148,7 +160,7 @@ export function IsoGrid() {
       });
     }, 1000);
     return () => window.clearInterval(id);
-  }, [gameOver]);
+  }, [gameOver, started, paused]);
 
   useEffect(() => {
     const host = containerRef.current;
@@ -491,6 +503,8 @@ export function IsoGrid() {
         bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
 
       const spawnBomb = () => {
+        if (gameOverRef.current) return;
+        if (pausedRef.current || !startedRef.current) { setT(spawnBomb, 800); return; }
         const gx = Math.floor(Math.random() * 8);
         const gy = Math.floor(Math.random() * 8);
         const p = isoPos(gx, gy);
@@ -559,6 +573,8 @@ export function IsoGrid() {
       // Boots
       let boots: { gx: number; gy: number; gfx: Graphics } | null = null;
       const spawnBoots = () => {
+        if (gameOverRef.current) return;
+        if (pausedRef.current || !startedRef.current) { setT(spawnBoots, 800); return; }
         if (boots) return;
         const gx = Math.floor(Math.random() * 8);
         const gy = Math.floor(Math.random() * 8);
@@ -607,6 +623,8 @@ export function IsoGrid() {
       };
 
       const spawnArrow = () => {
+        if (gameOverRef.current) return;
+        if (pausedRef.current || !startedRef.current) { setT(spawnArrow, 800); return; }
         if (arrow) removeArrow();
         const gx = Math.floor(Math.random() * 8);
         const gy = Math.floor(Math.random() * 8);
@@ -662,19 +680,22 @@ export function IsoGrid() {
       land(player);
       land(enemy);
       positionMinimap();
-      spawnChest();
       updateMinimap();
       recomputeScores();
 
-      // Kick off bombs, boots, arrow
-      setT(spawnBomb, 5000 + Math.random() * 3000);
-      setT(spawnBoots, 8000 + Math.random() * 4000);
-      setT(spawnArrow, 15000);
+      // Defer game-loop spawns until user presses Start
+      kickoffRef.current = () => {
+        spawnChest();
+        setT(spawnBomb, 5000 + Math.random() * 3000);
+        setT(spawnBoots, 8000 + Math.random() * 4000);
+        setT(spawnArrow, 15000);
+      };
+      if (startedRef.current) kickoffRef.current();
 
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       const moveCharacter = (c: Character, direction: Direction) => {
-        if (gameOverRef.current) return;
+        if (gameOverRef.current || !startedRef.current || pausedRef.current) return;
         if (c.anim) return;
         if (performance.now() < c.stunnedUntil) return;
         let nx = c.gx;
@@ -701,6 +722,7 @@ export function IsoGrid() {
 
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
+        const frozen = !startedRef.current || pausedRef.current || gameOverRef.current;
 
         if (debugRef.current) {
           const s = statsAccum.current;
@@ -729,8 +751,9 @@ export function IsoGrid() {
         world.x += (cameraTargetX - world.x) * camSmooth;
         world.y += (cameraTargetY - world.y) * camSmooth;
 
-        // Animate characters
+        // Animate characters (frozen when not running)
         let landedAny = false;
+        if (!frozen) {
         for (const c of [player, enemy]) {
           if (!c.anim) continue;
           c.anim.elapsed += dtMs;
@@ -829,6 +852,7 @@ export function IsoGrid() {
             moveCharacter(enemy, chosen);
           }
         }
+        }
       });
 
       // ---------- Joystick ----------
@@ -861,7 +885,7 @@ export function IsoGrid() {
       const COOLDOWN = 200;
 
       const onDown = (e: FederatedPointerEvent) => {
-        if (gameOverRef.current) return;
+        if (gameOverRef.current || !startedRef.current || pausedRef.current) return;
         baseX = e.global.x;
         baseY = e.global.y;
         joystick.x = baseX;
@@ -1044,6 +1068,56 @@ export function IsoGrid() {
               className="mt-6 w-full rounded-full bg-emerald-400 px-4 py-2 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
             >
               Play Again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pause / Settings gear (top-right) */}
+      <button
+        type="button"
+        onClick={() => {
+          if (!started) return;
+          setPaused((p) => !p);
+        }}
+        disabled={!started || gameOver}
+        className="fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm shadow-lg active:scale-95 disabled:opacity-40"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+        aria-label={paused ? "Resume" : "Pause"}
+      >
+        <Settings size={20} />
+      </button>
+
+      {/* Start overlay */}
+      {!started && !gameOver && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[260px]">
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Get Ready</div>
+            <div className="mt-2 text-2xl font-extrabold text-white">Paint the Grid!</div>
+            <p className="mt-3 text-sm text-white/70">Tap & drag to move. Bank tiles at the chest. 90s round.</p>
+            <button
+              type="button"
+              onClick={() => setStarted(true)}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              <Play size={16} fill="currentColor" /> Start Round
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Pause overlay */}
+      {paused && started && !gameOver && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[240px]">
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paused</div>
+            <div className="mt-2 text-2xl font-extrabold text-white">Take a breath</div>
+            <button
+              type="button"
+              onClick={() => setPaused(false)}
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+            >
+              <Play size={16} fill="currentColor" /> Resume
             </button>
           </div>
         </div>
