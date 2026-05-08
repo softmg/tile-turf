@@ -795,7 +795,7 @@ export function IsoGrid() {
         // Animate characters (frozen when not running)
         let landedAny = false;
         if (!frozen) {
-        for (const c of [player, enemy]) {
+        for (const c of [player, ...enemies]) {
           if (!c.anim) continue;
           c.anim.elapsed += dtMs;
           const linear = Math.min(1, c.anim.elapsed / c.anim.duration);
@@ -821,7 +821,7 @@ export function IsoGrid() {
 
         // Update auras for boost
         const nowMs = performance.now();
-        for (const c of [player, enemy]) {
+        for (const c of [player, ...enemies]) {
           const active = nowMs < c.boostUntil;
           c.aura.visible = active;
           if (active) {
@@ -830,67 +830,56 @@ export function IsoGrid() {
             c.aura.zIndex = c.sprite.zIndex - 0.01;
             c.aura.alpha = 0.6 + 0.3 * Math.sin(nowMs / 120);
           }
-          // Stunned shake
           if (nowMs < c.stunnedUntil) {
             c.sprite.x += Math.sin(nowMs / 30) * 2;
           }
         }
 
-        // Enemy AI tick (skip when stunned/animating)
+        // Enemy AI tick (per bot)
         enemyTimer += dtMs;
-        if (
-          enemyTimer >= ENEMY_INTERVAL &&
-          !enemy.anim &&
-          performance.now() >= enemy.stunnedUntil
-        ) {
+        if (enemyTimer >= ENEMY_INTERVAL) {
           enemyTimer = 0;
-          // Avoid bomb-warning tiles
-          const valid = DIRS.filter((d) => {
-            let nx = enemy.gx, ny = enemy.gy;
-            if (d === "UP") ny--; else if (d === "DOWN") ny++;
-            else if (d === "LEFT") nx--; else nx++;
-            if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return false;
-            if (isWarningAt(nx, ny)) return false;
-            return true;
-          });
-          // If everything is dangerous, allow any in-bounds direction
-          const safe = valid.length ? valid : DIRS.filter((d) => {
-            let nx = enemy.gx, ny = enemy.gy;
-            if (d === "UP") ny--; else if (d === "DOWN") ny++;
-            else if (d === "LEFT") nx--; else nx++;
-            return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
-          });
-          if (safe.length) {
+          for (const en of enemies) {
+            if (en.anim) continue;
+            if (performance.now() < en.stunnedUntil) continue;
+            const valid = DIRS.filter((d) => {
+              let nx = en.gx, ny = en.gy;
+              if (d === "UP") ny--; else if (d === "DOWN") ny++;
+              else if (d === "LEFT") nx--; else nx++;
+              if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return false;
+              if (isWarningAt(nx, ny)) return false;
+              return true;
+            });
+            const safe = valid.length ? valid : DIRS.filter((d) => {
+              let nx = en.gx, ny = en.gy;
+              if (d === "UP") ny--; else if (d === "DOWN") ny++;
+              else if (d === "LEFT") nx--; else nx++;
+              return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
+            });
+            if (!safe.length) continue;
             const distTo = (d: Direction, tx: number, ty: number) => {
-              let nx = enemy.gx, ny = enemy.gy;
+              let nx = en.gx, ny = en.gy;
               if (d === "UP") ny--; else if (d === "DOWN") ny++;
               else if (d === "LEFT") nx--; else nx++;
               return Math.abs(nx - tx) + Math.abs(ny - ty);
             };
+            const bootsDist = boots ? Math.abs(en.gx - boots.gx) + Math.abs(en.gy - boots.gy) : Infinity;
+            const arrowDist = arrow ? Math.abs(en.gx - arrow.gx) + Math.abs(en.gy - arrow.gy) : Infinity;
+            const ownedN = countOwned(en.skin.id);
             let chosen: Direction;
-            const bootsDist = boots
-              ? Math.abs(enemy.gx - boots.gx) + Math.abs(enemy.gy - boots.gy)
-              : Infinity;
-            const arrowDist = arrow
-              ? Math.abs(enemy.gx - arrow.gx) + Math.abs(enemy.gy - arrow.gy)
-              : Infinity;
-            const enemyOwned = countOwned(enemy.skin.id);
             if (arrow && arrowDist <= 2) {
               chosen = safe.reduce((best, d) =>
-                distTo(d, arrow!.gx, arrow!.gy) < distTo(best, arrow!.gx, arrow!.gy) ? d : best,
-                safe[0]);
+                distTo(d, arrow!.gx, arrow!.gy) < distTo(best, arrow!.gx, arrow!.gy) ? d : best, safe[0]);
             } else if (boots && bootsDist <= 2) {
               chosen = safe.reduce((best, d) =>
-                distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best,
-                safe[0]);
-            } else if (enemyOwned > 3) {
+                distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best, safe[0]);
+            } else if (ownedN > 3) {
               chosen = safe.reduce((best, d) =>
-                distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best,
-                safe[0]);
+                distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best, safe[0]);
             } else {
               chosen = safe[Math.floor(Math.random() * safe.length)];
             }
-            moveCharacter(enemy, chosen);
+            moveCharacter(en, chosen);
           }
         }
         }
