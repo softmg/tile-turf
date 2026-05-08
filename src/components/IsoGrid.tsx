@@ -43,6 +43,13 @@ export function IsoGrid() {
         Assets.load(tilePaintedUrl),
         Assets.load(playerUrl),
       ]);
+      for (const t of [tileTex, tilePaintedTex, playerTex]) {
+        if (t && (t as Texture).source) {
+          (t as Texture).source.scaleMode = "linear";
+          (t as Texture).source.autoGenerateMipmaps = true;
+          (t as Texture).source.updateMipmaps?.();
+        }
+      }
       if (destroyed) return;
 
       const world = new Container();
