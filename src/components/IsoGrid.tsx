@@ -476,7 +476,7 @@ export function IsoGrid() {
         for (const c of [player, enemy]) {
           if (!c.anim) continue;
           c.anim.elapsed += dtMs;
-          const linear = Math.min(1, c.anim.elapsed / JUMP_DURATION);
+          const linear = Math.min(1, c.anim.elapsed / c.anim.duration);
           const t = ease(linear);
           const gx = c.anim.fromX + (c.anim.toX - c.anim.fromX) * t;
           const gy = c.anim.fromY + (c.anim.toY - c.anim.fromY) * t;
