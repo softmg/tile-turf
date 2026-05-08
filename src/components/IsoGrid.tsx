@@ -376,6 +376,21 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
       });
       const miniEnemies: Graphics[] = []; // synced in kickoff
 
+      // Item / hazard markers
+      const miniChest = new Graphics();
+      miniChest.zIndex = 9;
+      miniChest.visible = false;
+      minimap.addChild(miniChest);
+
+      const miniArrow = new Graphics();
+      miniArrow.zIndex = 9;
+      miniArrow.visible = false;
+      minimap.addChild(miniArrow);
+
+      const miniBombs = new Graphics();
+      miniBombs.zIndex = 9;
+      minimap.addChild(miniBombs);
+
       const positionMinimap = () => {
         minimap.x = app.screen.width - MINI_SIZE - 16;
         minimap.y = app.screen.height - MINI_SIZE - 16;
@@ -396,6 +411,40 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
         for (let i = 0; i < enemies.length; i++) {
           miniEnemies[i].x = enemies[i].gx * MINI_CELL + MINI_CELL / 2;
           miniEnemies[i].y = enemies[i].gy * MINI_CELL + MINI_CELL / 2;
+        }
+
+        // Chest marker (gold square with outline)
+        const cx = chest.gx * MINI_CELL + MINI_CELL / 2;
+        const cy = chest.gy * MINI_CELL + MINI_CELL / 2;
+        miniChest.clear();
+        miniChest.rect(cx - 3, cy - 3, 6, 6).fill(0xffd24a).stroke({ width: 1, color: 0x6a4500 });
+        miniChest.visible = true;
+
+        // Arrow marker (white triangle pointing in current dir)
+        miniArrow.clear();
+        if (arrow) {
+          const ax = arrow.gx * MINI_CELL + MINI_CELL / 2;
+          const ay = arrow.gy * MINI_CELL + MINI_CELL / 2;
+          // dir: 0=UP,1=RIGHT,2=DOWN,3=LEFT — point along screen axes (matches grid in minimap)
+          const tri =
+            arrow.dir === 0 ? [0, -4, 3, 2, -3, 2] :
+            arrow.dir === 1 ? [4, 0, -2, 3, -2, -3] :
+            arrow.dir === 2 ? [0, 4, -3, -2, 3, -2] :
+                              [-4, 0, 2, -3, 2, 3];
+          miniArrow.poly(tri.map((v, i) => v + (i % 2 === 0 ? ax : ay)))
+            .fill(0xffffff).stroke({ width: 1, color: 0x222222 });
+          miniArrow.visible = true;
+        } else {
+          miniArrow.visible = false;
+        }
+
+        // Bombs (red dots; brighter when about to explode)
+        miniBombs.clear();
+        for (const b of bombs) {
+          const bx = b.gx * MINI_CELL + MINI_CELL / 2;
+          const by = b.gy * MINI_CELL + MINI_CELL / 2;
+          const color = b.phase === "explosion" ? 0xfff2a0 : 0xff2222;
+          miniBombs.circle(bx, by, 2.5).fill(color).stroke({ width: 1, color: 0x000000 });
         }
       };
 
@@ -847,9 +896,10 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
           }
         }
         if (landedAny) {
-          updateMinimap();
           recomputeScores();
         }
+        // Refresh minimap each frame so chest/arrow/bombs stay in sync
+        updateMinimap();
 
         // Update auras for boost
         const nowMs = performance.now();
