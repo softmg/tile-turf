@@ -1050,38 +1050,51 @@ export function IsoGrid() {
       )}
 
       <div
-        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-3 py-2 backdrop-blur-sm"
+        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
         <button
           type="button"
-          onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
-          aria-label="Zoom out"
+          onClick={() => setZoomOpen((o) => !o)}
+          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-sm font-bold text-black active:scale-95"
+          aria-label={zoomOpen ? "Collapse zoom" : "Expand zoom"}
+          aria-expanded={zoomOpen}
         >
-          −
+          {zoomOpen ? "×" : "⌕"}
         </button>
-        <input
-          type="range"
-          min={0.4}
-          max={2}
-          step={0.05}
-          value={zoom}
-          onChange={(e) => setZoom(parseFloat(e.target.value))}
-          className="w-28 accent-white"
-          aria-label="Zoom"
-        />
-        <button
-          type="button"
-          onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
-          aria-label="Zoom in"
-        >
-          +
-        </button>
-        <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
-          {Math.round(zoom * 100)}%
-        </span>
+        {zoomOpen && (
+          <>
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+              aria-label="Zoom out"
+            >
+              −
+            </button>
+            <input
+              type="range"
+              min={0.4}
+              max={2}
+              step={0.05}
+              value={zoom}
+              onChange={(e) => setZoom(parseFloat(e.target.value))}
+              className="w-28 accent-white"
+              aria-label="Zoom"
+            />
+            <button
+              type="button"
+              onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+              aria-label="Zoom in"
+            >
+              +
+            </button>
+            <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
+              {Math.round(zoom * 100)}%
+            </span>
+          </>
+        )}
         <button
           type="button"
           onClick={() => setDebug((d) => !d)}
