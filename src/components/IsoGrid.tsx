@@ -995,9 +995,20 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         }
         if (landedAny) {
           recomputeScores();
+          updateMinimapTiles();
         }
-        // Refresh minimap each frame so chest/arrow/bombs stay in sync
-        updateMinimap();
+        // Cheap per-frame: marker positions only (tiles updated on dirty)
+        updateMinimapMarkers();
+
+        // Throttle React score updates to ~5Hz to avoid HUD re-render storms
+        if (scoresDirty) {
+          const nowS = performance.now();
+          if (nowS - lastScoresFlush > 200) {
+            lastScoresFlush = nowS;
+            scoresDirty = false;
+            setScores({ ...lastScores });
+          }
+        }
 
         // Update auras for boost
         const nowMs = performance.now();
