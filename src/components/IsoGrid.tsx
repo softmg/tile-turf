@@ -71,8 +71,8 @@ export function IsoGrid() {
   const debugRef = useRef(false);
   const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
   const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
-  const [scores, setScores] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
-  const [banked, setBanked] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
+  const [scores, setScores] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
+  const [banked, setBanked] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
   const ROUND_DURATION = 90;
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
   const [gameOver, setGameOver] = useState(false);
