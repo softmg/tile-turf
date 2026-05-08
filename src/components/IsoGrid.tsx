@@ -736,7 +736,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
             const s = bombScale(boomTex, BOOM_TARGET_H) * (0.4 + 0.6 * k);
             boom.scale.set(s);
             boom.alpha = Math.max(0, 1 - Math.max(0, dt - 280) / 220);
-          }, 30);
+          }, 50);
           pendingIntervals.add(boomTickId);
 
           // Impact: stun anyone on this tile (and not mid-air)
