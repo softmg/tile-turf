@@ -226,9 +226,6 @@ export function IsoGrid() {
         const camSmooth = 1 - Math.exp(-dtMs / 80);
         world.x += (cameraTargetX - world.x) * camSmooth;
         world.y += (cameraTargetY - world.y) * camSmooth;
-        const camSmooth = 1 - Math.exp(-dtMs / 80);
-        world.x += (cameraTargetX - world.x) * camSmooth;
-        world.y += (cameraTargetY - world.y) * camSmooth;
 
         if (!anim) return;
         anim.elapsed += dtMs;
