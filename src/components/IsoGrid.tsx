@@ -405,6 +405,125 @@ export function IsoGrid() {
         return true;
       };
 
+      // ---------- Hazards (Bombs) & Boots ----------
+      const pendingTimeouts = new Set<number>();
+      const setT = (fn: () => void, ms: number) => {
+        const id = window.setTimeout(() => {
+          pendingTimeouts.delete(id);
+          if (gameOverRef.current || destroyed) return;
+          fn();
+        }, ms);
+        pendingTimeouts.add(id);
+        return id;
+      };
+
+      interface Bomb {
+        gx: number; gy: number;
+        warning: Graphics;
+        boom: Graphics | null;
+        phase: "warning" | "explosion";
+      }
+      const bombs: Bomb[] = [];
+
+      const isWarningAt = (gx: number, gy: number) =>
+        bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
+
+      const spawnBomb = () => {
+        const gx = Math.floor(Math.random() * 8);
+        const gy = Math.floor(Math.random() * 8);
+        const p = isoPos(gx, gy);
+        const warning = new Graphics();
+        const drawWarning = (alpha: number) => {
+          warning.clear();
+          warning.circle(0, 0, 36).stroke({ width: 4, color: 0xff2222, alpha });
+          warning.moveTo(-30, 0).lineTo(30, 0).stroke({ width: 3, color: 0xff2222, alpha });
+          warning.moveTo(0, -22).lineTo(0, 22).stroke({ width: 3, color: 0xff2222, alpha });
+        };
+        drawWarning(1);
+        warning.x = p.x;
+        warning.y = p.y;
+        warning.zIndex = gx + gy + 0.06;
+        world.addChild(warning);
+        const bomb: Bomb = { gx, gy, warning, boom: null, phase: "warning" };
+        bombs.push(bomb);
+
+        // Pulse warning
+        let pulseT = 0;
+        const pulseId = window.setInterval(() => {
+          pulseT += 100;
+          const a = 0.5 + 0.5 * Math.abs(Math.sin(pulseT / 180));
+          drawWarning(a);
+        }, 100);
+
+        setT(() => {
+          window.clearInterval(pulseId);
+          world.removeChild(warning);
+          warning.destroy();
+          bomb.phase = "explosion";
+
+          // Explosion graphic
+          const boom = new Graphics();
+          boom.circle(0, 0, 42).fill({ color: 0xff5500, alpha: 0.9 });
+          boom.circle(0, 0, 26).fill({ color: 0xfff2a0, alpha: 1 });
+          boom.x = p.x; boom.y = p.y;
+          boom.zIndex = gx + gy + 0.5;
+          world.addChild(boom);
+          bomb.boom = boom;
+
+          // Impact: stun anyone on this tile (and not mid-air)
+          for (const c of [player, enemy]) {
+            if (c.gx === gx && c.gy === gy && !c.anim) {
+              c.stunnedUntil = performance.now() + STUN_DURATION;
+              clearOwnedBy(c.skin.id);
+              recomputeScores();
+              updateMinimap();
+            }
+          }
+
+          setT(() => {
+            world.removeChild(boom);
+            boom.destroy();
+            const i = bombs.indexOf(bomb);
+            if (i >= 0) bombs.splice(i, 1);
+          }, 500);
+        }, 2000);
+
+        // Schedule next bomb
+        setT(spawnBomb, 5000 + Math.random() * 3000);
+      };
+
+      // Boots
+      let boots: { gx: number; gy: number; gfx: Graphics } | null = null;
+      const spawnBoots = () => {
+        if (boots) return;
+        const gx = Math.floor(Math.random() * 8);
+        const gy = Math.floor(Math.random() * 8);
+        const p = isoPos(gx, gy);
+        const gfx = new Graphics();
+        // boot body
+        gfx.roundRect(-16, -28, 32, 18, 4).fill(0x00cccc).stroke({ width: 2, color: 0x004444 });
+        gfx.roundRect(-16, -14, 28, 8, 3).fill(0x00ffff).stroke({ width: 2, color: 0x004444 });
+        // wing
+        gfx.moveTo(-18, -22).lineTo(-30, -28).lineTo(-18, -16).fill(0xffffff);
+        // glow
+        gfx.circle(0, -16, 22).stroke({ width: 2, color: 0x00ffff, alpha: 0.6 });
+        gfx.x = p.x; gfx.y = p.y;
+        gfx.zIndex = gx + gy + 0.06;
+        world.addChild(gfx);
+        boots = { gx, gy, gfx };
+      };
+
+      const tryCollectBoots = (c: Character) => {
+        if (!boots) return;
+        if (c.gx !== boots.gx || c.gy !== boots.gy) return;
+        world.removeChild(boots.gfx);
+        boots.gfx.destroy();
+        boots = null;
+        c.boostUntil = performance.now() + BOOST_DURATION;
+        // Schedule next boots after 10-15s
+        setT(spawnBoots, 10000 + Math.random() * 5000);
+      };
+
       // Initial paint
       land(player);
       land(enemy);
@@ -412,6 +531,10 @@ export function IsoGrid() {
       spawnChest();
       updateMinimap();
       recomputeScores();
+
+      // Kick off bombs and boots
+      setT(spawnBomb, 5000 + Math.random() * 3000);
+      setT(spawnBoots, 8000 + Math.random() * 4000);
 
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
