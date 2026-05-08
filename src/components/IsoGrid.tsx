@@ -86,7 +86,8 @@ function IsoRound({ level, matchWins, onRoundEnd }: IsoRoundProps) {
   const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
   const [scores, setScores] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
   const [banked, setBanked] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
-  const ROUND_DURATION = 90;
+  const ROUND_DURATION =
+    level <= 2 ? 30 : level <= 4 ? 45 : level <= 6 ? 60 : level <= 8 ? 75 : 90;
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
