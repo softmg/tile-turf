@@ -74,7 +74,15 @@ export function IsoGrid() {
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { debugRef.current = debug; }, [debug]);
-  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+  useEffect(() => {
+    gameOverRef.current = gameOver;
+    if (gameOver) {
+      for (const id of timeoutsRef.current) window.clearTimeout(id);
+      timeoutsRef.current.clear();
+      for (const id of intervalsRef.current) window.clearInterval(id);
+      intervalsRef.current.clear();
+    }
+  }, [gameOver]);
 
   // Round countdown timer
   useEffect(() => {
