@@ -351,13 +351,16 @@ export function IsoGrid() {
       miniPlayer.zIndex = 10;
       minimap.addChild(miniPlayer);
 
-      const miniEnemies: Graphics[] = enemies.map((e) => {
+      // Pre-create one minimap marker per possible bot; toggle visibility on kickoff
+      const allMiniEnemies: Graphics[] = allEnemies.map((e) => {
         const g = new Graphics();
         g.circle(0, 0, 3).stroke({ width: 1.5, color: 0xffffff }).fill(SKINS[e.skin.id].minimapColor);
         g.zIndex = 10;
+        g.visible = false;
         minimap.addChild(g);
         return g;
       });
+      const miniEnemies: Graphics[] = []; // synced in kickoff
 
       const positionMinimap = () => {
         minimap.x = app.screen.width - MINI_SIZE - 16;
