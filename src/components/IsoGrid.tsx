@@ -545,6 +545,7 @@ export function IsoGrid() {
       const COOLDOWN = 200;
 
       const onDown = (e: FederatedPointerEvent) => {
+        if (gameOverRef.current) return;
         baseX = e.global.x;
         baseY = e.global.y;
         joystick.x = baseX;
