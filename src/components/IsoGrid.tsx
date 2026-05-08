@@ -14,7 +14,7 @@ const TILE_H = 70;
 const TILE_SIZE = 120;
 
 // ---------- Skin System ----------
-export type SkinId = "plush" | "girl" | "alien" | "knight";
+export type SkinId = "plush" | "girl" | "alien" | "knight" | "robot";
 
 export interface SkinConfig {
   id: SkinId;
@@ -23,8 +23,6 @@ export interface SkinConfig {
   tileSprite: string;
   minimapColor: number;
   uiColor: string;
-  // Tint applied to shared sprites so each skin reads visually distinct
-  // (the user uploaded one plush set; other skins reuse it with a tint).
   spriteTint: number;
 }
 
@@ -49,13 +47,20 @@ export const SKINS: Record<SkinId, SkinConfig> = {
     playerSprite: playerUrl, tileSprite: tilePaintedUrl,
     minimapColor: 0x9aa6b8, uiColor: "#9aa6b8", spriteTint: 0xd0d8e4,
   },
+  robot: {
+    id: "robot", name: "Robot",
+    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
+    minimapColor: 0x9b87f5, uiColor: "#9b87f5", spriteTint: 0xc4b4ff,
+  },
 };
 
 const UNPAINTED_TILE_URL = tileUrl;
 const UNPAINTED_MINIMAP_COLOR = 0xf5d0b0;
 
 const PLAYER_SKIN: SkinId = "plush";
-const ENEMY_SKIN: SkinId = "girl";
+const BOT_SKINS: SkinId[] = ["girl", "alien", "knight", "robot"];
+const SKIN_IDS: SkinId[] = ["plush", "girl", "alien", "knight", "robot"];
+const ZERO_SCORES = (): Record<SkinId, number> => ({ plush: 0, girl: 0, alien: 0, knight: 0, robot: 0 });
 
 export function IsoGrid() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,8 +71,8 @@ export function IsoGrid() {
   const debugRef = useRef(false);
   const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
   const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
-  const [scores, setScores] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
-  const [banked, setBanked] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
+  const [scores, setScores] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
+  const [banked, setBanked] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
   const ROUND_DURATION = 90;
   const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
   const [gameOver, setGameOver] = useState(false);
@@ -77,6 +82,12 @@ export function IsoGrid() {
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
+  const [botCount, setBotCount] = useState(1);
+  const botCountRef = useRef(1);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useEffect(() => { botCountRef.current = botCount; }, [botCount]);
+  const activeBotSkins: SkinId[] = BOT_SKINS.slice(0, botCount);
+  const activeSkins: SkinId[] = [PLAYER_SKIN, ...activeBotSkins];
   const timeoutsRef = useRef<Set<number>>(new Set());
   const intervalsRef = useRef<Set<number>>(new Set());
 
@@ -220,6 +231,7 @@ export function IsoGrid() {
         girl:   { tile: paintedTex, player: playerTex },
         alien:  { tile: paintedTex, player: playerTex },
         knight: { tile: paintedTex, player: playerTex },
+        robot:  { tile: paintedTex, player: playerTex },
       };
       console.log("[IsoGrid] textures ready");
 
@@ -292,7 +304,17 @@ export function IsoGrid() {
       };
 
       const player = makeCharacter(PLAYER_SKIN, 0, 0);
-      const enemy = makeCharacter(ENEMY_SKIN, 7, 7);
+      // Pre-create all 4 possible bot characters; activate first N based on botCount.
+      const ENEMY_SPAWN_POSITIONS: Array<[number, number]> = [[7, 7], [7, 0], [0, 7], [4, 4]];
+      const allEnemies: Character[] = BOT_SKINS.map((sid, i) =>
+        makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1])
+      );
+      const enemies: Character[] = []; // active enemies; populated in kickoff
+      // Hide all bot sprites until activated
+      for (const e of allEnemies) {
+        e.sprite.visible = false;
+        e.shadow.visible = false;
+      }
 
       const BASE_JUMP_DURATION = 380;
       const BOOST_JUMP_DURATION = 150;
@@ -329,10 +351,16 @@ export function IsoGrid() {
       miniPlayer.zIndex = 10;
       minimap.addChild(miniPlayer);
 
-      const miniEnemy = new Graphics();
-      miniEnemy.circle(0, 0, 3).stroke({ width: 1.5, color: 0xffffff }).fill(SKINS[ENEMY_SKIN].minimapColor);
-      miniEnemy.zIndex = 10;
-      minimap.addChild(miniEnemy);
+      // Pre-create one minimap marker per possible bot; toggle visibility on kickoff
+      const allMiniEnemies: Graphics[] = allEnemies.map((e) => {
+        const g = new Graphics();
+        g.circle(0, 0, 3).stroke({ width: 1.5, color: 0xffffff }).fill(SKINS[e.skin.id].minimapColor);
+        g.zIndex = 10;
+        g.visible = false;
+        minimap.addChild(g);
+        return g;
+      });
+      const miniEnemies: Graphics[] = []; // synced in kickoff
 
       const positionMinimap = () => {
         minimap.x = app.screen.width - MINI_SIZE - 16;
@@ -351,8 +379,10 @@ export function IsoGrid() {
         }
         miniPlayer.x = player.gx * MINI_CELL + MINI_CELL / 2;
         miniPlayer.y = player.gy * MINI_CELL + MINI_CELL / 2;
-        miniEnemy.x = enemy.gx * MINI_CELL + MINI_CELL / 2;
-        miniEnemy.y = enemy.gy * MINI_CELL + MINI_CELL / 2;
+        for (let i = 0; i < enemies.length; i++) {
+          miniEnemies[i].x = enemies[i].gx * MINI_CELL + MINI_CELL / 2;
+          miniEnemies[i].y = enemies[i].gy * MINI_CELL + MINI_CELL / 2;
+        }
       };
 
       let cameraTargetX = 0;
@@ -427,7 +457,8 @@ export function IsoGrid() {
         for (let i = 0; i < 50; i++) {
           gx = Math.floor(Math.random() * 8);
           gy = Math.floor(Math.random() * 8);
-          if ((gx !== player.gx || gy !== player.gy) && (gx !== enemy.gx || gy !== enemy.gy)) break;
+          const occupied = [player, ...enemies].some((c) => c.gx === gx && c.gy === gy);
+          if (!occupied) break;
         }
         chest.gx = gx;
         chest.gy = gy;
@@ -439,7 +470,7 @@ export function IsoGrid() {
 
 
       const recomputeScores = () => {
-        const next: Record<SkinId, number> = { plush: 0, girl: 0, alien: 0, knight: 0 };
+        const next: Record<SkinId, number> = ZERO_SCORES();
         for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
           const o = owners[x][y];
           if (o) next[o]++;
@@ -549,7 +580,7 @@ export function IsoGrid() {
           bomb.boom = boom;
 
           // Impact: stun anyone on this tile (and not mid-air)
-          for (const c of [player, enemy]) {
+          for (const c of [player, ...enemies]) {
             if (c.gx === gx && c.gy === gy && !c.anim) {
               c.stunnedUntil = performance.now() + STUN_DURATION;
               clearOwnedBy(c.skin.id);
@@ -689,15 +720,30 @@ export function IsoGrid() {
         removeArrow();
       };
 
-      // Initial paint
+      // Initial paint (player only; bots activated on kickoff)
       land(player);
-      land(enemy);
       positionMinimap();
       updateMinimap();
       recomputeScores();
 
-      // Defer game-loop spawns until user presses Start
+      // Defer game-loop spawns + bot activation until user presses Start
       kickoffRef.current = () => {
+        // Activate bots based on current setting
+        const n = Math.min(botCountRef.current, allEnemies.length);
+        enemies.length = 0;
+        miniEnemies.length = 0;
+        for (let i = 0; i < allEnemies.length; i++) {
+          const active = i < n;
+          allEnemies[i].sprite.visible = active;
+          allEnemies[i].shadow.visible = active;
+          allMiniEnemies[i].visible = active;
+          if (active) {
+            enemies.push(allEnemies[i]);
+            miniEnemies.push(allMiniEnemies[i]);
+            land(allEnemies[i]);
+          }
+        }
+        updateMinimap();
         spawnChest();
         setT(spawnBomb, 5000 + Math.random() * 3000);
         setT(spawnBoots, 8000 + Math.random() * 4000);
@@ -767,7 +813,7 @@ export function IsoGrid() {
         // Animate characters (frozen when not running)
         let landedAny = false;
         if (!frozen) {
-        for (const c of [player, enemy]) {
+        for (const c of [player, ...enemies]) {
           if (!c.anim) continue;
           c.anim.elapsed += dtMs;
           const linear = Math.min(1, c.anim.elapsed / c.anim.duration);
@@ -793,7 +839,7 @@ export function IsoGrid() {
 
         // Update auras for boost
         const nowMs = performance.now();
-        for (const c of [player, enemy]) {
+        for (const c of [player, ...enemies]) {
           const active = nowMs < c.boostUntil;
           c.aura.visible = active;
           if (active) {
@@ -802,67 +848,56 @@ export function IsoGrid() {
             c.aura.zIndex = c.sprite.zIndex - 0.01;
             c.aura.alpha = 0.6 + 0.3 * Math.sin(nowMs / 120);
           }
-          // Stunned shake
           if (nowMs < c.stunnedUntil) {
             c.sprite.x += Math.sin(nowMs / 30) * 2;
           }
         }
 
-        // Enemy AI tick (skip when stunned/animating)
+        // Enemy AI tick (per bot)
         enemyTimer += dtMs;
-        if (
-          enemyTimer >= ENEMY_INTERVAL &&
-          !enemy.anim &&
-          performance.now() >= enemy.stunnedUntil
-        ) {
+        if (enemyTimer >= ENEMY_INTERVAL) {
           enemyTimer = 0;
-          // Avoid bomb-warning tiles
-          const valid = DIRS.filter((d) => {
-            let nx = enemy.gx, ny = enemy.gy;
-            if (d === "UP") ny--; else if (d === "DOWN") ny++;
-            else if (d === "LEFT") nx--; else nx++;
-            if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return false;
-            if (isWarningAt(nx, ny)) return false;
-            return true;
-          });
-          // If everything is dangerous, allow any in-bounds direction
-          const safe = valid.length ? valid : DIRS.filter((d) => {
-            let nx = enemy.gx, ny = enemy.gy;
-            if (d === "UP") ny--; else if (d === "DOWN") ny++;
-            else if (d === "LEFT") nx--; else nx++;
-            return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
-          });
-          if (safe.length) {
+          for (const en of enemies) {
+            if (en.anim) continue;
+            if (performance.now() < en.stunnedUntil) continue;
+            const valid = DIRS.filter((d) => {
+              let nx = en.gx, ny = en.gy;
+              if (d === "UP") ny--; else if (d === "DOWN") ny++;
+              else if (d === "LEFT") nx--; else nx++;
+              if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return false;
+              if (isWarningAt(nx, ny)) return false;
+              return true;
+            });
+            const safe = valid.length ? valid : DIRS.filter((d) => {
+              let nx = en.gx, ny = en.gy;
+              if (d === "UP") ny--; else if (d === "DOWN") ny++;
+              else if (d === "LEFT") nx--; else nx++;
+              return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
+            });
+            if (!safe.length) continue;
             const distTo = (d: Direction, tx: number, ty: number) => {
-              let nx = enemy.gx, ny = enemy.gy;
+              let nx = en.gx, ny = en.gy;
               if (d === "UP") ny--; else if (d === "DOWN") ny++;
               else if (d === "LEFT") nx--; else nx++;
               return Math.abs(nx - tx) + Math.abs(ny - ty);
             };
+            const bootsDist = boots ? Math.abs(en.gx - boots.gx) + Math.abs(en.gy - boots.gy) : Infinity;
+            const arrowDist = arrow ? Math.abs(en.gx - arrow.gx) + Math.abs(en.gy - arrow.gy) : Infinity;
+            const ownedN = countOwned(en.skin.id);
             let chosen: Direction;
-            const bootsDist = boots
-              ? Math.abs(enemy.gx - boots.gx) + Math.abs(enemy.gy - boots.gy)
-              : Infinity;
-            const arrowDist = arrow
-              ? Math.abs(enemy.gx - arrow.gx) + Math.abs(enemy.gy - arrow.gy)
-              : Infinity;
-            const enemyOwned = countOwned(enemy.skin.id);
             if (arrow && arrowDist <= 2) {
               chosen = safe.reduce((best, d) =>
-                distTo(d, arrow!.gx, arrow!.gy) < distTo(best, arrow!.gx, arrow!.gy) ? d : best,
-                safe[0]);
+                distTo(d, arrow!.gx, arrow!.gy) < distTo(best, arrow!.gx, arrow!.gy) ? d : best, safe[0]);
             } else if (boots && bootsDist <= 2) {
               chosen = safe.reduce((best, d) =>
-                distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best,
-                safe[0]);
-            } else if (enemyOwned > 3) {
+                distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best, safe[0]);
+            } else if (ownedN > 3) {
               chosen = safe.reduce((best, d) =>
-                distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best,
-                safe[0]);
+                distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best, safe[0]);
             } else {
               chosen = safe[Math.floor(Math.random() * safe.length)];
             }
-            moveCharacter(enemy, chosen);
+            moveCharacter(en, chosen);
           }
         }
         }
@@ -990,14 +1025,13 @@ export function IsoGrid() {
   }, []);
 
   const playerSkin = SKINS[PLAYER_SKIN];
-  const enemySkin = SKINS[ENEMY_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
   const ss = String(timeLeft % 60).padStart(2, "0");
   const urgent = timeLeft <= 10 && timeLeft > 0;
-  const winner: SkinId = banked[PLAYER_SKIN] === banked[ENEMY_SKIN]
-    ? PLAYER_SKIN
-    : (banked[PLAYER_SKIN] > banked[ENEMY_SKIN] ? PLAYER_SKIN : ENEMY_SKIN);
-  const isTie = banked[PLAYER_SKIN] === banked[ENEMY_SKIN];
+  const winner: SkinId = activeSkins.reduce((best, id) =>
+    banked[id] > banked[best] ? id : best, activeSkins[0]);
+  const topScore = banked[winner];
+  const isTie = activeSkins.filter((id) => banked[id] === topScore).length > 1;
 
   return (
     <>
@@ -1018,19 +1052,17 @@ export function IsoGrid() {
         className="fixed left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: playerSkin.uiColor }} />
-          <span style={{ color: playerSkin.uiColor }}>{playerSkin.name}:</span>
-          <span className="tabular-nums">{banked[PLAYER_SKIN]}</span>
-          <span className="text-white/60 tabular-nums text-xs">(+{scores[PLAYER_SKIN]})</span>
-        </span>
-        <span className="text-white/50">vs</span>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: enemySkin.uiColor }} />
-          <span style={{ color: enemySkin.uiColor }}>{enemySkin.name}:</span>
-          <span className="tabular-nums">{banked[ENEMY_SKIN]}</span>
-          <span className="text-white/60 tabular-nums text-xs">(+{scores[ENEMY_SKIN]})</span>
-        </span>
+        {activeSkins.map((id, i) => {
+          const sk = SKINS[id];
+          return (
+            <span key={id} className="flex items-center gap-1.5">
+              {i > 0 && <span className="text-white/40">·</span>}
+              <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: sk.uiColor }} />
+              <span className="tabular-nums" style={{ color: sk.uiColor }}>{banked[id]}</span>
+              <span className="text-white/60 tabular-nums text-xs">+{scores[id]}</span>
+            </span>
+          );
+        })}
       </div>
 
       {/* Timer */}
@@ -1065,7 +1097,7 @@ export function IsoGrid() {
               )}
             </div>
             <div className="mt-5 space-y-2 text-left">
-              {[PLAYER_SKIN, ENEMY_SKIN].map((id) => (
+              {activeSkins.map((id) => (
                 <div key={id} className="flex items-center justify-between gap-6 rounded-lg bg-white/5 px-3 py-2">
                   <span className="flex items-center gap-2">
                     <span className="inline-block h-3 w-3 rounded-full" style={{ background: SKINS[id].uiColor }} />
@@ -1086,28 +1118,29 @@ export function IsoGrid() {
         </div>
       )}
 
-      {/* Pause / Settings gear (top-right) */}
+      {/* Settings gear (top-right) */}
       <button
         type="button"
         onClick={() => {
-          if (!started) return;
-          setPaused((p) => !p);
+          if (started && !gameOver) setPaused(true);
+          setSettingsOpen(true);
         }}
-        disabled={!started || gameOver}
+        disabled={gameOver}
         className="fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm shadow-lg active:scale-95 disabled:opacity-40"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
-        aria-label={paused ? "Resume" : "Pause"}
+        aria-label="Settings"
       >
         <Settings size={20} />
       </button>
 
       {/* Start overlay */}
-      {!started && !gameOver && (
+      {!started && !gameOver && !settingsOpen && (
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[260px]">
             <div className="text-xs font-bold uppercase tracking-widest text-white/50">Get Ready</div>
             <div className="mt-2 text-2xl font-extrabold text-white">Paint the Grid!</div>
             <p className="mt-3 text-sm text-white/70">Tap & drag to move. Bank tiles at the chest. 90s round.</p>
+            <p className="mt-1 text-xs text-white/50">Bots: {botCount}</p>
             <button
               type="button"
               onClick={() => setStarted(true)}
@@ -1115,22 +1148,61 @@ export function IsoGrid() {
             >
               <Play size={16} fill="currentColor" /> Start Round
             </button>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white active:scale-95"
+            >
+              <Settings size={14} /> Settings
+            </button>
           </div>
         </div>
       )}
 
-      {/* Pause overlay */}
-      {paused && started && !gameOver && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[240px]">
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paused</div>
-            <div className="mt-2 text-2xl font-extrabold text-white">Take a breath</div>
+      {/* Settings / Pause overlay */}
+      {settingsOpen && !gameOver && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="rounded-2xl bg-zinc-900/95 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]">
+            <div className="text-xs font-bold uppercase tracking-widest text-white/50">
+              {started ? "Paused" : "Settings"}
+            </div>
+            <div className="mt-1 text-2xl font-extrabold text-white">Game Setup</div>
+
+            <div className="mt-5 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-bold text-white/80">Bots</span>
+                <span className="font-mono text-lg font-extrabold text-white tabular-nums">{botCount}</span>
+              </div>
+              <div className="mt-2 grid grid-cols-4 gap-2">
+                {[1, 2, 3, 4].map((n) => {
+                  const disabled = started; // can only change before round starts
+                  const active = botCount === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setBotCount(n)}
+                      className={`rounded-lg px-3 py-2 text-sm font-bold transition active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed ${
+                        active ? "bg-emerald-400 text-black" : "bg-white/10 text-white"
+                      }`}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+              {started && (
+                <p className="mt-2 text-[11px] text-white/50">Bot count locks once the round starts.</p>
+              )}
+            </div>
+
             <button
               type="button"
-              onClick={() => setPaused(false)}
+              onClick={() => { setSettingsOpen(false); setPaused(false); }}
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
             >
-              <Play size={16} fill="currentColor" /> Resume
+              <Play size={16} fill="currentColor" /> {started ? "Resume" : "Close"}
             </button>
           </div>
         </div>
