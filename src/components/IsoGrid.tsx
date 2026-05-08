@@ -64,6 +64,7 @@ export function IsoGrid() {
   const [stats, setStats] = useState({ fps: 0, frameMs: 0, maxMs: 0 });
   const statsAccum = useRef({ frames: 0, sumMs: 0, maxMs: 0, lastFlush: 0 });
   const [scores, setScores] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
+  const [banked, setBanked] = useState<Record<SkinId, number>>({ plush: 0, girl: 0, alien: 0, knight: 0 });
 
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
   useEffect(() => { debugRef.current = debug; }, [debug]);
@@ -229,15 +230,6 @@ export function IsoGrid() {
         minimap.y = 20;
       };
 
-      const recomputeScores = () => {
-        const next: Record<SkinId, number> = { plush: 0, girl: 0, alien: 0, knight: 0 };
-        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
-          const o = owners[x][y];
-          if (o) next[o]++;
-        }
-        setScores(next);
-      };
-
       const updateMinimap = () => {
         for (let x = 0; x < 8; x++) {
           for (let y = 0; y < 8; y++) {
@@ -312,10 +304,78 @@ export function IsoGrid() {
         renderCharacterAt(c, c.gx, c.gy);
       };
 
+      // ---------- Chest ----------
+      const chestGfx = new Graphics();
+      // Body
+      chestGfx.roundRect(-22, -34, 44, 32, 4).fill(0xb8860b).stroke({ width: 2, color: 0x4a2c0a });
+      // Lid
+      chestGfx.roundRect(-22, -44, 44, 14, 4).fill(0xffd700).stroke({ width: 2, color: 0x4a2c0a });
+      // Lock
+      chestGfx.rect(-4, -28, 8, 8).fill(0x4a2c0a);
+      // Highlight
+      chestGfx.rect(-18, -41, 36, 3).fill({ color: 0xffffff, alpha: 0.4 });
+      world.addChild(chestGfx);
+      const chest = { gx: 0, gy: 0, gfx: chestGfx };
+
+      const spawnChest = () => {
+        // Pick a random tile that is not currently occupied by either character
+        let gx = 0, gy = 0;
+        for (let i = 0; i < 50; i++) {
+          gx = Math.floor(Math.random() * 8);
+          gy = Math.floor(Math.random() * 8);
+          if ((gx !== player.gx || gy !== player.gy) && (gx !== enemy.gx || gy !== enemy.gy)) break;
+        }
+        chest.gx = gx;
+        chest.gy = gy;
+        const p = isoPos(gx, gy);
+        chestGfx.x = p.x;
+        chestGfx.y = p.y + 8;
+        chestGfx.zIndex = gx + gy + 0.05;
+      };
+
+      const recomputeScores = () => {
+        const next: Record<SkinId, number> = { plush: 0, girl: 0, alien: 0, knight: 0 };
+        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
+          const o = owners[x][y];
+          if (o) next[o]++;
+        }
+        setScores(next);
+        return next;
+      };
+
+      const countOwned = (skinId: SkinId) => {
+        let n = 0;
+        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) if (owners[x][y] === skinId) n++;
+        return n;
+      };
+
+      const clearOwnedBy = (skinId: SkinId) => {
+        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
+          if (owners[x][y] === skinId) {
+            owners[x][y] = null;
+            const t = tiles[x][y];
+            t.texture = unpaintedTex;
+            t.tint = 0xffffff;
+          }
+        }
+      };
+
+      const tryCollectChest = (c: Character) => {
+        if (c.gx !== chest.gx || c.gy !== chest.gy) return false;
+        const gained = countOwned(c.skin.id);
+        if (gained > 0) {
+          setBanked((prev) => ({ ...prev, [c.skin.id]: prev[c.skin.id] + gained }));
+          clearOwnedBy(c.skin.id);
+        }
+        spawnChest();
+        return true;
+      };
+
       // Initial paint
       land(player);
       land(enemy);
       positionMinimap();
+      spawnChest();
       updateMinimap();
       recomputeScores();
 
@@ -390,6 +450,7 @@ export function IsoGrid() {
           if (linear >= 1) {
             c.anim = null;
             land(c);
+            tryCollectChest(c);
             landedAny = true;
           }
         }
@@ -408,7 +469,27 @@ export function IsoGrid() {
             else if (d === "LEFT") nx--; else nx++;
             return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
           });
-          if (valid.length) moveCharacter(enemy, valid[Math.floor(Math.random() * valid.length)]);
+          if (valid.length) {
+            let chosen: Direction;
+            const enemyOwned = countOwned(enemy.skin.id);
+            if (enemyOwned > 3) {
+              // Hunt the chest: pick the valid direction that minimizes Manhattan distance
+              chosen = valid.reduce((best, d) => {
+                let nx = enemy.gx, ny = enemy.gy;
+                if (d === "UP") ny--; else if (d === "DOWN") ny++;
+                else if (d === "LEFT") nx--; else nx++;
+                const dist = Math.abs(nx - chest.gx) + Math.abs(ny - chest.gy);
+                let bx = enemy.gx, by = enemy.gy;
+                if (best === "UP") by--; else if (best === "DOWN") by++;
+                else if (best === "LEFT") bx--; else bx++;
+                const bestDist = Math.abs(bx - chest.gx) + Math.abs(by - chest.gy);
+                return dist < bestDist ? d : best;
+              }, valid[0]);
+            } else {
+              chosen = valid[Math.floor(Math.random() * valid.length)];
+            }
+            moveCharacter(enemy, chosen);
+          }
         }
       });
 
@@ -548,14 +629,16 @@ export function IsoGrid() {
       >
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: playerSkin.uiColor }} />
-          <span style={{ color: playerSkin.uiColor }}>{playerSkin.name}</span>
-          <span className="tabular-nums">{scores[PLAYER_SKIN]}</span>
+          <span style={{ color: playerSkin.uiColor }}>{playerSkin.name}:</span>
+          <span className="tabular-nums">{banked[PLAYER_SKIN]} banked</span>
+          <span className="text-white/60 tabular-nums text-xs">(+{scores[PLAYER_SKIN]} painted)</span>
         </span>
         <span className="text-white/50">vs</span>
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30" style={{ background: enemySkin.uiColor }} />
-          <span style={{ color: enemySkin.uiColor }}>{enemySkin.name}</span>
-          <span className="tabular-nums">{scores[ENEMY_SKIN]}</span>
+          <span style={{ color: enemySkin.uiColor }}>{enemySkin.name}:</span>
+          <span className="tabular-nums">{banked[ENEMY_SKIN]} banked</span>
+          <span className="text-white/60 tabular-nums text-xs">(+{scores[ENEMY_SKIN]} painted)</span>
         </span>
       </div>
 
