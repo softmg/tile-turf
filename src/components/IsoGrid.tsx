@@ -223,6 +223,28 @@ export function IsoGrid() {
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
 
+        // Debug stats sampling (flush ~5x per second)
+        if (debugRef.current) {
+          const s = statsAccum.current;
+          s.frames += 1;
+          s.sumMs += dtMs;
+          if (dtMs > s.maxMs) s.maxMs = dtMs;
+          const now = performance.now();
+          if (s.lastFlush === 0) s.lastFlush = now;
+          if (now - s.lastFlush >= 200) {
+            const avg = s.sumMs / Math.max(1, s.frames);
+            setStats({
+              fps: Math.round(1000 / Math.max(0.001, avg)),
+              frameMs: +avg.toFixed(2),
+              maxMs: +s.maxMs.toFixed(2),
+            });
+            s.frames = 0;
+            s.sumMs = 0;
+            s.maxMs = 0;
+            s.lastFlush = now;
+          }
+        }
+
         // Smooth zoom toward target
         const zSmooth = 1 - Math.exp(-dtMs / 100);
         const curScale = world.scale.x;
