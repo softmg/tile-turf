@@ -1,4 +1,4 @@
-name: crash-cubes-dev
+name: tile-turf-dev
 description: |
   Use when working on Hop and Fill project tasks, especially Yandex Games
   release work, Pixi gameplay changes, React UI flows, progression/saves,
@@ -62,12 +62,12 @@ nodes:
     timeout: 30000
 
   - id: plan
-    command: crash-cubes-plan-task
+    command: tile-turf-plan-task
     depends_on: [repo-snapshot]
     idle_timeout: 600000
 
   - id: implement
-    command: crash-cubes-implement-task
+    command: tile-turf-implement-task
     depends_on: [plan]
     idle_timeout: 900000
 
@@ -165,7 +165,7 @@ nodes:
     timeout: 900000
 
   - id: review
-    command: crash-cubes-review-task
+    command: tile-turf-review-task
     depends_on: [final-validation]
     when: "$final-validation.output.ok == 'true'"
     context: fresh

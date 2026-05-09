@@ -191,7 +191,7 @@ function discoverRunRoots() {
       continue;
     }
 
-    const runRoot = path.join(root, workspace.name, "crash-cubes", "artifacts", "runs");
+    const runRoot = path.join(root, workspace.name, "tile-turf", "artifacts", "runs");
     if (fs.existsSync(runRoot)) {
       results.push(runRoot);
     }

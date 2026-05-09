@@ -193,7 +193,7 @@ function main() {
   const options = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
   const stateFile = options.state;
-  const childWorkflow = options.workflow ?? "crash-cubes-dev";
+  const childWorkflow = options.workflow ?? "tile-turf-dev";
   const artifactsDir = options.artifactsDir;
   const maxHours = Number(options.maxHours ?? "8");
   const pollSeconds = Number(options.pollSeconds ?? "60");
