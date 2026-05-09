@@ -1,6 +1,6 @@
 name: tile-turf-release-interactive
 description: |
-  Interactive Hop & Fill release-material workflow for Yandex Games.
+  Interactive Tile Turf release-material workflow for Yandex Games.
   Use when the user needs approval-driven work on gameplay screenshots,
   promotional media shot lists, or asset provenance/licensing notes.
   The workflow pauses for user feedback before writing final release docs.
@@ -19,7 +19,7 @@ nodes:
       set -euo pipefail
       mkdir -p "$ARTIFACTS_DIR"
       {
-        echo "# Hop & Fill Release Snapshot"
+        echo "# Tile Turf Release Snapshot"
         echo
         echo "## User request"
         printf '%s\n' "$ARGUMENTS"
@@ -39,7 +39,7 @@ nodes:
   - id: prepare
     depends_on: [repo-snapshot]
     prompt: |
-      Prepare the requested interactive Hop & Fill Yandex Games release task.
+      Prepare the requested interactive Tile Turf Yandex Games release task.
 
       Read:
       - $ARTIFACTS_DIR/repo-snapshot.md
@@ -78,7 +78,7 @@ nodes:
   - id: finalize
     depends_on: [user-approval]
     prompt: |
-      Finalize the interactive Hop & Fill Yandex release artifact.
+      Finalize the interactive Tile Turf Yandex release artifact.
 
       Read:
       - $ARTIFACTS_DIR/release-interactive-draft.md
