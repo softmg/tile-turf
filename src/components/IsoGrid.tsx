@@ -631,8 +631,11 @@ function IsoRound({ level, roundIndex, matchWins, history, onRoundEnd }: IsoRoun
       const isWarningAt = (gx: number, gy: number) =>
         bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
 
-      const BOMB_TARGET_H = 90;
-      const BOOM_TARGET_H = 140;
+      // All bomb sprites are normalized to 460x520 with the bomb body centered
+      // at (230, 280), so this anchor keeps all frames visually aligned.
+      const BOMB_TARGET_H = 170;
+      const BOOM_TARGET_H = 220;
+      const BOMB_ANCHOR_Y = 280 / 520;
 
       const removeBomb = (bomb: Bomb) => {
         if (bomb.warning.parent) world.removeChild(bomb.warning);
@@ -654,7 +657,7 @@ function IsoRound({ level, roundIndex, matchWins, history, onRoundEnd }: IsoRoun
 
         const p = isoPos(bomb.gx, bomb.gy);
         const boom = new Sprite(boomTex);
-        boom.anchor.set(0.5, 0.5);
+        boom.anchor.set(0.5, BOMB_ANCHOR_Y);
         boom.scale.set(hazardSpriteScale(boomTex, BOOM_TARGET_H));
         boom.x = p.x;
         boom.y = p.y;
@@ -678,7 +681,7 @@ function IsoRound({ level, roundIndex, matchWins, history, onRoundEnd }: IsoRoun
         const p = isoPos(gx, gy);
 
         const warning = new Sprite(bombTex1);
-        warning.anchor.set(0.5, 0.5);
+        warning.anchor.set(0.5, BOMB_ANCHOR_Y);
         warning.scale.set(hazardSpriteScale(bombTex1, BOMB_TARGET_H));
         warning.x = p.x;
         warning.y = p.y;
