@@ -1,99 +1,75 @@
 import { useEffect, useRef, useState } from "react";
 import { Settings, Play } from "lucide-react";
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Texture, FederatedPointerEvent } from "pixi.js";
-import backgroundUrl from "@/assets/background.png";
-import playerUrl from "@/assets/player.png";
-import tileUrl from "@/assets/tile.png";
-import tilePaintedUrl from "@/assets/tile-painted.png";
-import chestUrl from "@/assets/chest.png";
-import bomb1Url from "@/assets/bomb/bomb1.png";
-import bomb2Url from "@/assets/bomb/bomb2.png";
-import bomb3Url from "@/assets/bomb/bomb3.png";
-import bomb4Url from "@/assets/bomb/bomb4.png";
-import bootsUrl from "@/assets/boots.png";
+import chestUrl from "@/assets/chest.webp";
+import bomb1Url from "@/assets/bomb/bomb1.webp";
+import bomb2Url from "@/assets/bomb/bomb2.webp";
+import bomb3Url from "@/assets/bomb/bomb3.webp";
+import bomb4Url from "@/assets/bomb/bomb4.webp";
+import bootsUrl from "@/assets/boots.webp";
+import {
+  BACKGROUND_URL,
+  BASE_JUMP_DURATION,
+  BOARD_SIZE,
+  BOOST_DURATION,
+  BOOST_JUMP_DURATION,
+  BOT_SKINS,
+  DIRECTIONS,
+  ENEMY_SPAWN_POSITIONS,
+  MAX_LEVEL,
+  PAINTED_TILE_URL,
+  PLAYER_SKIN,
+  PLAYER_URL,
+  SKINS,
+  SKIN_IDS,
+  STUN_DURATION,
+  TILE_SIZE,
+  UNPAINTED_MINIMAP_COLOR,
+  UNPAINTED_TILE_URL,
+  WINS_TO_PASS,
+  botsForLevel,
+  enemyIntervalForLevel,
+  roundDurationForLevel,
+  type Direction,
+  type RoundHistoryEntry,
+  type SkinConfig,
+  type SkinId,
+  zeroScores,
+} from "@/game/game-constants";
+import { isoPos, isInsideBoard, manhattanDistance, nextGridPosition } from "@/game/grid-math";
+import { countOwned as countOwnedTiles, scoreOwners, scoresChanged, type OwnerGrid } from "@/game/scoring";
+import { createSeededRng, seedFromParts } from "@/game/rng";
+import { markTutorialSeen, readUnlockedLevel, shouldShowTutorial, writeUnlockedLevel } from "@/game/level-state";
+import type { Character } from "@/game/entities";
+import { hazardSpriteScale, isoRotation, type ArrowState, type Bomb } from "@/game/hazards";
 
-type Direction = "UP" | "DOWN" | "LEFT" | "RIGHT";
+type InertProps = { "aria-hidden"?: true; inert?: boolean };
 
-const TILE_W = 110;
-const TILE_H = 70;
-const TILE_SIZE = 120;
+const inertBackgroundProps = (isInert: boolean): InertProps =>
+  isInert ? { "aria-hidden": true, inert: true } : {};
 
-// ---------- Skin System ----------
-export type SkinId = "plush" | "girl" | "alien" | "knight" | "robot";
-
-export interface SkinConfig {
-  id: SkinId;
-  name: string;
-  playerSprite: string;
-  tileSprite: string;
-  minimapColor: number;
-  uiColor: string;
-  spriteTint: number;
-}
-
-export const SKINS: Record<SkinId, SkinConfig> = {
-  plush: {
-    id: "plush", name: "Plush",
-    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
-    minimapColor: 0xe89a6a, uiColor: "#e89a6a", spriteTint: 0xffffff,
-  },
-  girl: {
-    id: "girl", name: "Girl",
-    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
-    minimapColor: 0xff7fb3, uiColor: "#ff7fb3", spriteTint: 0xffb6d4,
-  },
-  alien: {
-    id: "alien", name: "Alien",
-    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
-    minimapColor: 0x6ed36e, uiColor: "#6ed36e", spriteTint: 0xb8f2b8,
-  },
-  knight: {
-    id: "knight", name: "Knight",
-    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
-    minimapColor: 0x9aa6b8, uiColor: "#9aa6b8", spriteTint: 0xd0d8e4,
-  },
-  robot: {
-    id: "robot", name: "Robot",
-    playerSprite: playerUrl, tileSprite: tilePaintedUrl,
-    minimapColor: 0x9b87f5, uiColor: "#9b87f5", spriteTint: 0xc4b4ff,
-  },
-};
-
-const UNPAINTED_TILE_URL = tileUrl;
-const UNPAINTED_MINIMAP_COLOR = 0xf5d0b0;
-
-const PLAYER_SKIN: SkinId = "plush";
-const BOT_SKINS: SkinId[] = ["girl", "alien", "knight", "robot"];
-const SKIN_IDS: SkinId[] = ["plush", "girl", "alien", "knight", "robot"];
-const ZERO_SCORES = (): Record<SkinId, number> => ({ plush: 0, girl: 0, alien: 0, knight: 0, robot: 0 });
-
-// Level scaling
-export const MAX_LEVEL = 10;
-export const WINS_TO_PASS = 3;
-export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : lv <= 7 ? 3 : 4);
-export const enemyIntervalForLevel = (lv: number) =>
-  Math.max(220, 750 - (lv - 1) * 60); // bots step faster on higher levels
-
-export interface RoundHistoryEntry {
-  level: number;
-  round: number;
-  winner: SkinId | null;
-  scores: Record<SkinId, number>;
+declare global {
+  interface Window {
+    render_game_to_text?: () => string;
+    advanceTime?: (ms: number) => string;
+  }
 }
 
 interface IsoRoundProps {
   level: number;
+  roundIndex: number;
   matchWins: Record<SkinId, number>;
   history: RoundHistoryEntry[];
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
 }
 
-function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
+function IsoRound({ level, roundIndex, matchWins, history, onRoundEnd }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
   const [zoomOpen, setZoomOpen] = useState(false);
   const [debug, setDebug] = useState(false);
+  const canShowDebug = import.meta.env.DEV;
   const debugRef = useRef(false);
   const [stats, setStats] = useState({
     fps: 0, frameMs: 0, maxMs: 0,
@@ -105,11 +81,10 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
     paints: 0, miniCells: 0, miniPasses: 0,
     animSum: 0, animSamples: 0, bombsMax: 0, enemiesActive: 0,
   });
-  const [scores, setScores] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
-  const [banked, setBanked] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
-  const ROUND_DURATION =
-    level <= 2 ? 30 : level <= 4 ? 45 : level <= 6 ? 60 : level <= 8 ? 75 : 90;
-  const [timeLeft, setTimeLeft] = useState(ROUND_DURATION);
+  const [scores, setScores] = useState<Record<SkinId, number>>(() => zeroScores());
+  const [banked, setBanked] = useState<Record<SkinId, number>>(() => zeroScores());
+  const roundDuration = roundDurationForLevel(level);
+  const [timeLeft, setTimeLeft] = useState(roundDuration);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
   const [started, setStarted] = useState(true);
@@ -125,9 +100,6 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
   useEffect(() => { botCountRef.current = botCount; levelRef.current = level; }, [botCount, level]);
   const activeBotSkins: SkinId[] = BOT_SKINS.slice(0, botCount);
   const activeSkins: SkinId[] = [PLAYER_SKIN, ...activeBotSkins];
-  const timeoutsRef = useRef<Set<number>>(new Set());
-  const intervalsRef = useRef<Set<number>>(new Set());
-
   useEffect(() => { startedRef.current = started; }, [started]);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => {
@@ -186,29 +158,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
   useEffect(() => { debugRef.current = debug; }, [debug]);
   useEffect(() => {
     gameOverRef.current = gameOver;
-    if (gameOver) {
-      for (const id of timeoutsRef.current) window.clearTimeout(id);
-      timeoutsRef.current.clear();
-      for (const id of intervalsRef.current) window.clearInterval(id);
-      intervalsRef.current.clear();
-    }
   }, [gameOver]);
-
-  // Round countdown timer
-  useEffect(() => {
-    if (gameOver || !started || paused) return;
-    const id = window.setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          window.clearInterval(id);
-          setGameOver(true);
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [gameOver, started, paused]);
 
   useEffect(() => {
     const host = containerRef.current;
@@ -218,8 +168,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
     let destroyed = false;
     let keyHandler: ((e: KeyboardEvent) => void) | null = null;
     let resizeHandler: (() => void) | null = null;
-    let scheduledTimeouts: Set<number> | null = null;
-    let scheduledIntervals: Set<number> | null = null;
+    let removeWindowErrorHandlers: (() => void) | null = null;
 
     (async () => {
       try {
@@ -249,8 +198,15 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       }
       host.appendChild(app.canvas);
       console.log("[IsoGrid] canvas appended", app.canvas.width, app.canvas.height);
-      window.addEventListener("error", (e) => console.error("[IsoGrid] window error", e.error || e.message));
-      window.addEventListener("unhandledrejection", (e) => console.error("[IsoGrid] unhandled rejection", e.reason));
+      const onWindowError = (e: ErrorEvent) => console.error("[IsoGrid] window error", e.error || e.message);
+      const onUnhandledRejection = (e: PromiseRejectionEvent) =>
+        console.error("[IsoGrid] unhandled rejection", e.reason);
+      window.addEventListener("error", onWindowError);
+      window.addEventListener("unhandledrejection", onUnhandledRejection);
+      removeWindowErrorHandlers = () => {
+        window.removeEventListener("error", onWindowError);
+        window.removeEventListener("unhandledrejection", onUnhandledRejection);
+      };
 
 
 
@@ -261,8 +217,8 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       const [unpaintedTex, paintedTex, playerTex, chestTex, bombTex1, bombTex2, bombTex3, boomTex, bootsTex] =
         await Promise.all([
           Assets.load<Texture>(UNPAINTED_TILE_URL),
-          Assets.load<Texture>(tilePaintedUrl),
-          Assets.load<Texture>(playerUrl),
+          Assets.load<Texture>(PAINTED_TILE_URL),
+          Assets.load<Texture>(PLAYER_URL),
           Assets.load<Texture>(chestUrl),
           Assets.load<Texture>(bomb1Url),
           Assets.load<Texture>(bomb2Url),
@@ -275,7 +231,6 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         if (t?.source) {
           t.source.scaleMode = "linear";
           t.source.autoGenerateMipmaps = true;
-          t.source.updateMipmaps?.();
         }
       }
       const skinTextures: Record<SkinId, { tile: Texture; player: Texture }> = {
@@ -294,18 +249,13 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       app.stage.addChild(world);
       app.stage.sortableChildren = true;
 
-      const isoPos = (x: number, y: number) => ({
-        x: (x - y) * (TILE_W / 2),
-        y: (x + y) * (TILE_H / 2),
-      });
-
       // Tile ownership: null = unpainted, else SkinId
-      const owners: (SkinId | null)[][] = [];
+      const owners: OwnerGrid = [];
       const tiles: Sprite[][] = [];
-      for (let x = 0; x < 8; x++) {
+      for (let x = 0; x < BOARD_SIZE; x++) {
         tiles[x] = [];
         owners[x] = [];
-        for (let y = 0; y < 8; y++) {
+        for (let y = 0; y < BOARD_SIZE; y++) {
           const tile = new Sprite(unpaintedTex);
           tile.anchor.set(0.5, 0.5);
           tile.width = TILE_SIZE;
@@ -323,18 +273,6 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
 
       // ---------- Characters ----------
-      interface Character {
-        skin: SkinConfig;
-        sprite: Sprite;
-        shadow: Graphics;
-        gx: number;
-        gy: number;
-        anim: { fromX: number; fromY: number; toX: number; toY: number; elapsed: number; duration: number; arrowDir: number | null } | null;
-        stunnedUntil: number;
-        boostUntil: number;
-        aura: Graphics;
-      }
-
       const makeCharacter = (skinId: SkinId, gx: number, gy: number): Character => {
         const skin = SKINS[skinId];
         const shadow = new Graphics();
@@ -357,7 +295,6 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       const player = makeCharacter(PLAYER_SKIN, 0, 0);
       // Pre-create all 4 possible bot characters; activate first N based on botCount.
-      const ENEMY_SPAWN_POSITIONS: Array<[number, number]> = [[7, 7], [7, 0], [0, 7], [4, 4]];
       const allEnemies: Character[] = BOT_SKINS.map((sid, i) =>
         makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1])
       );
@@ -368,17 +305,26 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         e.shadow.visible = false;
       }
 
-      const BASE_JUMP_DURATION = 380;
-      const BOOST_JUMP_DURATION = 150;
-      const STUN_DURATION = 2000;
-      const BOOST_DURATION = 12000;
+      let gameTimeMs = 0;
+      const gameNow = () => gameTimeMs;
+      let lastCountdownValue = roundDuration;
+      const updateCountdown = () => {
+        const next = Math.max(0, roundDuration - Math.floor(gameNow() / 1000));
+        if (next === lastCountdownValue) return;
+        lastCountdownValue = next;
+        setTimeLeft(next);
+        if (next <= 0) {
+          gameOverRef.current = true;
+          setGameOver(true);
+        }
+      };
       const jumpDurationFor = (c: Character) =>
-        performance.now() < c.boostUntil ? BOOST_JUMP_DURATION : BASE_JUMP_DURATION;
+        gameNow() < c.boostUntil ? BOOST_JUMP_DURATION : BASE_JUMP_DURATION;
 
 
       // ---------- Minimap ----------
       const MINI_CELL = 10;
-      const MINI_SIZE = 8 * MINI_CELL;
+      const MINI_SIZE = BOARD_SIZE * MINI_CELL;
       const minimap = new Container();
       minimap.zIndex = 999;
       app.stage.addChild(minimap);
@@ -388,9 +334,9 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       minimap.addChild(miniBg);
 
       const miniTiles: Graphics[][] = [];
-      for (let x = 0; x < 8; x++) {
+      for (let x = 0; x < BOARD_SIZE; x++) {
         miniTiles[x] = [];
-        for (let y = 0; y < 8; y++) {
+        for (let y = 0; y < BOARD_SIZE; y++) {
           const m = new Graphics();
           m.rect(x * MINI_CELL, y * MINI_CELL, MINI_CELL - 1, MINI_CELL - 1).fill(UNPAINTED_MINIMAP_COLOR);
           minimap.addChild(m);
@@ -435,9 +381,9 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
       const miniTileColor: number[][] = [];
-      for (let x = 0; x < 8; x++) {
+      for (let x = 0; x < BOARD_SIZE; x++) {
         miniTileColor[x] = [];
-        for (let y = 0; y < 8; y++) miniTileColor[x][y] = UNPAINTED_MINIMAP_COLOR;
+        for (let y = 0; y < BOARD_SIZE; y++) miniTileColor[x][y] = UNPAINTED_MINIMAP_COLOR;
       }
       let minimapTilesDirty = true;
 
@@ -445,8 +391,8 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         if (!minimapTilesDirty) return;
         minimapTilesDirty = false;
         statsAccum.current.miniPasses += 1;
-        for (let x = 0; x < 8; x++) {
-          for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          for (let y = 0; y < BOARD_SIZE; y++) {
             const o = owners[x][y];
             const color = o ? SKINS[o].minimapColor : UNPAINTED_MINIMAP_COLOR;
             if (miniTileColor[x][y] === color) continue;
@@ -582,6 +528,46 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         renderCharacterAt(c, c.gx, c.gy);
       };
 
+      const rng = createSeededRng(seedFromParts("tile-turf", level, roundIndex));
+      const randomCell = () => ({ gx: rng.int(BOARD_SIZE), gy: rng.int(BOARD_SIZE) });
+      const randomUnoccupiedCell = () => {
+        let cell = randomCell();
+        for (let i = 0; i < 50; i++) {
+          cell = randomCell();
+          const occupiedByPlayer = player.gx === cell.gx && player.gy === cell.gy;
+          const occupiedByEnemy = enemies.some((c) => c.gx === cell.gx && c.gy === cell.gy);
+          if (!occupiedByPlayer && !occupiedByEnemy) break;
+        }
+        return cell;
+      };
+
+      interface GameTimer {
+        due: number;
+        fn: () => void;
+        cancelled: boolean;
+      }
+      const gameTimers: GameTimer[] = [];
+      const scheduleGame = (fn: () => void, ms: number) => {
+        const timer = { due: gameNow() + ms, fn, cancelled: false };
+        gameTimers.push(timer);
+        return timer;
+      };
+      const flushGameTimers = () => {
+        for (let i = 0; i < gameTimers.length;) {
+          const timer = gameTimers[i];
+          if (timer.cancelled) {
+            gameTimers.splice(i, 1);
+            continue;
+          }
+          if (timer.due > gameNow()) {
+            i++;
+            continue;
+          }
+          gameTimers.splice(i, 1);
+          timer.fn();
+        }
+      };
+
       // ---------- Chest ----------
       const chestSprite = new Sprite(chestTex);
       chestSprite.anchor.set(0.5, 1);
@@ -592,13 +578,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       const chest = { gx: 0, gy: 0, gfx: chestSprite };
 
       const spawnChest = () => {
-        let gx = 0, gy = 0;
-        for (let i = 0; i < 50; i++) {
-          gx = Math.floor(Math.random() * 8);
-          gy = Math.floor(Math.random() * 8);
-          const occupied = [player, ...enemies].some((c) => c.gx === gx && c.gy === gy);
-          if (!occupied) break;
-        }
+        const { gx, gy } = randomUnoccupiedCell();
         chest.gx = gx;
         chest.gy = gy;
         const p = isoPos(gx, gy);
@@ -607,33 +587,23 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         chestSprite.zIndex = gx + gy + 0.05;
       };
 
-
-      const lastScores: Record<SkinId, number> = ZERO_SCORES();
+      const lastScores: Record<SkinId, number> = zeroScores();
       let scoresDirty = false;
       let lastScoresFlush = 0;
       const recomputeScores = () => {
-        let changed = false;
-        const next: Record<SkinId, number> = ZERO_SCORES();
-        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
-          const o = owners[x][y];
-          if (o) next[o]++;
+        const next = scoreOwners(owners);
+        if (scoresChanged(lastScores, next)) {
+          for (const id of SKIN_IDS) lastScores[id] = next[id];
+          scoresDirty = true;
         }
-        for (const id of SKIN_IDS) {
-          if (next[id] !== lastScores[id]) { changed = true; lastScores[id] = next[id]; }
-        }
-        if (changed) scoresDirty = true;
         return next;
       };
 
-      const countOwned = (skinId: SkinId) => {
-        let n = 0;
-        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) if (owners[x][y] === skinId) n++;
-        return n;
-      };
+      const countOwned = (skinId: SkinId) => countOwnedTiles(owners, skinId);
 
       const clearOwnedBy = (skinId: SkinId) => {
         let any = false;
-        for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) {
+        for (let x = 0; x < BOARD_SIZE; x++) for (let y = 0; y < BOARD_SIZE; y++) {
           if (owners[x][y] === skinId) {
             owners[x][y] = null;
             const t = tiles[x][y];
@@ -657,140 +627,124 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       };
 
       // ---------- Hazards (Bombs) & Boots ----------
-      const pendingTimeouts = timeoutsRef.current;
-      const pendingIntervals = intervalsRef.current;
-      scheduledTimeouts = pendingTimeouts;
-      scheduledIntervals = pendingIntervals;
-      const setT = (fn: () => void, ms: number) => {
-        const id = window.setTimeout(() => {
-          pendingTimeouts.delete(id);
-          if (gameOverRef.current || destroyed) return;
-          fn();
-        }, ms);
-        pendingTimeouts.add(id);
-        return id;
-      };
-
-      interface Bomb {
-        gx: number; gy: number;
-        warning: Sprite;
-        boom: Sprite | null;
-        phase: "warning" | "explosion";
-      }
       const bombs: Bomb[] = [];
-
       const isWarningAt = (gx: number, gy: number) =>
         bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
 
       const BOMB_TARGET_H = 90;
       const BOOM_TARGET_H = 140;
-      const bombScale = (tex: Texture, target: number) => target / Math.max(tex.height, 1);
+
+      const removeBomb = (bomb: Bomb) => {
+        if (bomb.warning.parent) world.removeChild(bomb.warning);
+        bomb.warning.destroy();
+        if (bomb.boom) {
+          if (bomb.boom.parent) world.removeChild(bomb.boom);
+          bomb.boom.destroy();
+        }
+        const i = bombs.indexOf(bomb);
+        if (i >= 0) bombs.splice(i, 1);
+      };
+
+      const explodeBomb = (bomb: Bomb) => {
+        if (gameOverRef.current || destroyed || bomb.phase !== "warning") return;
+        if (bomb.warning.parent) world.removeChild(bomb.warning);
+        bomb.warning.destroy();
+        bomb.phase = "explosion";
+        bomb.explosionElapsed = 0;
+
+        const p = isoPos(bomb.gx, bomb.gy);
+        const boom = new Sprite(boomTex);
+        boom.anchor.set(0.5, 0.5);
+        boom.scale.set(hazardSpriteScale(boomTex, BOOM_TARGET_H));
+        boom.x = p.x;
+        boom.y = p.y;
+        boom.zIndex = bomb.gx + bomb.gy + 0.5;
+        world.addChild(boom);
+        bomb.boom = boom;
+
+        for (const c of [player, ...enemies]) {
+          if (c.gx === bomb.gx && c.gy === bomb.gy && !c.anim) {
+            c.stunnedUntil = gameNow() + STUN_DURATION;
+            clearOwnedBy(c.skin.id);
+            recomputeScores();
+            updateMinimap();
+          }
+        }
+      };
 
       const spawnBomb = () => {
-        if (gameOverRef.current) return;
-        if (pausedRef.current || !startedRef.current) { setT(spawnBomb, 800); return; }
-        const gx = Math.floor(Math.random() * 8);
-        const gy = Math.floor(Math.random() * 8);
+        if (gameOverRef.current || destroyed || !startedRef.current) return;
+        const { gx, gy } = randomCell();
         const p = isoPos(gx, gy);
 
         const warning = new Sprite(bombTex1);
         warning.anchor.set(0.5, 0.5);
-        warning.scale.set(bombScale(bombTex1, BOMB_TARGET_H));
+        warning.scale.set(hazardSpriteScale(bombTex1, BOMB_TARGET_H));
         warning.x = p.x;
         warning.y = p.y;
         warning.zIndex = gx + gy + 0.06;
         world.addChild(warning);
-        const bomb: Bomb = { gx, gy, warning, boom: null, phase: "warning" };
+        const bomb: Bomb = {
+          gx,
+          gy,
+          warning,
+          boom: null,
+          phase: "warning",
+          warningElapsed: 0,
+          explosionElapsed: 0,
+        };
         bombs.push(bomb);
 
-        // Animate: cycle frames + shake near the end
-        const startedAt = performance.now();
-        const tickId = window.setInterval(() => {
-          const elapsed = performance.now() - startedAt;
-          let tex = bombTex1;
-          if (elapsed > 1400) tex = bombTex3;
-          else if (elapsed > 600) tex = bombTex2;
-          if (warning.texture !== tex) {
-            warning.texture = tex;
-            warning.scale.set(bombScale(tex, BOMB_TARGET_H));
-          }
-          // Shake last 600ms
-          if (elapsed > 1400) {
-            const k = (elapsed - 1400) / 600;
-            const amp = 1 + k * 3;
-            warning.x = p.x + (Math.random() - 0.5) * amp * 2;
-          } else {
-            warning.x = p.x;
-          }
-        }, 100);
-        pendingIntervals.add(tickId);
-
-        setT(() => {
-          window.clearInterval(tickId);
-          pendingIntervals.delete(tickId);
-          world.removeChild(warning);
-          warning.destroy();
-          bomb.phase = "explosion";
-
-          // Explosion sprite
-          const boom = new Sprite(boomTex);
-          boom.anchor.set(0.5, 0.5);
-          boom.scale.set(bombScale(boomTex, BOOM_TARGET_H));
-          boom.x = p.x; boom.y = p.y;
-          boom.zIndex = gx + gy + 0.5;
-          world.addChild(boom);
-          bomb.boom = boom;
-
-          // Pop-in tween
-          const boomStart = performance.now();
-          const boomTickId = window.setInterval(() => {
-            const dt = performance.now() - boomStart;
-            const k = Math.min(1, dt / 220);
-            const s = bombScale(boomTex, BOOM_TARGET_H) * (0.4 + 0.6 * k);
-            boom.scale.set(s);
-            boom.alpha = Math.max(0, 1 - Math.max(0, dt - 280) / 220);
-          }, 50);
-          pendingIntervals.add(boomTickId);
-
-          // Impact: stun anyone on this tile (and not mid-air)
-          for (const c of [player, ...enemies]) {
-            if (c.gx === gx && c.gy === gy && !c.anim) {
-              c.stunnedUntil = performance.now() + STUN_DURATION;
-              clearOwnedBy(c.skin.id);
-              recomputeScores();
-              updateMinimap();
-            }
-          }
-
-          setT(() => {
-            window.clearInterval(boomTickId);
-            pendingIntervals.delete(boomTickId);
-            world.removeChild(boom);
-            boom.destroy();
-            const i = bombs.indexOf(bomb);
-            if (i >= 0) bombs.splice(i, 1);
-          }, 500);
-        }, 2000);
-
-        // Schedule next bomb
-        setT(spawnBomb, 5000 + Math.random() * 3000);
+        scheduleGame(() => explodeBomb(bomb), 2000);
+        scheduleGame(spawnBomb, rng.range(5000, 8000));
       };
 
-      // Boots
+      const updateBombs = (dtMs: number) => {
+        for (let i = bombs.length - 1; i >= 0; i--) {
+          const bomb = bombs[i];
+          if (bomb.phase === "warning") {
+            bomb.warningElapsed += dtMs;
+            const elapsed = bomb.warningElapsed;
+            let tex = bombTex1;
+            if (elapsed > 1400) tex = bombTex3;
+            else if (elapsed > 600) tex = bombTex2;
+            if (bomb.warning.texture !== tex) {
+              bomb.warning.texture = tex;
+              bomb.warning.scale.set(hazardSpriteScale(tex, BOMB_TARGET_H));
+            }
+            const p = isoPos(bomb.gx, bomb.gy);
+            if (elapsed > 1400) {
+              const k = (elapsed - 1400) / 600;
+              const amp = 1 + k * 3;
+              bomb.warning.x = p.x + Math.sin((elapsed + bomb.gx * 17 + bomb.gy * 31) / 28) * amp;
+            } else {
+              bomb.warning.x = p.x;
+            }
+            continue;
+          }
+
+          if (!bomb.boom) continue;
+          bomb.explosionElapsed += dtMs;
+          const k = Math.min(1, bomb.explosionElapsed / 220);
+          const s = hazardSpriteScale(boomTex, BOOM_TARGET_H) * (0.4 + 0.6 * k);
+          bomb.boom.scale.set(s);
+          bomb.boom.alpha = Math.max(0, 1 - Math.max(0, bomb.explosionElapsed - 280) / 220);
+          if (bomb.explosionElapsed >= 500) removeBomb(bomb);
+        }
+      };
+
       let boots: { gx: number; gy: number; gfx: Sprite } | null = null;
       const spawnBoots = () => {
-        if (gameOverRef.current) return;
-        if (pausedRef.current || !startedRef.current) { setT(spawnBoots, 800); return; }
-        if (boots) return;
-        const gx = Math.floor(Math.random() * 8);
-        const gy = Math.floor(Math.random() * 8);
+        if (gameOverRef.current || destroyed || !startedRef.current || boots) return;
+        const { gx, gy } = randomCell();
         const p = isoPos(gx, gy);
         const gfx = new Sprite(bootsTex);
         gfx.anchor.set(0.5, 0.5);
         const targetH = 70;
         const s = targetH / Math.max(bootsTex.height, 1);
         gfx.scale.set(s);
-        gfx.x = p.x; gfx.y = p.y;
+        gfx.x = p.x;
+        gfx.y = p.y;
         gfx.zIndex = gx + gy + 0.06;
         world.addChild(gfx);
         boots = { gx, gy, gfx };
@@ -802,77 +756,49 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         world.removeChild(boots.gfx);
         boots.gfx.destroy();
         boots = null;
-        c.boostUntil = performance.now() + BOOST_DURATION;
-        // Schedule next boots after 10-15s
-        setT(spawnBoots, 10000 + Math.random() * 5000);
+        c.boostUntil = gameNow() + BOOST_DURATION;
+        scheduleGame(spawnBoots, rng.range(10000, 15000));
       };
 
       // ---------- Rotating Arrow ----------
       // dir: 0=UP, 1=RIGHT, 2=DOWN, 3=LEFT
-      let arrow: {
-        gx: number; gy: number; dir: number;
-        gfx: Graphics; rotateId: number; despawnId: number;
-      } | null = null;
+      let arrow: ArrowState | null = null;
 
       const removeArrow = () => {
         if (!arrow) return;
-        window.clearInterval(arrow.rotateId);
-        intervalsRef.current.delete(arrow.rotateId);
-        window.clearTimeout(arrow.despawnId);
-        timeoutsRef.current.delete(arrow.despawnId);
         world.removeChild(arrow.gfx);
         arrow.gfx.destroy();
         arrow = null;
       };
 
       const spawnArrow = () => {
-        if (gameOverRef.current) return;
-        if (pausedRef.current || !startedRef.current) { setT(spawnArrow, 800); return; }
+        if (gameOverRef.current || destroyed || !startedRef.current) return;
         if (arrow) removeArrow();
-        const gx = Math.floor(Math.random() * 8);
-        const gy = Math.floor(Math.random() * 8);
+        const { gx, gy } = randomCell();
         const p = isoPos(gx, gy);
         const gfx = new Graphics();
-        // Arrow pointing UP (towards -y) so rotation 0 = UP
         gfx.poly([0, -22, 14, 0, 6, 0, 6, 22, -6, 22, -6, 0, -14, 0]).fill(0xffffff).stroke({ width: 2, color: 0x222222 });
         gfx.circle(0, 0, 26).stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
         gfx.x = p.x;
         gfx.y = p.y;
         gfx.zIndex = gx + gy + 0.1;
-        // Map dir → screen vector along iso grid axes
-        const dirVec = (d: number): [number, number] => {
-          // 0=UP(gy-1), 1=RIGHT(gx+1), 2=DOWN(gy+1), 3=LEFT(gx-1)
-          if (d === 0) return [-TILE_W / 2, -TILE_H / 2];
-          if (d === 1) return [ TILE_W / 2, -TILE_H / 2];
-          if (d === 2) return [ TILE_W / 2,  TILE_H / 2];
-          return [-TILE_W / 2,  TILE_H / 2];
-        };
-        const isoRotation = (d: number) => {
-          const [vx, vy] = dirVec(d);
-          // Arrow art points to (0,-1) at rotation 0
-          return Math.atan2(vx, -vy);
-        };
         gfx.rotation = isoRotation(0);
         world.addChild(gfx);
 
-        const rotateId = window.setInterval(() => {
-          if (!arrow) return;
+        arrow = { gx, gy, dir: 0, gfx, rotateElapsed: 0, lifeElapsed: 0 };
+        scheduleGame(spawnArrow, 20000);
+      };
+
+      const updateArrow = (dtMs: number) => {
+        if (!arrow) return;
+        arrow.rotateElapsed += dtMs;
+        arrow.lifeElapsed += dtMs;
+        while (arrow && arrow.rotateElapsed >= 2000) {
+          arrow.rotateElapsed -= 2000;
           arrow.dir = (arrow.dir + 1) % 4;
           arrow.gfx.rotation = isoRotation(arrow.dir);
-        }, 2000);
-        intervalsRef.current.add(rotateId);
-
-        const despawnId = window.setTimeout(() => {
-          timeoutsRef.current.delete(despawnId);
-          if (gameOverRef.current || destroyed) return;
-          removeArrow();
-        }, 15000);
-        timeoutsRef.current.add(despawnId);
-
-        arrow = { gx, gy, dir: 0, gfx, rotateId, despawnId };
-
-        // Schedule next arrow
-        setT(spawnArrow, 20000);
+        }
+        if (arrow && arrow.lifeElapsed >= 15000) removeArrow();
       };
 
       const tryTriggerArrow = (c: Character, snapshotDir: number | null) => {
@@ -881,14 +807,13 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         const dir = snapshotDir ?? arrow.dir;
         const dx = dir === 1 ? 1 : dir === 3 ? -1 : 0;
         const dy = dir === 0 ? -1 : dir === 2 ? 1 : 0;
-        // Paint the arrow tile itself
         paintAt(c.gx, c.gy, c.skin);
-        // Paint the full line in the chosen direction to the edge of the field
         let x = c.gx + dx;
         let y = c.gy + dy;
-        while (x >= 0 && x < 8 && y >= 0 && y < 8) {
+        while (isInsideBoard(x, y)) {
           paintAt(x, y, c.skin);
-          x += dx; y += dy;
+          x += dx;
+          y += dy;
         }
         removeArrow();
       };
@@ -901,7 +826,6 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       // Defer game-loop spawns + bot activation until user presses Start
       kickoffRef.current = () => {
-        // Activate bots based on current setting
         const n = Math.min(botCountRef.current, allEnemies.length);
         enemies.length = 0;
         miniEnemies.length = 0;
@@ -918,9 +842,9 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         }
         updateMinimap();
         spawnChest();
-        setT(spawnBomb, 5000 + Math.random() * 3000);
-        setT(spawnBoots, 8000 + Math.random() * 4000);
-        setT(spawnArrow, 15000);
+        scheduleGame(spawnBomb, rng.range(5000, 8000));
+        scheduleGame(spawnBoots, rng.range(8000, 12000));
+        scheduleGame(spawnArrow, 15000);
       };
       if (startedRef.current) kickoffRef.current();
 
@@ -929,30 +853,64 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       const moveCharacter = (c: Character, direction: Direction) => {
         if (gameOverRef.current || !startedRef.current || pausedRef.current) return;
         if (c.anim) return;
-        if (performance.now() < c.stunnedUntil) return;
-        let nx = c.gx;
-        let ny = c.gy;
-        if (direction === "UP") ny -= 1;
-        else if (direction === "DOWN") ny += 1;
-        else if (direction === "LEFT") nx -= 1;
-        else if (direction === "RIGHT") nx += 1;
-        if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return;
+        if (gameNow() < c.stunnedUntil) return;
+        const next = nextGridPosition(c.gx, c.gy, direction);
+        if (!isInsideBoard(next.gx, next.gy)) return;
         const fromX = c.gx;
         const fromY = c.gy;
-        c.gx = nx;
-        c.gy = ny;
+        c.gx = next.gx;
+        c.gy = next.gy;
         updateMinimap();
-        // Snapshot arrow direction at jump start so the painted line matches
-        // the visible arrow at the moment the player committed to the tile,
-        // not whatever the rotation happens to be when they land.
-        const arrowDir = (arrow && arrow.gx === nx && arrow.gy === ny) ? arrow.dir : null;
-        c.anim = { fromX, fromY, toX: nx, toY: ny, elapsed: 0, duration: jumpDurationFor(c), arrowDir };
+        const arrowDir = (arrow && arrow.gx === next.gx && arrow.gy === next.gy) ? arrow.dir : null;
+        c.anim = { fromX, fromY, toX: next.gx, toY: next.gy, elapsed: 0, duration: jumpDurationFor(c), arrowDir };
       };
 
       const movePlayer = (d: Direction) => moveCharacter(player, d);
 
+      const renderGameToText = () => {
+        const rows: string[] = [];
+        for (let y = 0; y < BOARD_SIZE; y++) {
+          let row = "";
+          for (let x = 0; x < BOARD_SIZE; x++) {
+            let mark = owners[x][y]?.slice(0, 1).toUpperCase() ?? ".";
+            if (chest.gx === x && chest.gy === y) mark = "C";
+            if (arrow && arrow.gx === x && arrow.gy === y) mark = "A";
+            if (bombs.some((b) => b.gx === x && b.gy === y)) mark = "B";
+            const enemyIndex = enemies.findIndex((en) => en.gx === x && en.gy === y);
+            if (enemyIndex >= 0) mark = String(enemyIndex + 1);
+            if (player.gx === x && player.gy === y) mark = "P";
+            row += mark;
+          }
+          rows.push(row);
+        }
+        return [
+          `level=${levelRef.current}`,
+          `time=${Math.round(gameNow())}`,
+          `paused=${pausedRef.current}`,
+          ...rows,
+        ].join("\n");
+      };
+
+      const advanceTime = (ms: number) => {
+        if (destroyed || gameOverRef.current || pausedRef.current || !startedRef.current) return renderGameToText();
+        let remaining = Math.max(0, Math.min(ms, 60000));
+        while (remaining > 0) {
+          const dt = Math.min(50, remaining);
+          gameTimeMs += dt;
+          updateCountdown();
+          flushGameTimers();
+          updateBombs(dt);
+          updateArrow(dt);
+          remaining -= dt;
+        }
+        updateMinimap();
+        return renderGameToText();
+      };
+
+      window.render_game_to_text = renderGameToText;
+      window.advanceTime = advanceTime;
+
       // Enemy AI: random walk every ~700ms
-      const DIRS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
       let enemyTimer = 0;
       const enemyInterval = () => enemyIntervalForLevel(levelRef.current);
 
@@ -1011,6 +969,12 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         // Animate characters (frozen when not running)
         let landedAny = false;
         if (!frozen) {
+        gameTimeMs += dtMs;
+        updateCountdown();
+        flushGameTimers();
+        updateBombs(dtMs);
+        updateArrow(dtMs);
+
         // Iterate stable list (player + active enemies) without per-frame allocation
         for (let ci = -1; ci < enemies.length; ci++) {
           const c = ci < 0 ? player : enemies[ci];
@@ -1043,7 +1007,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
         // Throttle React score updates to ~5Hz to avoid HUD re-render storms
         if (scoresDirty) {
-          const nowS = performance.now();
+          const nowS = gameNow();
           if (nowS - lastScoresFlush > 200) {
             lastScoresFlush = nowS;
             scoresDirty = false;
@@ -1052,7 +1016,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
         }
 
         // Update auras for boost
-        const nowMs = performance.now();
+        const nowMs = gameNow();
         for (let ci = -1; ci < enemies.length; ci++) {
           const c = ci < 0 ? player : enemies[ci];
           const active = nowMs < c.boostUntil;
@@ -1074,30 +1038,25 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
           enemyTimer = 0;
           for (const en of enemies) {
             if (en.anim) continue;
-            if (performance.now() < en.stunnedUntil) continue;
-            const valid = DIRS.filter((d) => {
-              let nx = en.gx, ny = en.gy;
-              if (d === "UP") ny--; else if (d === "DOWN") ny++;
-              else if (d === "LEFT") nx--; else nx++;
-              if (nx < 0 || nx > 7 || ny < 0 || ny > 7) return false;
-              if (isWarningAt(nx, ny)) return false;
+            if (gameNow() < en.stunnedUntil) continue;
+            const valid = DIRECTIONS.filter((d) => {
+              const next = nextGridPosition(en.gx, en.gy, d);
+              if (!isInsideBoard(next.gx, next.gy)) return false;
+              if (isWarningAt(next.gx, next.gy)) return false;
               return true;
             });
-            const safe = valid.length ? valid : DIRS.filter((d) => {
-              let nx = en.gx, ny = en.gy;
-              if (d === "UP") ny--; else if (d === "DOWN") ny++;
-              else if (d === "LEFT") nx--; else nx++;
-              return nx >= 0 && nx < 8 && ny >= 0 && ny < 8;
+            const safe = valid.length ? valid : DIRECTIONS.filter((d) => {
+              const next = nextGridPosition(en.gx, en.gy, d);
+              return isInsideBoard(next.gx, next.gy);
             });
             if (!safe.length) continue;
             const distTo = (d: Direction, tx: number, ty: number) => {
-              let nx = en.gx, ny = en.gy;
-              if (d === "UP") ny--; else if (d === "DOWN") ny++;
-              else if (d === "LEFT") nx--; else nx++;
-              return Math.abs(nx - tx) + Math.abs(ny - ty);
+              const next = nextGridPosition(en.gx, en.gy, d);
+              return manhattanDistance(next, { gx: tx, gy: ty });
             };
-            const bootsDist = boots ? Math.abs(en.gx - boots.gx) + Math.abs(en.gy - boots.gy) : Infinity;
-            const arrowDist = arrow ? Math.abs(en.gx - arrow.gx) + Math.abs(en.gy - arrow.gy) : Infinity;
+            const enemyPos = { gx: en.gx, gy: en.gy };
+            const bootsDist = boots ? manhattanDistance(enemyPos, boots) : Infinity;
+            const arrowDist = arrow ? manhattanDistance(enemyPos, arrow) : Infinity;
             const ownedN = countOwned(en.skin.id);
             let chosen: Direction;
             if (arrow && arrowDist <= 2) {
@@ -1110,7 +1069,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
               chosen = safe.reduce((best, d) =>
                 distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best, safe[0]);
             } else {
-              chosen = safe[Math.floor(Math.random() * safe.length)];
+              chosen = rng.pick(safe);
             }
             moveCharacter(en, chosen);
           }
@@ -1220,24 +1179,19 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
     return () => {
       destroyed = true;
-      if (scheduledTimeouts) {
-        for (const id of scheduledTimeouts) window.clearTimeout(id);
-        scheduledTimeouts.clear();
-      }
-      if (scheduledIntervals) {
-        for (const id of scheduledIntervals) window.clearInterval(id);
-        scheduledIntervals.clear();
-      }
+      removeWindowErrorHandlers?.();
       if (keyHandler) window.removeEventListener("keydown", keyHandler);
       if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+      if (window.render_game_to_text) delete window.render_game_to_text;
+      if (window.advanceTime) delete window.advanceTime;
       try {
         if (app.canvas && app.canvas.parentNode === host) host.removeChild(app.canvas);
-        app.destroy(true, { children: true, texture: true });
+        app.destroy(true, { children: true });
       } catch {
-        // ignore
+        // Pixi may already have been torn down during hot reload.
       }
     };
-  }, []);
+  }, [level, roundIndex, roundDuration]);
 
   const playerSkin = SKINS[PLAYER_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
@@ -1248,14 +1202,19 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
   const topScore = banked[winner];
   const isTie = activeSkins.filter((id) => banked[id] === topScore).length > 1;
 
+  const modalOpen = gameOver || settingsOpen || tutorialOpen;
+  const backgroundInertProps = inertBackgroundProps(modalOpen);
+  const settingsInertProps = inertBackgroundProps(tutorialOpen);
+
   return (
     <>
       <div
+        {...backgroundInertProps}
         className="fixed inset-0"
         style={{
           touchAction: "none",
           userSelect: "none",
-          backgroundImage: `url(${backgroundUrl})`,
+          backgroundImage: `url(${BACKGROUND_URL})`,
           backgroundSize: "cover",
           backgroundPosition: "center",
         }}
@@ -1264,6 +1223,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       {/* Scoreboard */}
       <div
+        {...backgroundInertProps}
         className="fixed left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
@@ -1282,6 +1242,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       {/* Timer */}
       <div
+        {...backgroundInertProps}
         className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-black/55 px-4 py-1 backdrop-blur-sm shadow-lg"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 110px)" }}
       >
@@ -1301,6 +1262,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       {/* Match wins HUD (player vs bots, first to 3) */}
       <div
+        {...backgroundInertProps}
         className="fixed right-4 z-50 rounded-lg bg-black/55 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm shadow-lg"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 56px)" }}
       >
@@ -1316,9 +1278,14 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       {/* Round Over overlay */}
       {gameOver && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]">
+          <div
+            className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="round-over-title"
+          >
             <div className="text-xs font-bold uppercase tracking-widest text-white/50">End of Round · Level {level}</div>
-            <div className="mt-2 text-3xl font-extrabold text-white">
+            <div id="round-over-title" className="mt-2 text-3xl font-extrabold text-white">
               {isTie ? "It's a Tie!" : (
                 <span style={{ color: SKINS[winner].uiColor }}>
                   {SKINS[winner].name} wins!
@@ -1390,6 +1357,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       {/* Settings gear (top-right) */}
       <button
+        {...backgroundInertProps}
         type="button"
         onClick={() => {
           if (started && !gameOver) setPaused(true);
@@ -1405,10 +1373,15 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
       {/* Pause overlay */}
       {settingsOpen && !gameOver && (
-        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="rounded-2xl bg-zinc-900/95 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]">
+        <div {...settingsInertProps} className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div
+            className="rounded-2xl bg-zinc-900/95 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pause-title"
+          >
             <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paused</div>
-            <div className="mt-1 text-2xl font-extrabold text-white">Level {level}</div>
+            <div id="pause-title" className="mt-1 text-2xl font-extrabold text-white">Level {level}</div>
             <div className="mt-3 text-sm text-white/70">
               Bots: <span className="font-bold text-white">{botCount}</span> · Speed{" "}
               <span className="font-bold text-white">×{(700 / enemyIntervalForLevel(level)).toFixed(2)}</span>
@@ -1430,7 +1403,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
               onClick={() => setTutorialOpen(true)}
               className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-white/15 active:scale-95"
             >
-              Как играть?
+              How to play?
             </button>
           </div>
         </div>
@@ -1438,6 +1411,7 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
       {tutorialOpen && <TutorialModal onClose={() => setTutorialOpen(false)} />}
 
       <div
+        {...backgroundInertProps}
         className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
@@ -1483,20 +1457,25 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
             </span>
           </>
         )}
-        <button
-          type="button"
-          onClick={() => setDebug((d) => !d)}
-          className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider active:scale-95 ${
-            debug ? "bg-emerald-400 text-black" : "bg-white/80 text-black"
-          }`}
-          aria-label="Toggle debug"
-          aria-pressed={debug}
-        >
-          DBG
-        </button>
+        {canShowDebug && (
+          <button
+            type="button"
+            onClick={() => setDebug((d) => !d)}
+            className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider active:scale-95 ${
+              debug ? "bg-emerald-400 text-black" : "bg-white/80 text-black"
+            }`}
+            aria-label="Toggle debug"
+            aria-pressed={debug}
+          >
+            DBG
+          </button>
+        )}
       </div>
-      {debug && (
-        <div className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/75 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums shadow-lg">
+      {canShowDebug && debug && (
+        <div
+          {...backgroundInertProps}
+          className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/75 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums shadow-lg"
+        >
           <div className={stats.fps < 50 ? "text-red-400" : "text-emerald-300"}>
             FPS: {stats.fps} <span className="text-white/60">({stats.frameMs.toFixed(2)}ms)</span>
           </div>
@@ -1521,37 +1500,46 @@ function IsoRound({ level, matchWins, history, onRoundEnd }: IsoRoundProps) {
 
 // ============= Level Manager Wrapper =============
 
-const LS_UNLOCKED = "iso_unlocked_level";
-
 export function IsoGrid() {
-  const [unlocked, setUnlocked] = useState<number>(() => {
-    if (typeof window === "undefined") return 1;
-    const v = parseInt(window.localStorage.getItem(LS_UNLOCKED) || "1", 10);
-    return Math.min(MAX_LEVEL, Math.max(1, isNaN(v) ? 1 : v));
-  });
+  const [unlocked, setUnlocked] = useState<number>(1);
   const [level, setLevel] = useState<number>(1);
-  const [matchWins, setMatchWins] = useState<Record<SkinId, number>>(() => ZERO_SCORES());
+  const [matchWins, setMatchWins] = useState<Record<SkinId, number>>(() => zeroScores());
   const [phase, setPhase] = useState<"menu" | "playing" | "passed" | "failed">("menu");
   const [roundIdx, setRoundIdx] = useState(0);
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
   const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
-  const [tutorialOpen, setTutorialOpen] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem("isogrid:tutorial:v1") !== "1";
-  });
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      setUnlocked(readUnlockedLevel(window.localStorage));
+      setTutorialOpen(shouldShowTutorial(window.localStorage));
+    } catch (err) {
+      console.warn("[IsoGrid] localStorage read failed", err);
+    }
+  }, []);
+
   const closeTutorial = () => {
     setTutorialOpen(false);
-    try { window.localStorage.setItem("isogrid:tutorial:v1", "1"); } catch {}
+    try {
+      markTutorialSeen(window.localStorage);
+    } catch (err) {
+      console.warn("[IsoGrid] tutorial persistence failed", err);
+    }
   };
 
   const persistUnlocked = (lv: number) => {
     setUnlocked(lv);
-    try { window.localStorage.setItem(LS_UNLOCKED, String(lv)); } catch {}
+    try {
+      writeUnlockedLevel(window.localStorage, lv);
+    } catch (err) {
+      console.warn("[IsoGrid] unlocked level persistence failed", err);
+    }
   };
 
   const startLevel = (lv: number) => {
     setLevel(lv);
-    setMatchWins(ZERO_SCORES());
+    setMatchWins(zeroScores());
     setHistory([]);
     setRoundIdx((r) => r + 1);
     setPhase("playing");
@@ -1585,29 +1573,39 @@ export function IsoGrid() {
     setPhase("playing");
   };
 
+  const managerInertProps = inertBackgroundProps(tutorialOpen);
+
   if (phase === "playing") {
     return (
       <>
-        <IsoRound
-          key={`lvl-${level}-r-${roundIdx}`}
-          level={level}
-          matchWins={matchWins}
-          history={history}
-          onRoundEnd={handleRoundEnd}
-        />
+        <div {...managerInertProps}>
+          <IsoRound
+            key={`lvl-${level}-r-${roundIdx}`}
+            level={level}
+            roundIndex={roundIdx}
+            matchWins={matchWins}
+            history={history}
+            onRoundEnd={handleRoundEnd}
+          />
+        </div>
         {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
       </>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
-      <div className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10">
+    <>
+    <div {...managerInertProps} className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div
+        className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="level-menu-title"
+      >
         {phase === "passed" && (
           <>
             <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">Level Passed</div>
-            <div className="mt-1 text-3xl font-extrabold text-white">Level {level} ✓</div>
+            <div id="level-menu-title" className="mt-1 text-3xl font-extrabold text-white">Level {level} ✓</div>
             <p className="mt-2 text-sm text-white/70">
               You won {matchWins[PLAYER_SKIN]}–{Math.max(0, ...BOT_SKINS.slice(0, botsForLevel(level)).map((b) => matchWins[b]))}.
             </p>
@@ -1616,7 +1614,7 @@ export function IsoGrid() {
         {phase === "failed" && (
           <>
             <div className="text-xs font-bold uppercase tracking-widest text-rose-400">Level Failed</div>
-            <div className="mt-1 text-3xl font-extrabold text-white">Level {level} ✗</div>
+            <div id="level-menu-title" className="mt-1 text-3xl font-extrabold text-white">Level {level} ✗</div>
             <p className="mt-2 text-sm text-white/70">
               A bot reached {WINS_TO_PASS} wins first. Try again!
             </p>
@@ -1625,7 +1623,7 @@ export function IsoGrid() {
         {phase === "menu" && (
           <>
             <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paint the Grid</div>
-            <div className="mt-1 text-3xl font-extrabold text-white">Select Level</div>
+            <div id="level-menu-title" className="mt-1 text-3xl font-extrabold text-white">Select Level</div>
             <p className="mt-2 text-xs text-white/60">First to {WINS_TO_PASS} round wins clears the level.</p>
           </>
         )}
@@ -1650,6 +1648,11 @@ export function IsoGrid() {
                         : "bg-white/10 text-white"
                 }`}
                 title={locked ? "Locked" : `Level ${lv} · ${botsForLevel(lv)} bot${botsForLevel(lv) > 1 ? "s" : ""}`}
+                aria-label={
+                  locked
+                    ? `Level ${lv} locked`
+                    : `Start level ${lv}, ${botsForLevel(lv)} bot${botsForLevel(lv) > 1 ? "s" : ""}`
+                }
               >
                 {locked ? "🔒" : lv}
               </button>
@@ -1701,32 +1704,39 @@ export function IsoGrid() {
           onClick={() => setTutorialOpen(true)}
           className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 hover:text-white underline-offset-2 hover:underline"
         >
-          Как играть?
+          How to play?
         </button>
       </div>
     </div>
+    {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
+    </>
   );
 }
 
 function TutorialModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-6 text-left shadow-2xl ring-1 ring-white/10 max-h-[90vh] overflow-y-auto">
-        <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Туториал</div>
-        <div className="mt-1 text-2xl font-extrabold text-white">Как играть</div>
+      <div
+        className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-6 text-left shadow-2xl ring-1 ring-white/10 max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="tutorial-title"
+      >
+        <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Tutorial</div>
+        <div id="tutorial-title" className="mt-1 text-2xl font-extrabold text-white">How to play</div>
 
         <div className="mt-4 space-y-3 text-sm text-white/80 leading-relaxed">
           <p>
-            <span className="font-bold text-white">Цель:</span> закрашивай клетки своим цветом и собирай сундуки, чтобы набирать очки.
-            Побеждает в раунде тот, у кого в конце больше очков — а не просто больше закрашенных клеток.
+            <span className="font-bold text-white">Goal:</span> move across the grid to paint tiles in your color,
+            then collect chests to bank those painted tiles as round points.
           </p>
           <p>
-            <span className="font-bold text-white">Очки:</span> двигаясь по полю, ты автоматически красишь клетки под собой и можешь перекрашивать клетки соперников.
-            Закрашенные клетки дают очки, а сундуки приносят бонусные очки сверху.
+            <span className="font-bold text-white">Scoring:</span> the HUD shows banked points first and your current
+            painted tiles as a smaller + value. Chests add the current + value to your bank and clear your active paint.
           </p>
           <p>
-            <span className="font-bold text-white">Матч:</span> уровень играется до <span className="text-emerald-400 font-bold">{WINS_TO_PASS} побед</span> в раундах.
-            Если бот первым наберёт {WINS_TO_PASS} побед — уровень не пройден, придётся переиграть.
+            <span className="font-bold text-white">Match:</span> each level is first to <span className="text-emerald-400 font-bold">{WINS_TO_PASS} round wins</span>.
+            If a bot reaches {WINS_TO_PASS} wins first, retry the level.
           </p>
         </div>
 
@@ -1734,22 +1744,22 @@ function TutorialModal({ onClose }: { onClose: () => void }) {
           <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
             <div className="text-xl leading-none">🎁</div>
             <div>
-              <div className="font-bold text-white">Сундук</div>
-              <div className="text-xs text-white/70">Подбери, чтобы получить бонусные очки и закрасить клетки вокруг. Появляется в случайном месте.</div>
+              <div className="font-bold text-white">Chest</div>
+              <div className="text-xs text-white/70">Banks your current painted tiles as points, clears those tiles, then respawns elsewhere.</div>
             </div>
           </div>
           <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
             <div className="text-xl leading-none">➤</div>
             <div>
-              <div className="font-bold text-white">Стрелка</div>
-              <div className="text-xs text-white/70">Закрашивает целую линию клеток в направлении стрелки твоим цветом — мощный буст.</div>
+              <div className="font-bold text-white">Arrow</div>
+              <div className="text-xs text-white/70">Paints a full line from the arrow tile in its current direction.</div>
             </div>
           </div>
           <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
             <div className="text-xl leading-none">💣</div>
             <div>
-              <div className="font-bold text-white">Бомба</div>
-              <div className="text-xs text-white/70">Опасно! Скоро взорвётся (мигает красным). Взрыв сбрасывает закраску вокруг — держись подальше или подставь соперника.</div>
+              <div className="font-bold text-white">Bomb</div>
+              <div className="text-xs text-white/70">Explodes on its exact tile. A hit stuns that player and clears every tile they currently own.</div>
             </div>
           </div>
         </div>
@@ -1759,7 +1769,7 @@ function TutorialModal({ onClose }: { onClose: () => void }) {
           onClick={onClose}
           className="mt-6 w-full rounded-full bg-amber-400 px-4 py-3 text-sm font-extrabold uppercase tracking-wider text-black active:scale-95"
         >
-          Поехали!
+          Got it
         </button>
       </div>
     </div>
