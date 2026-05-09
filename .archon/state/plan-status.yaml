@@ -1,0 +1,471 @@
+version: 1
+updatedAt: "2026-05-04T15:33:08.000Z"
+steps:
+  - id: step-0
+    title: Commit Archon setup
+    status: manual
+    notes: Manual repository commit step. Not executed by crash-cubes-dev.
+  - id: step-1
+    title: Baseline lint cleanup
+    branch: chore/lint-baseline-v2
+    status: done
+    request: >-
+      Fix current npm run lint failures only. Do not change gameplay behavior. Scope: src/components/ui/command.tsx,
+      src/components/ui/textarea.tsx, src/game/PixiGame.ts, src/game/Player.ts, tailwind.config.ts.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining lint-baseline issues for this step. Do not
+      start the next plan step.
+    updatedAt: "2026-05-01T20:43:06.177Z"
+    lastAttemptAt: "2026-05-01T20:39:02.277Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/75300a028b7c51d299dda203b05d1927
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-2
+    title: Yandex gameplay lifecycle
+    branch: feat/yandex-gameplay-events-v3
+    status: done
+    request: >-
+      Read plan.md and
+      /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/51da1ca3dcac7194aab45b33a3918f41/review.md.
+      Implement only section 2: correct Yandex LoadingAPI.ready timing and GameplayAPI.start/stop lifecycle. Fix the
+      review findings: SDK exceptions must not poison gameplay sync, LoadingAPI.ready must fire after the first scene is
+      actually laid out/renderable, and add focused lifecycle coverage. Preserve local mock behavior. Do not implement
+      ads, audio, saves, or level generation.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining Yandex lifecycle issues for this step. Do
+      not start the next plan step.
+    updatedAt: "2026-05-01T21:03:39.670Z"
+    lastAttemptAt: "2026-05-01T20:58:33.299Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/99dbfee1b28305e0f218a7a9c07ee531
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-3
+    title: Level metadata and balance validation
+    branch: feat/level-balance-metadata
+    status: done
+    request: >-
+      Read plan.md. Implement only section 4: level metadata structure and balance validation output for the current
+      level system. Keep gameplay behavior stable. Do not implement new levels beyond what is necessary to support
+      metadata and validation.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the metadata and balance validation issues for this
+      step. Do not start the next plan step.
+    updatedAt: "2026-05-01T21:19:18.234Z"
+    lastAttemptAt: "2026-05-01T21:14:12.358Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/58726e84f6fd7691d533012d56016c95
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-4
+    title: Pause, final screen, and chapter UX
+    branch: feat/pause-final-chapter-ux
+    status: done
+    request: >-
+      Read plan.md. Implement a focused slice from section 5: pause/settings menu, final screen, chapter transition
+      states, and fix failure copy if still inaccurate. Do not implement ads or audio.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the pause/final screen/chapter UX issues for this step.
+      Do not start the next plan step.
+    updatedAt: "2026-05-01T21:36:26.794Z"
+    lastAttemptAt: "2026-05-01T21:30:00.362Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/41d7b28ea9547600d4048be812c21711
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-5
+    title: Rewarded undo or hints groundwork
+    branch: feat/rewarded-undo-hints
+    status: done
+    request: >-
+      Read plan.md. Implement only rewarded-option groundwork from section 3/5: undo or hint reward flow at safe pause
+      points. Keep ad provider calls behind src/sdk/yandex.ts and preserve local mock behavior.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the rewarded flow issues for this step. Do not start the
+      next plan step.
+    updatedAt: "2026-05-01T21:45:49.376Z"
+    lastAttemptAt: "2026-05-01T21:36:27.059Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/6fd179cfb8c7ff18625a3e32f8c79864
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-6
+    title: Interstitial ads at safe pauses
+    branch: feat/interstitial-safe-pauses
+    status: done
+    request: >-
+      Read plan.md. Implement interstitial ad placement only during safe pauses: after loss, chapter boundary, or
+      periodic completed levels. Never show ads during active movement.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the safe-pause interstitial issues for this step. Do not
+      start the next plan step.
+    updatedAt: "2026-05-01T22:01:36.704Z"
+    lastAttemptAt: "2026-05-01T21:54:55.449Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/91708b87632ba8fbe585bd742ebeb226
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-7
+    title: Audio, mute, and background handling
+    branch: feat/audio-mute-background
+    status: done
+    request: >-
+      Read plan.md. Implement section 7 audio/mute/background handling: basic SFX hooks, mute preference persistence,
+      and pause/mute when hidden or during ads.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the audio/mute issues for this step. Do not start the
+      next plan step.
+    updatedAt: "2026-05-01T22:10:37.068Z"
+    lastAttemptAt: "2026-05-01T22:01:36.971Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/d558791f817025cbb9cb58891af74c20
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-8
+    title: Fix tutorial arrow direction
+    branch: fix/tutorial-arrow-direction
+    status: done
+    request: >-
+      Fix the tutorial arrow so it points in the correct movement direction for the first tutorial prompt. Keep the
+      scope limited to the tutorial indicator behavior and its assets/positioning as needed.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining tutorial arrow direction issues for this
+      step. Do not start the next plan step.
+    updatedAt: "2026-05-01T22:24:35.730Z"
+    lastAttemptAt: "2026-05-01T22:18:55.218Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/a1cf86d787e82faa20d40d9cb6a0b119
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-9
+    title: Fix isometric WASD and add diagonal keyboard moves
+    branch: fix/isometric-wasd-diagonals
+    status: done
+    request: >-
+      Fix keyboard movement so WASD respects the game's isometric orientation instead of using incorrect directions.
+      Also add diagonal movement on keyboard for the isometric grid. Keep the scope limited to input mapping, movement
+      directions, and focused validation/tests for this behavior.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining keyboard isometric/diagonal movement
+      issues for this step. Do not start the next plan step.
+    updatedAt: "2026-05-01T22:42:03.937Z"
+    lastAttemptAt: "2026-05-01T22:37:37.182Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/8ea0ed178f8ac45c93cd09fea826cfcf
+    lastReviewVerdict: pass
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-10
+    title: Update Yandex SDK loader path
+    branch: feat/yandex-sdk-loader-current
+    status: done
+    request: >-
+      Read plan.md and src/sdk/yandex.ts. Update the Yandex Games SDK loader to use the current moderation-safe SDK
+      connection path for archive-hosted games: load /sdk.js on Yandex hosting while preserving the local mock outside
+      Yandex. Avoid duplicate script injection, keep fallback behavior resilient, and add focused tests for local mock,
+      Yandex-hosted loader selection, and loader failure fallback. Do not change gameplay behavior.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining Yandex SDK loader issues for this step. Do
+      not start the next plan step.
+    updatedAt: "2026-05-04T17:16:34.620Z"
+    lastAttemptAt: "2026-05-04T17:03:48.413Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/637a6f11bc36feaed23ca11006800c46
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-11
+    title: Gate LoadingAPI.ready on playable launch state
+    branch: feat/yandex-ready-playable-state
+    status: done
+    request: >-
+      Read plan.md, src/components/GameCanvas.tsx, src/components/GameIntro.tsx, and src/sdk/yandex.ts. Move
+      LoadingAPI.ready so it fires exactly once only after player progress is loaded, Pixi assets have produced a first
+      renderable scene, and the intro has finished or been skipped so the first level is actually playable. Preserve
+      current intro handoff visuals and local mock behavior. Add focused tests for the readiness gate and one-shot
+      behavior.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining LoadingAPI.ready timing issues for this
+      step. Do not start the next plan step.
+    updatedAt: "2026-05-05T08:39:02.401Z"
+    lastAttemptAt: "2026-05-05T08:29:59.117Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/33d9404e4aebf30693ba866c345f393c
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-12
+    title: Add SDK language autodetection at launch
+    branch: feat/yandex-locale-autodetect
+    status: done
+    request: >-
+      Read plan.md and src/sdk/yandex.ts. Add a safe Yandex SDK wrapper for launch-time language autodetection using
+      ysdk.environment.i18n.lang, with a local mock defaulting to ru. Wire the app so autodetection happens during
+      launch/loading, not during active gameplay. The current release may remain Russian-only, but the SDK call must be
+      present and testable. Add focused tests and document the debug-panel verification expectation.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining locale autodetection issues for this step.
+      Do not start the next plan step.
+    updatedAt: "2026-05-05T09:42:13.236Z"
+    lastAttemptAt: "2026-05-05T09:33:34.805Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/deb9b334c4ae0320b37ecb14ff19009e
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-13
+    title: Add Yandex debug panel verification helper
+    branch: chore/yandex-debug-panel-checklist
+    status: done
+    request: >-
+      Read plan.md. Add a repo-local Yandex debug panel verification checklist or lightweight helper document for
+      moderation checks: LoadingAPI.ready, GameplayAPI.start/stop, language autodetection indicator, cloud save,
+      fullscreen/rewarded ads, visibility pause, and portrait orientation. Keep this as documentation or non-invasive
+      dev tooling only; do not change gameplay. Include exact manual steps for the draft/debug-panel run.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining debug-panel checklist/helper issues for
+      this step. Do not start the next plan step.
+    updatedAt: "2026-05-05T10:19:24.305Z"
+    lastAttemptAt: "2026-05-05T10:09:23.461Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/825ad295c74b18db522d5a05df3a0f3f
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-14
+    title: Enforce portrait-first mobile release
+    branch: feat/portrait-mobile-release
+    status: done
+    request: >-
+      Read plan.md and the mobile UI components. Make the game portrait-first for the Yandex Games release. Add a
+      landscape/unsupported-orientation state only if needed locally, keep desktop usable, and ensure mobile HUD,
+      joystick, overlays, intro, and level select fit portrait viewports. Document that the Yandex draft must select
+      Portrait. Add focused responsive tests where practical.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining portrait/mobile orientation issues for
+      this step. Do not start the next plan step.
+    updatedAt: "2026-05-05T11:51:38.297Z"
+    lastAttemptAt: "2026-05-05T11:31:27.377Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/7bbe84c6d0f1533d68bdda16344096ac
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-15
+    title: Apply lifecycle holds to rewarded ads
+    branch: feat/rewarded-ad-lifecycle-holds
+    status: done
+    request: >-
+      Read plan.md, src/sdk/yandex.ts, src/components/GameCanvas.tsx, and src/game/audio.ts. Make rewarded ads use the
+      same gameplay/audio hold semantics as fullscreen ads: gameplay stops while the ad is open, audio is muted/held,
+      and gameplay resumes cleanly after close/error only when the game is otherwise playable. Preserve the rewarded
+      undo reward semantics and add focused tests.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining rewarded ad lifecycle issues for this
+      step. Do not start the next plan step.
+    updatedAt: "2026-05-05T12:21:24.299Z"
+    lastAttemptAt: "2026-05-05T11:51:38.670Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/16fa841a34d4cb5f606a08d0f37fbb4f
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-16
+    title: Cache Yandex Player object
+    branch: perf/cache-yandex-player
+    status: done
+    request: >-
+      Read plan.md, src/sdk/yandex.ts, and src/game/progress.ts. Cache the Yandex Player promise/object inside the SDK
+      wrapper so ysdkSave and ysdkLoad do not call getPlayer repeatedly. Preserve scopes:false behavior, local mock
+      storage, failure resilience, and progress normalization. Add focused tests for getPlayer call count and fallback
+      behavior.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining Yandex Player caching issues for this
+      step. Do not start the next plan step.
+    updatedAt: "2026-05-05T12:54:46.782Z"
+    lastAttemptAt: "2026-05-05T12:46:26.928Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/c97c75cf7f6daa61cb7a223b4d51d451
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-17
+    title: Clean release metadata leftovers
+    branch: chore/release-metadata-cleanup
+    status: done
+    request: >-
+      Read plan.md and index.html. Remove Lovable leftovers and stale external preview images from metadata. Keep the
+      product title Hop & Fill, align author/description/OG/Twitter tags with the actual game, and avoid adding remote
+      promotional image URLs unless the asset is owned and final. Keep repo/workflow names unchanged.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining release metadata cleanup issues for this
+      step. Do not start the next plan step.
+    updatedAt: "2026-05-05T13:09:38.298Z"
+    lastAttemptAt: "2026-05-05T12:54:47.126Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/f1edfcbaf697c22d89b31811b9f37370
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-18
+    title: Make user-facing copy brand-safe
+    branch: chore/brand-safe-copy
+    status: done
+    request: >-
+      Read plan.md and search the repo for user-facing/store-facing references to third-party brands. Remove or rewrite
+      brand references such as Crash Bandicoot from index.html, README, plan-facing copy, and any visible strings. Keep
+      the game named Hop & Fill and keep internal repo/Archon infrastructure names as Hop and Fill where needed.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining brand-safe copy issues for this step. Do
+      not start the next plan step.
+    updatedAt: "2026-05-05T13:52:04.404Z"
+    lastAttemptAt: "2026-05-05T13:40:18.877Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/89b4bf99a7050bec03b49af905d634e3
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-19
+    title: Reduce initial JS bundle risk
+    branch: perf/initial-bundle-split
+    status: done
+    request: >-
+      Read plan.md and vite.config.ts. Reduce or better structure the initial production JS chunk for the Yandex Games
+      mobile launch path. Prefer low-risk Vite/Rollup manualChunks or lazy loading that does not break the intro,
+      GameCanvas, Pixi asset loading, Yandex SDK lifecycle, or tests. Re-run build and document before/after chunk
+      sizes.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining bundle-size optimization issues for this
+      step. Do not start the next plan step.
+    updatedAt: "2026-05-05T14:08:45.462Z"
+    lastAttemptAt: "2026-05-05T13:52:04.727Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/7184cb6409af648e3e58f73558f61024
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-20
+    title: Draft Yandex store text for Hop & Fill
+    branch: docs/yandex-store-text
+    status: done
+    request: >-
+      Read plan.md and current gameplay/UI strings. Create docs/yandex-release/store-text.md with final draft copy for
+      Yandex Games: Title, SEO description, Description, How to play, categories/tags/keywords suggestions, supported
+      languages, and developer comment notes. The copy must describe the real 25-level Hop & Fill release and avoid
+      third-party brand references.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining Yandex store text issues for this step. Do
+      not start the next plan step.
+    updatedAt: "2026-05-05T14:45:56.525Z"
+    lastAttemptAt: "2026-05-05T14:32:42.530Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/62dbe9986e05e38f8ad76570c3d93f68
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-21
+    title: Specify Yandex visual material requirements
+    branch: docs/yandex-visual-materials
+    status: done
+    request: >-
+      Read plan.md and the existing asset list. Create docs/yandex-release/visual-materials.md with concrete specs and
+      production notes for icon, maskable icon, cover, hero image, vertical/horizontal video if used, GIF if used, and
+      screenshots. Include file format, dimensions when known from the Yandex draft/docs, content constraints, and a
+      checklist that materials must show actual Hop & Fill gameplay or owned artwork.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining visual-materials documentation issues for
+      this step. Do not start the next plan step.
+    updatedAt: "2026-05-05T15:00:32.309Z"
+    lastAttemptAt: "2026-05-05T14:45:56.847Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/6dbf872099ff18d04a6f2fd0b3fcb90a
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-22
+    title: Document cloud save draft setting
+    branch: docs/yandex-cloud-save-setting
+    status: done
+    request: >-
+      Read plan.md, src/sdk/yandex.ts, and src/game/progress.ts. Create docs/yandex-release/cloud-save.md documenting
+      that the Yandex draft must enable "The game use cloud save" because Hop & Fill uses Player.getData/setData.
+      Include local and debug-panel verification steps, expected progress fields, and failure/fallback behavior.
+    continueMessage: >-
+      Read the latest validation and review artifacts. Fix only the remaining cloud-save documentation issues for this
+      step. Do not start the next plan step.
+    updatedAt: "2026-05-05T15:23:05.472Z"
+    lastAttemptAt: "2026-05-05T15:14:17.058Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/crash-cubes/artifacts/runs/7b5490dd3b42980d1d27b2973adb0e24
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-23
+    title: Interactive gameplay screenshots and media shot list
+    status: manual
+    notes: >-
+      Interactive Archon task. Run: archon workflow run crash-cubes-release-interactive --branch
+      release/gameplay-media-shot-list --from main "Create and finalize the Hop & Fill Yandex Games gameplay
+      screenshot/media shot list. Ask for user approval on levels, themes, viewport sizes, and states before writing
+      docs/yandex-release/screenshot-shot-list.md."
+  - id: step-24
+    title: Interactive asset rights checklist
+    status: manual
+    notes: >-
+      Interactive Archon task. Run: archon workflow run crash-cubes-release-interactive --branch
+      release/asset-rights-checklist --from main "Create and finalize the Hop & Fill Yandex Games asset provenance and
+      licensing checklist. Ask for user confirmation on generated, owned, and externally sourced materials before
+      writing docs/yandex-release/asset-rights-checklist.md."

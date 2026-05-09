@@ -1,0 +1,57 @@
+---
+description: Create a focused implementation plan for a Hop and Fill task.
+argument-hint: <feature, bug, plan slice, or Yandex Games release task>
+---
+
+# Hop and Fill Plan Task
+
+**Workflow ID**: $WORKFLOW_ID
+**Request**: $ARGUMENTS
+
+You are planning a focused code change for Hop and Fill, a Vite + React + Pixi
+isometric puzzle game being prepared for Yandex Games.
+
+## Phase 1: Load Context
+
+Read:
+- `$ARTIFACTS_DIR/repo-snapshot.md`
+- `package.json`
+- `src/game/*` and `src/components/*` files relevant to the request
+- `src/sdk/yandex.ts` for platform integration tasks
+- `plan.md` if present
+- `RTK.md` if present
+
+Inspect git status before planning. Treat pre-existing uncommitted changes as
+user work. Do not plan to revert them.
+
+## Phase 2: Define Scope
+
+Choose the smallest coherent slice that satisfies the request. If the request is
+broad, select the first high-value implementation slice and list deferred items.
+
+Project guardrails:
+- Keep React UI, Pixi gameplay, and Yandex SDK concerns separated.
+- Preserve local development behavior outside Yandex.
+- Keep guest play and local mock storage working.
+- Keep mobile UI constraints in mind.
+- Prefer existing project patterns over new abstractions.
+- Do not create commits, push branches, or open PRs in this workflow.
+
+## Phase 3: Write Plan Artifact
+
+Write `$ARTIFACTS_DIR/plan.md` with:
+- Objective
+- In-scope and out-of-scope items
+- Relevant existing files and behavior
+- Step-by-step implementation tasks
+- Test/validation plan using `npm run test`, `npm run lint`, and `npm run build`
+- Risk notes, especially around saves, Yandex SDK calls, Pixi lifecycle, and mobile UI
+
+## Phase 4: Report
+
+Return a concise summary of the planned slice and the artifact path.
+
+### CHECKPOINT
+- [ ] `$ARTIFACTS_DIR/plan.md` exists
+- [ ] Scope is narrow enough to implement in one workflow run
+- [ ] Validation commands are explicit

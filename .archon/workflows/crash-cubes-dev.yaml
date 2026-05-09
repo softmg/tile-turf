@@ -1,0 +1,204 @@
+name: crash-cubes-dev
+description: |
+  Use when working on Hop and Fill project tasks, especially Yandex Games
+  release work, Pixi gameplay changes, React UI flows, progression/saves,
+  level select, mobile layout fixes, and focused bug fixes.
+
+  Does: captures project context, creates a focused implementation plan,
+  implements the requested slice, runs npm test/lint/build deterministically,
+  iterates on validation failures, reviews the final diff, and summarizes the
+  result with artifact paths.
+
+  NOT for: creating/pushing GitHub PRs or broad release automation. Use
+  archon-idea-to-pr or archon-plan-to-pr when a PR is required.
+
+provider: codex
+modelReasoningEffort: high
+webSearchMode: disabled
+
+worktree:
+  enabled: true
+
+nodes:
+  - id: repo-snapshot
+    bash: |
+      set -euo pipefail
+      mkdir -p "$ARTIFACTS_DIR"
+
+      {
+        echo "# Hop and Fill Repo Snapshot"
+        echo
+        echo "## User request"
+        printf '%s\n' "$ARGUMENTS"
+        echo
+        echo "## Git"
+        git status --short || true
+        echo
+        echo "Current branch: $(git branch --show-current || true)"
+        echo
+        echo "## Package scripts"
+        node -e "const p=require('./package.json'); console.log(JSON.stringify(p.scripts,null,2))"
+        echo
+        echo "## Project files"
+        find src -maxdepth 3 -type f | sort
+        echo
+        echo "## Local planning docs"
+        if [ -f plan.md ]; then
+          sed -n '1,220p' plan.md
+        else
+          echo "plan.md not present in this worktree."
+        fi
+        echo
+        if [ -f RTK.md ]; then
+          echo "## RTK.md"
+          sed -n '1,220p' RTK.md
+        else
+          echo "## RTK.md"
+          echo "RTK.md not present in this worktree."
+        fi
+      } > "$ARTIFACTS_DIR/repo-snapshot.md"
+
+      printf '{"artifact":"%s/repo-snapshot.md"}\n' "$ARTIFACTS_DIR"
+    timeout: 30000
+
+  - id: plan
+    command: crash-cubes-plan-task
+    depends_on: [repo-snapshot]
+    idle_timeout: 600000
+
+  - id: implement
+    command: crash-cubes-implement-task
+    depends_on: [plan]
+    idle_timeout: 900000
+
+  - id: validate
+    bash: |
+      set +e
+      mkdir -p "$ARTIFACTS_DIR/validation"
+
+      run_check() {
+        name="$1"
+        shift
+        "$@" > "$ARTIFACTS_DIR/validation/${name}.log" 2>&1
+        status=$?
+        printf '%s=%s\n' "$name" "$status" >> "$ARTIFACTS_DIR/validation/status.env"
+      }
+
+      : > "$ARTIFACTS_DIR/validation/status.env"
+      run_check test npm run test
+      run_check lint npm run lint
+      run_check build npm run build
+
+      test_status=$(awk -F= '$1=="test"{print $2}' "$ARTIFACTS_DIR/validation/status.env")
+      lint_status=$(awk -F= '$1=="lint"{print $2}' "$ARTIFACTS_DIR/validation/status.env")
+      build_status=$(awk -F= '$1=="build"{print $2}' "$ARTIFACTS_DIR/validation/status.env")
+
+      ok=false
+      if [ "$test_status" = "0" ] && [ "$lint_status" = "0" ] && [ "$build_status" = "0" ]; then
+        ok=true
+      fi
+
+      printf '{"test":%s,"lint":%s,"build":%s,"ok":%s,"artifact":"%s/validation"}\n' \
+        "$test_status" "$lint_status" "$build_status" "$ok" "$ARTIFACTS_DIR"
+    depends_on: [implement]
+    timeout: 900000
+
+  - id: fix-validation
+    depends_on: [validate]
+    when: "$validate.output.ok != 'true'"
+    idle_timeout: 900000
+    loop:
+      prompt: |
+        Validation failed for the Hop and Fill task.
+
+        Read:
+        - $ARTIFACTS_DIR/plan.md
+        - $ARTIFACTS_DIR/implementation.md
+        - $ARTIFACTS_DIR/validation/status.env
+        - $ARTIFACTS_DIR/validation/test.log
+        - $ARTIFACTS_DIR/validation/lint.log
+        - $ARTIFACTS_DIR/validation/build.log
+
+        Fix the smallest set of issues needed to make validation pass. Keep the
+        original scope from $ARTIFACTS_DIR/plan.md. Do not revert unrelated
+        user changes. After changes, update $ARTIFACTS_DIR/validation-fixes.md
+        with what failed, what changed, and any remaining risk.
+
+        When npm run test, npm run lint, and npm run build all pass, output:
+        <promise>VALIDATION_FIXED</promise>
+      until: VALIDATION_FIXED
+      max_iterations: 4
+      fresh_context: false
+      until_bash: "npm run test && npm run lint && npm run build"
+
+  - id: final-validation
+    depends_on: [validate, fix-validation]
+    trigger_rule: none_failed_min_one_success
+    bash: |
+      set +e
+      mkdir -p "$ARTIFACTS_DIR/final-validation"
+
+      run_check() {
+        name="$1"
+        shift
+        "$@" > "$ARTIFACTS_DIR/final-validation/${name}.log" 2>&1
+        status=$?
+        printf '%s=%s\n' "$name" "$status" >> "$ARTIFACTS_DIR/final-validation/status.env"
+      }
+
+      : > "$ARTIFACTS_DIR/final-validation/status.env"
+      run_check test npm run test
+      run_check lint npm run lint
+      run_check build npm run build
+
+      test_status=$(awk -F= '$1=="test"{print $2}' "$ARTIFACTS_DIR/final-validation/status.env")
+      lint_status=$(awk -F= '$1=="lint"{print $2}' "$ARTIFACTS_DIR/final-validation/status.env")
+      build_status=$(awk -F= '$1=="build"{print $2}' "$ARTIFACTS_DIR/final-validation/status.env")
+
+      ok=false
+      if [ "$test_status" = "0" ] && [ "$lint_status" = "0" ] && [ "$build_status" = "0" ]; then
+        ok=true
+      fi
+
+      printf '{"test":%s,"lint":%s,"build":%s,"ok":%s,"artifact":"%s/final-validation"}\n' \
+        "$test_status" "$lint_status" "$build_status" "$ok" "$ARTIFACTS_DIR"
+    timeout: 900000
+
+  - id: review
+    command: crash-cubes-review-task
+    depends_on: [final-validation]
+    when: "$final-validation.output.ok == 'true'"
+    context: fresh
+    idle_timeout: 600000
+
+  - id: report-validation-failed
+    prompt: |
+      Final validation failed for the Hop and Fill workflow.
+
+      Read the artifacts under:
+      - $ARTIFACTS_DIR/plan.md
+      - $ARTIFACTS_DIR/implementation.md
+      - $ARTIFACTS_DIR/final-validation/
+
+      Report the failing checks, likely causes, changed files, and the next
+      concrete fix steps. Do not edit files in this node.
+    depends_on: [final-validation]
+    when: "$final-validation.output.ok != 'true'"
+    context: fresh
+
+  - id: summary
+    prompt: |
+      Summarize the Hop and Fill workflow result for the user.
+
+      Include:
+      - implemented scope
+      - changed files
+      - validation result from $final-validation.output
+      - review findings if $ARTIFACTS_DIR/review.md exists
+      - artifact paths for plan, implementation, validation, and review
+      - any follow-up work deliberately left out of scope
+
+      Keep it concise and factual. Do not claim a PR was created.
+    depends_on: [review, report-validation-failed]
+    trigger_rule: none_failed_min_one_success
+    context: fresh

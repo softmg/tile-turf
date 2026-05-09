@@ -1,0 +1,114 @@
+name: crash-cubes-release-interactive
+description: |
+  Interactive Hop & Fill release-material workflow for Yandex Games.
+  Use when the user needs approval-driven work on gameplay screenshots,
+  promotional media shot lists, or asset provenance/licensing notes.
+  The workflow pauses for user feedback before writing final release docs.
+
+provider: codex
+modelReasoningEffort: high
+webSearchMode: disabled
+interactive: true
+
+worktree:
+  enabled: true
+
+nodes:
+  - id: repo-snapshot
+    bash: |
+      set -euo pipefail
+      mkdir -p "$ARTIFACTS_DIR"
+      {
+        echo "# Hop & Fill Release Snapshot"
+        echo
+        echo "## User request"
+        printf '%s\n' "$ARGUMENTS"
+        echo
+        echo "## Git"
+        git status --short || true
+        echo
+        echo "## Release plan"
+        sed -n '1,260p' plan.md
+        echo
+        echo "## Assets"
+        find public src/assets -maxdepth 2 -type f | sort
+      } > "$ARTIFACTS_DIR/repo-snapshot.md"
+      printf '{"artifact":"%s/repo-snapshot.md"}\n' "$ARTIFACTS_DIR"
+    timeout: 30000
+
+  - id: prepare
+    depends_on: [repo-snapshot]
+    prompt: |
+      Prepare the requested interactive Hop & Fill Yandex Games release task.
+
+      Read:
+      - $ARTIFACTS_DIR/repo-snapshot.md
+      - plan.md
+
+      Scope:
+      - If the request is about screenshots/media, draft a concrete gameplay shot list:
+        levels/themes to capture, game states, viewport sizes, what each shot proves,
+        and any assets or routes needed before capture.
+      - If the request is about asset rights/licensing, draft an asset provenance
+        checklist: every asset group to confirm, what evidence is needed, and which
+        uncertain items require user confirmation.
+
+      Write the draft to:
+      - $ARTIFACTS_DIR/release-interactive-draft.md
+
+      Then return the draft and the exact questions the user must answer before
+      finalizing. Keep the questions concise and actionable.
+
+  - id: user-approval
+    depends_on: [prepare]
+    approval:
+      message: "$prepare.output"
+      capture_response: true
+      on_reject:
+        prompt: |
+          Revise the interactive release draft based on the rejection reason:
+          $REJECTION_REASON
+
+          Keep the task scoped to $ARGUMENTS. Update:
+          - $ARTIFACTS_DIR/release-interactive-draft.md
+
+          Return the revised draft and concise approval questions.
+        max_attempts: 3
+
+  - id: finalize
+    depends_on: [user-approval]
+    prompt: |
+      Finalize the interactive Hop & Fill Yandex release artifact.
+
+      Read:
+      - $ARTIFACTS_DIR/release-interactive-draft.md
+      - the user's approval/feedback: $user-approval.output
+
+      Create or update docs under:
+      - docs/yandex-release/
+
+      Use the most specific filename for the requested task:
+      - screenshot-shot-list.md for gameplay screenshots/media
+      - asset-rights-checklist.md for asset provenance/licensing
+
+      Include:
+      - final decisions
+      - remaining user-confirmed assumptions
+      - concrete next manual steps
+      - links or file paths to any local assets referenced
+
+      Do not edit gameplay code in this workflow.
+
+  - id: summary
+    depends_on: [finalize]
+    prompt: |
+      Summarize the finalized interactive release task.
+
+      Include:
+      - what document was created or updated
+      - what the user approved
+      - remaining manual steps
+      - artifact path under $ARTIFACTS_DIR
+
+      Keep it concise.
+    context: fresh

@@ -1,0 +1,51 @@
+name: crash-cubes-plan-iterative
+description: |
+  Runs the Hop and Fill Archon roadmap autonomously through crash-cubes-dev.
+  One invocation can keep working for hours: it tracks step status in
+  .archon/state/plan-status.yaml, waits for active child workflows, retries
+  blocked infrastructure cases, and keeps iterating on the same step until it
+  reaches passing validation and an acceptable review verdict.
+
+  Use when continuing the Hop and Fill Archon roadmap one focused slice at a
+  time and you need status persisted across sessions with minimal babysitting.
+
+provider: codex
+modelReasoningEffort: high
+webSearchMode: disabled
+
+worktree:
+  enabled: false
+
+nodes:
+  - id: autonomous-run
+    bash: |
+      set -euo pipefail
+      mkdir -p "$ARTIFACTS_DIR"
+      node .archon/scripts/plan-autonomous-runner.mjs \
+        --state .archon/state/plan-status.yaml \
+        --artifacts-dir "$ARTIFACTS_DIR" \
+        --workflow crash-cubes-dev \
+        --max-hours 8 \
+        --poll-seconds 60 \
+        --max-iterations 999
+    timeout: 32400000
+
+  - id: summary
+    depends_on: [autonomous-run]
+    prompt: |
+      Summarize the autonomous Archon execution result for the user.
+
+      Read:
+      - .archon/state/plan-status.yaml
+      - $ARTIFACTS_DIR/runner-report.json if it exists
+      - $ARTIFACTS_DIR/runner.log if it exists
+
+      Include:
+      - what steps or retries happened during this invocation
+      - the current actionable step and its status
+      - whether the runner is ready to advance or must keep retrying the same step
+      - where to inspect the runner report/log
+      - the state file path
+
+      Keep it concise and factual.
+    context: fresh
