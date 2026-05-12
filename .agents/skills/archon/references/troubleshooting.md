@@ -12,13 +12,13 @@ Workflow run logs are written as JSONL per run:
 
 Each line is a structured event. The discriminator is the `type` field. Values (see `packages/workflows/src/logger.ts` for the canonical list):
 
-| `type` | Meaning |
-|--------|---------|
-| `workflow_start` / `workflow_complete` / `workflow_error` | Run lifecycle |
-| `node_start` / `node_complete` / `node_error` / `node_skipped` | Node lifecycle |
-| `assistant` | AI assistant message — has `content` field with the full AI output |
-| `tool` | SDK tool invocation — has `tool_name`, `tool_input`, `duration_ms`, and optionally `tokens` |
-| `validation` | Workflow-level validation event — has `check` and `result` (`pass` / `fail` / `warn` / `unknown`) |
+| `type`                                                         | Meaning                                                                                           |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `workflow_start` / `workflow_complete` / `workflow_error`      | Run lifecycle                                                                                     |
+| `node_start` / `node_complete` / `node_error` / `node_skipped` | Node lifecycle                                                                                    |
+| `assistant`                                                    | AI assistant message — has `content` field with the full AI output                                |
+| `tool`                                                         | SDK tool invocation — has `tool_name`, `tool_input`, `duration_ms`, and optionally `tokens`       |
+| `validation`                                                   | Workflow-level validation event — has `check` and `result` (`pass` / `fail` / `warn` / `unknown`) |
 
 > **Loop iterations and per-attempt retry events are NOT in the JSONL file.** They go through the workflow event emitter (WebSocket / `workflow_events` DB table) under `loop_iteration_started` / `loop_iteration_completed` etc. To see them, query the DB or the Web UI dashboard — not the JSONL log.
 
@@ -59,6 +59,7 @@ Artifacts are **external** to the repo on purpose — they don't pollute git.
 A node references `$BASE_BRANCH` in its prompt, but neither git auto-detection nor `worktree.baseBranch` in `.archon/config.yaml` produced a branch.
 
 **Fix:**
+
 1. Set `worktree.baseBranch: main` (or `dev`, or whatever) in `.archon/config.yaml`.
 2. Or pass `--from <branch>` on `archon workflow run`.
 3. Or remove the `$BASE_BRANCH` reference if the node doesn't actually need it.
@@ -68,12 +69,14 @@ A node references `$BASE_BRANCH` in its prompt, but neither git auto-detection n
 Compiled-binary builds of Archon no longer embed Claude Code / Codex — you install them separately and Archon resolves the binary via env var or config.
 
 **Fix (Claude):**
+
 - Install: `curl -fsSL https://claude.ai/install.sh | bash` (or `npm install -g @anthropic-ai/claude-code`)
 - Set `CLAUDE_BIN_PATH=/path/to/claude` in `~/.archon/.env`, OR
 - Set `assistants.claude.claudeBinaryPath: /absolute/path` in `.archon/config.yaml`
 - Autodetect covers `$HOME/.local/bin/claude` (native installer) — no config needed if you used that path
 
 **Fix (Codex):**
+
 - Install: `npm install -g @openai/codex` (or platform-specific instructions)
 - Set `CODEX_CLI_PATH=/path/to/codex` or `assistants.codex.codexBinaryPath` in config
 - Autodetect covers the standard npm / Homebrew locations per platform

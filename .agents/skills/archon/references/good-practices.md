@@ -21,7 +21,7 @@ AI nodes are expensive, non-reproducible, and can hallucinate. Use `bash:` or `s
 # GOOD
 - id: classify
   prompt: "Classify as BUG or FEATURE"
-  output_format:                          # enforces the JSON shape
+  output_format: # enforces the JSON shape
     type: object
     properties:
       type: { type: string, enum: [BUG, FEATURE] }
@@ -30,7 +30,7 @@ AI nodes are expensive, non-reproducible, and can hallucinate. Use `bash:` or `s
 - id: investigate
   command: investigate-bug
   depends_on: [classify]
-  when: "$classify.output.type == 'BUG'"  # safe field access
+  when: "$classify.output.type == 'BUG'" # safe field access
 
 # BAD
 - id: classify
@@ -40,7 +40,7 @@ AI nodes are expensive, non-reproducible, and can hallucinate. Use `bash:` or `s
 - id: investigate
   command: investigate-bug
   depends_on: [classify]
-  when: "$classify.output == 'BUG'"       # fragile string match
+  when: "$classify.output == 'BUG'" # fragile string match
 ```
 
 ### 3. `trigger_rule: none_failed_min_one_success` after conditional branches
@@ -61,7 +61,7 @@ After `when:`-gated branches, the downstream merge node will see one or more **s
 - id: implement
   command: implement
   depends_on: [investigate, plan]
-  trigger_rule: none_failed_min_one_success   # CORRECT — exactly one ran
+  trigger_rule: none_failed_min_one_success # CORRECT — exactly one ran
   # trigger_rule: all_success               ← would fail here (one dep skipped)
 ```
 
@@ -93,13 +93,13 @@ Classification, routing, formatting, and short summaries don't need Opus. Use `m
 ```yaml
 - id: classify
   prompt: "Classify this issue"
-  model: haiku              # fast + cheap
-  allowed_tools: []         # no tool overhead
+  model: haiku # fast + cheap
+  allowed_tools: [] # no tool overhead
   output_format: { ... }
 
 - id: implement
   command: implement-fix
-  model: sonnet             # where the thinking happens
+  model: sonnet # where the thinking happens
 ```
 
 ### 6. Write the workflow description for routing
@@ -121,6 +121,7 @@ archon validate workflows <name>     # YAML + DAG structure + resource refs
 This checks: YAML syntax, node ID uniqueness, no cycles, all `depends_on` exist, all `$nodeId.output` refs point to known nodes, all `command:` files exist, all `mcp:` configs parse, all `skills:` directories exist, provider/model compatibility, named script existence, runtime availability. Fix everything it reports before first run.
 
 For brand-new workflows, also:
+
 1. Run once against a trivial input (`archon workflow run my-workflow --branch test/sanity "hello"`)
 2. Check the run log at `~/.archon/workspaces/<owner>/<repo>/logs/<run-id>.jsonl`
 3. Check artifacts at `~/.archon/workspaces/<owner>/<repo>/artifacts/runs/<run-id>/`
@@ -131,11 +132,11 @@ See `references/troubleshooting.md` for how to read those.
 
 In a multi-node workflow, each node's artifact IS the specification for the next node. Before writing any command body, map out:
 
-| Node | Reads | Writes |
-|------|-------|--------|
-| `investigate-issue` | GitHub issue via `gh` | `$ARTIFACTS_DIR/issues/issue-{n}.md` |
-| `implement-issue` | Artifact from `investigate-issue` | Code files, tests |
-| `create-pr` | Git diff | GitHub PR, `$ARTIFACTS_DIR/pr-body.md` |
+| Node                | Reads                             | Writes                                 |
+| ------------------- | --------------------------------- | -------------------------------------- |
+| `investigate-issue` | GitHub issue via `gh`             | `$ARTIFACTS_DIR/issues/issue-{n}.md`   |
+| `implement-issue`   | Artifact from `investigate-issue` | Code files, tests                      |
+| `create-pr`         | Git diff                          | GitHub PR, `$ARTIFACTS_DIR/pr-body.md` |
 
 If a downstream agent can't execute from just its artifact, the artifact is incomplete. This is the single most common failure mode in multi-node workflows.
 
@@ -163,7 +164,7 @@ For read-only workflows (triage, reporting, code analysis), pin `worktree.enable
 - id: react-to-tests
   prompt: "Fix any failures: $test.output"
   depends_on: [test]
-  trigger_rule: all_done            # run even if tests failed
+  trigger_rule: all_done # run even if tests failed
 ```
 
 ### ❌ Pattern-matching free-form AI output in `when:`
@@ -174,7 +175,7 @@ For read-only workflows (triage, reporting, code analysis), pin `worktree.enable
   prompt: "Should we proceed? Answer yes or no."
 - id: do-thing
   depends_on: [decide]
-  when: "$decide.output == 'yes'"    # AI says "Yes!" or "Yes, because..." — no match
+  when: "$decide.output == 'yes'" # AI says "Yes!" or "Yes, because..." — no match
 
 # GOOD
 - id: decide
@@ -192,9 +193,11 @@ For read-only workflows (triage, reporting, code analysis), pin `worktree.enable
 
 ```markdown
 <!-- BAD — implement.md -->
+
 Fix the bug we discussed in the investigation phase.
 
 <!-- GOOD — implement.md -->
+
 Read the investigation at `$ARTIFACTS_DIR/issues/issue-{n}.md`.
 Extract the root cause, affected files, and implementation plan.
 Implement the changes exactly as specified in the plan.
@@ -227,7 +230,7 @@ Web UI dispatches non-interactive workflows to a background worker that cannot d
 - id: analyze
   prompt: "Use the Postgres MCP to query users"
   mcp: .archon/mcp/postgres.json
-  allowed_tools: []          # OOPS — disables EVERYTHING, including MCP tools
+  allowed_tools: [] # OOPS — disables EVERYTHING, including MCP tools
 
 # FIXED — Archon auto-adds mcp__<server>__* wildcards when mcp: is set,
 # so this actually works out of the box. The anti-pattern is forgetting
@@ -235,7 +238,7 @@ Web UI dispatches non-interactive workflows to a background worker that cannot d
 - id: analyze
   prompt: "Use Postgres MCP to query users"
   mcp: .archon/mcp/postgres.json
-  allowed_tools: []          # correct — MCP tools auto-attached
+  allowed_tools: [] # correct — MCP tools auto-attached
 ```
 
 Caveat: this only helps Claude. Codex gets MCP config from `~/.codex/config.toml` globally, not per-node.

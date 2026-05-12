@@ -4,21 +4,22 @@ These features are available on **command and prompt nodes** (hooks, MCP, skills
 
 ## Provider Compatibility
 
-| Feature | Claude (per-node) | Codex (per-node) | Codex (global) |
-|---------|-------------------|------------------|----------------|
-| `hooks` | Supported | Ignored | Not available |
-| `mcp` | Supported | Ignored | `~/.codex/config.toml` `[mcp_servers.*]` |
-| `skills` | Supported | Ignored | `~/.agents/skills/` or `.agents/skills/` |
-| `allowed_tools` / `denied_tools` | Supported | Ignored | `enabled_tools` / `disabled_tools` per MCP server in config.toml |
-| `output_format` | Supported | Supported | — |
-| `retry` | Supported | Supported | — |
-| `model` / `provider` per-node | Supported | Supported | — |
+| Feature                          | Claude (per-node) | Codex (per-node) | Codex (global)                                                   |
+| -------------------------------- | ----------------- | ---------------- | ---------------------------------------------------------------- |
+| `hooks`                          | Supported         | Ignored          | Not available                                                    |
+| `mcp`                            | Supported         | Ignored          | `~/.codex/config.toml` `[mcp_servers.*]`                         |
+| `skills`                         | Supported         | Ignored          | `~/.agents/skills/` or `.agents/skills/`                         |
+| `allowed_tools` / `denied_tools` | Supported         | Ignored          | `enabled_tools` / `disabled_tools` per MCP server in config.toml |
+| `output_format`                  | Supported         | Supported        | —                                                                |
+| `retry`                          | Supported         | Supported        | —                                                                |
+| `model` / `provider` per-node    | Supported         | Supported        | —                                                                |
 
 ### Claude vs Codex: How Each Gets MCP and Skills
 
 **Claude**: MCP servers and skills are configured **per-node** in the workflow YAML via `mcp:` and `skills:` fields. Each node can have different MCP servers and skills.
 
 **Codex**: MCP servers and skills are configured **globally** — they apply to all Codex nodes in the workflow:
+
 - **MCP servers**: Add to `~/.codex/config.toml` (or `.codex/config.toml` in the repo):
   ```toml
   [mcp_servers.github]
@@ -49,18 +50,18 @@ Hooks intercept tool calls during a node's AI execution. Use them to approve/den
   prompt: "Analyze the codebase"
   hooks:
     PreToolUse:
-      - matcher: "Bash"                    # Regex on tool name (optional)
-        response:                          # Required: SDK SyncHookJSONOutput
+      - matcher: "Bash" # Regex on tool name (optional)
+        response: # Required: SDK SyncHookJSONOutput
           hookSpecificOutput:
-            hookEventName: PreToolUse      # Must match the event key
+            hookEventName: PreToolUse # Must match the event key
             permissionDecision: deny
             permissionDecisionReason: "No shell access in analysis phase"
-        timeout: 30                        # Seconds (optional, default: 60)
+        timeout: 30 # Seconds (optional, default: 60)
     PostToolUse:
       - matcher: "Read"
         response:
           systemMessage: "You just read a file. Stay focused on analysis — do not modify anything."
-      - response:                          # No matcher = fires on every tool
+      - response: # No matcher = fires on every tool
           systemMessage: "Verify this output is relevant."
 ```
 
@@ -72,41 +73,42 @@ Full list: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `Notification`, `U
 
 ### Matcher Fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `matcher` | string | No | Regex pattern to filter by tool name. Omit to match all |
-| `response` | object | **Yes** | The `SyncHookJSONOutput` returned when hook fires |
-| `timeout` | number | No | Timeout in **seconds** (default: 60) |
+| Field      | Type   | Required | Description                                             |
+| ---------- | ------ | -------- | ------------------------------------------------------- |
+| `matcher`  | string | No       | Regex pattern to filter by tool name. Omit to match all |
+| `response` | object | **Yes**  | The `SyncHookJSONOutput` returned when hook fires       |
+| `timeout`  | number | No       | Timeout in **seconds** (default: 60)                    |
 
 ### Response Fields
 
-| Field | Type | Effect |
-|-------|------|--------|
-| `hookSpecificOutput` | object | Event-specific payload. Must include `hookEventName` matching the outer event key |
-| `systemMessage` | string | Inject a message visible to the AI model |
-| `continue` | boolean | Set to `false` to stop the agent |
-| `stopReason` | string | Reason when stopping |
-| `decision` | `approve` / `block` | Top-level approve/block decision |
+| Field                | Type                | Effect                                                                            |
+| -------------------- | ------------------- | --------------------------------------------------------------------------------- |
+| `hookSpecificOutput` | object              | Event-specific payload. Must include `hookEventName` matching the outer event key |
+| `systemMessage`      | string              | Inject a message visible to the AI model                                          |
+| `continue`           | boolean             | Set to `false` to stop the agent                                                  |
+| `stopReason`         | string              | Reason when stopping                                                              |
+| `decision`           | `approve` / `block` | Top-level approve/block decision                                                  |
 
 ### PreToolUse hookSpecificOutput
 
-| Field | Effect |
-|-------|--------|
-| `permissionDecision` | `deny` / `allow` / `ask` |
-| `permissionDecisionReason` | Human-readable reason |
-| `updatedInput` | Object to replace tool arguments |
-| `additionalContext` | Extra context injected into the conversation |
+| Field                      | Effect                                       |
+| -------------------------- | -------------------------------------------- |
+| `permissionDecision`       | `deny` / `allow` / `ask`                     |
+| `permissionDecisionReason` | Human-readable reason                        |
+| `updatedInput`             | Object to replace tool arguments             |
+| `additionalContext`        | Extra context injected into the conversation |
 
 ### PostToolUse hookSpecificOutput
 
-| Field | Effect |
-|-------|--------|
-| `additionalContext` | Context injected after the tool runs |
-| `updatedMCPToolOutput` | Replace MCP tool output |
+| Field                  | Effect                               |
+| ---------------------- | ------------------------------------ |
+| `additionalContext`    | Context injected after the tool runs |
+| `updatedMCPToolOutput` | Replace MCP tool output              |
 
 ### Common Patterns
 
 **Deny specific tools:**
+
 ```yaml
 hooks:
   PreToolUse:
@@ -119,6 +121,7 @@ hooks:
 ```
 
 **Inject guidance after file reads:**
+
 ```yaml
 hooks:
   PostToolUse:
@@ -128,6 +131,7 @@ hooks:
 ```
 
 **Emergency stop on shell access:**
+
 ```yaml
 hooks:
   PreToolUse:
@@ -139,11 +143,11 @@ hooks:
 
 ### Hooks vs Tool Restrictions
 
-| Mechanism | Granularity | Effect |
-|-----------|------------|--------|
-| `allowed_tools` | Coarse | Tools not in list are invisible to AI |
-| `denied_tools` | Coarse | Listed tools are invisible to AI |
-| `hooks.PreToolUse` | Fine | Tool is visible but call can be denied/modified/annotated |
+| Mechanism          | Granularity | Effect                                                    |
+| ------------------ | ----------- | --------------------------------------------------------- |
+| `allowed_tools`    | Coarse      | Tools not in list are invisible to AI                     |
+| `denied_tools`     | Coarse      | Listed tools are invisible to AI                          |
+| `hooks.PreToolUse` | Fine        | Tool is visible but call can be denied/modified/annotated |
 
 Use `allowed_tools`/`denied_tools` for hard restrictions. Use hooks when you want the AI to know the tool exists but have guardrails on how it's used.
 
@@ -160,8 +164,8 @@ Connect external tool servers to individual nodes.
 ```yaml
 - id: github-analysis
   prompt: "Analyze recent PRs using GitHub MCP tools"
-  mcp: .archon/mcp/github.json          # Path relative to repo root
-  allowed_tools: []                      # MCP-only mode (no built-in tools)
+  mcp: .archon/mcp/github.json # Path relative to repo root
+  allowed_tools: [] # MCP-only mode (no built-in tools)
 ```
 
 ### Config File Format
@@ -183,6 +187,7 @@ The JSON file defines one or more MCP servers:
 **Transport types:**
 
 stdio (default):
+
 ```json
 {
   "my-server": {
@@ -194,6 +199,7 @@ stdio (default):
 ```
 
 HTTP:
+
 ```json
 {
   "my-server": {
@@ -205,6 +211,7 @@ HTTP:
 ```
 
 SSE:
+
 ```json
 {
   "my-server": {
@@ -232,7 +239,7 @@ Combine `mcp:` with `allowed_tools: []` for nodes that should ONLY use MCP tools
 - id: notify
   prompt: "Send a notification that the workflow completed"
   mcp: .archon/mcp/ntfy.json
-  allowed_tools: []                    # No built-in tools, MCP only
+  allowed_tools: [] # No built-in tools, MCP only
 ```
 
 ---
@@ -249,13 +256,14 @@ Preload domain knowledge into a node via Claude Code skills.
 - id: generate
   prompt: "Create a Remotion animation for: $ARGUMENTS"
   skills:
-    - remotion-best-practices          # Must be installed in .claude/skills/
+    - remotion-best-practices # Must be installed in .claude/skills/
   allowed_tools: [Read, Write, Edit, Glob]
 ```
 
 ### How It Works
 
 When `skills:` is set, the node is wrapped in a Claude SDK `AgentDefinition`:
+
 - The skill content is injected into the agent's context at startup
 - The `Skill` tool is automatically added to the node's allowed tools
 - The agent gets a system prompt listing the preloaded skills
@@ -272,6 +280,7 @@ mkdir -p .claude/skills/my-skill
 ```
 
 Skills are discovered from:
+
 - `.claude/skills/` (project-level)
 - `~/.claude/skills/` (user-level, global)
 
@@ -285,7 +294,7 @@ Skills provide **knowledge** (how to do something). MCP provides **capability** 
   skills:
     - github-triage-guide
   mcp: .archon/mcp/github.json
-  allowed_tools: []                    # MCP tools + skill knowledge
+  allowed_tools: [] # MCP tools + skill knowledge
 ```
 
 ---
@@ -298,18 +307,18 @@ Available on command, prompt, and bash nodes. **Not supported on loop nodes** (h
 - id: deploy
   bash: "deploy.sh"
   retry:
-    max_attempts: 3                    # 1-5 (required when retry is set)
-    delay_ms: 5000                     # 1000-60000, default 3000. Doubles each attempt
-    on_error: all                      # 'transient' (default) or 'all'
+    max_attempts: 3 # 1-5 (required when retry is set)
+    delay_ms: 5000 # 1000-60000, default 3000. Doubles each attempt
+    on_error: all # 'transient' (default) or 'all'
 ```
 
 ### Error Classification
 
-| Category | Examples | Retried? |
-|----------|----------|----------|
-| **FATAL** | `unauthorized`, `forbidden`, `permission denied`, `invalid token`, `authentication failed`, `auth error`, `401`, `403`, `credit balance` | Never |
-| **TRANSIENT** | `timeout`, `etimedout`, `rate limit`, `too many requests`, `429`, `502`, `503`, `econnrefused`, `econnreset`, `network error`, `socket hang up`, `exited with code`, `claude code crash` | By default |
-| **UNKNOWN** | Everything else | Only with `on_error: all` |
+| Category      | Examples                                                                                                                                                                                 | Retried?                  |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| **FATAL**     | `unauthorized`, `forbidden`, `permission denied`, `invalid token`, `authentication failed`, `auth error`, `401`, `403`, `credit balance`                                                 | Never                     |
+| **TRANSIENT** | `timeout`, `etimedout`, `rate limit`, `too many requests`, `429`, `502`, `503`, `econnrefused`, `econnreset`, `network error`, `socket hang up`, `exited with code`, `claude code crash` | By default                |
+| **UNKNOWN**   | Everything else                                                                                                                                                                          | Only with `on_error: all` |
 
 FATAL patterns take priority over TRANSIENT patterns in the same error message.
 
@@ -325,7 +334,7 @@ Separate from retry — controls how long a node can be idle (no output) before 
 ```yaml
 - id: long-running
   command: full-analysis
-  idle_timeout: 600000                 # 10 minutes (default: 5 minutes / 300000ms)
+  idle_timeout: 600000 # 10 minutes (default: 5 minutes / 300000ms)
 ```
 
 For bash nodes, use `timeout:` instead (controls total script execution time, default: 120000ms).

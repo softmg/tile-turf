@@ -10,7 +10,9 @@ function Index() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-8">
       <div className="text-center">
         <h1 className="text-3xl font-bold text-foreground">Isometric 8×8 Grid</h1>
-        <p className="text-muted-foreground mt-2">Move across tiles, paint turf, and bank points with chests.</p>
+        <p className="text-muted-foreground mt-2">
+          Move across tiles, paint turf, and bank points with chests.
+        </p>
       </div>
       <IsoGrid />
     </div>

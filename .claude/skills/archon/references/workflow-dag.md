@@ -10,14 +10,14 @@ name: my-workflow
 description: What this workflow does
 
 # Optional — workflow-level provider/model (inherited by all nodes)
-provider: claude                    # 'claude' or 'codex' (default: from config)
-model: sonnet                       # Model override
+provider: claude # 'claude' or 'codex' (default: from config)
+model: sonnet # Model override
 
 # Required — the nodes array
 nodes:
-  - id: node-name                   # Unique identifier
-    prompt: "Inline AI prompt"      # OR command: name  OR bash: "script"  OR loop: {...}
-    depends_on: [other-node]        # Node IDs that must complete first
+  - id: node-name # Unique identifier
+    prompt: "Inline AI prompt" # OR command: name  OR bash: "script"  OR loop: {...}
+    depends_on: [other-node] # Node IDs that must complete first
 ```
 
 ## Workflow-Level Fields
@@ -26,18 +26,18 @@ Top-level YAML fields on a workflow object. Per-node overrides (same name under 
 
 ### Core
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string (required) | Workflow identifier (used in `archon workflow run <name>`) |
-| `description` | string (required) | Human-readable summary. Used for routing; see [Workflow Description Best Practices](https://archon.diy/guides/authoring-workflows/#workflow-description-best-practices) |
-| `provider` | string | AI provider (e.g. `claude`, `codex`, `pi`). Default: from `.archon/config.yaml` |
-| `model` | string | Model override. Claude: `sonnet` \| `opus` \| `haiku` \| `claude-*` \| `inherit`. Codex: any non-Claude model ID |
-| `interactive` | boolean | **Required for web UI** when the workflow has approval gates or `loop.interactive` nodes. Forces foreground execution so gate messages reach the user's chat. Default: `false` (background on web) |
+| Field         | Type              | Description                                                                                                                                                                                        |
+| ------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | string (required) | Workflow identifier (used in `archon workflow run <name>`)                                                                                                                                         |
+| `description` | string (required) | Human-readable summary. Used for routing; see [Workflow Description Best Practices](https://archon.diy/guides/authoring-workflows/#workflow-description-best-practices)                            |
+| `provider`    | string            | AI provider (e.g. `claude`, `codex`, `pi`). Default: from `.archon/config.yaml`                                                                                                                    |
+| `model`       | string            | Model override. Claude: `sonnet` \| `opus` \| `haiku` \| `claude-*` \| `inherit`. Codex: any non-Claude model ID                                                                                   |
+| `interactive` | boolean           | **Required for web UI** when the workflow has approval gates or `loop.interactive` nodes. Forces foreground execution so gate messages reach the user's chat. Default: `false` (background on web) |
 
 ### Isolation
 
-| Field | Type | Description |
-|-------|------|-------------|
+| Field              | Type    | Description                                                                                                                                                                                                                                         |
+| ------------------ | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `worktree.enabled` | boolean | Pin isolation regardless of caller. `false` = always live checkout (CLI `--branch`/`--from` hard-error). `true` = always worktree (CLI `--no-worktree` hard-errors). Omit = caller decides. Use `false` for read-only workflows (triage, reporting) |
 
 Other worktree config (`baseBranch`, `copyFiles`, `initSubmodules`, `path`) lives in `.archon/config.yaml`, not the workflow YAML — see `references/repo-init.md`.
@@ -46,23 +46,23 @@ Other worktree config (`baseBranch`, `copyFiles`, `initSubmodules`, `path`) live
 
 These fields apply to Claude nodes workflow-wide; each can be overridden per-node. Codex nodes ignore them with a warning.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `effort` | `'low'` \| `'medium'` \| `'high'` \| `'max'` | Claude Agent SDK reasoning depth. Different from Codex `modelReasoningEffort` below |
-| `thinking` | string \| object | Extended thinking. String shorthand: `'adaptive'` \| `'enabled'` \| `'disabled'`. Object form: `{ type: 'enabled', budgetTokens: 8000 }` |
-| `fallbackModel` | string | Model to use if the primary model fails (e.g. `claude-haiku-4-5-20251001`) |
-| `betas` | string[] | SDK beta feature flags (non-empty array). Example: `['context-1m-2025-08-07']` for 1M-context Claude |
-| `sandbox` | object | OS-level filesystem/network restrictions. Nested `network` / `filesystem` sub-objects — see [archon.diy/guides/authoring-workflows/#claude-sdk-advanced-options](https://archon.diy/guides/authoring-workflows/#claude-sdk-advanced-options) for the full schema. Layers on top of worktree isolation |
+| Field           | Type                                         | Description                                                                                                                                                                                                                                                                                           |
+| --------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `effort`        | `'low'` \| `'medium'` \| `'high'` \| `'max'` | Claude Agent SDK reasoning depth. Different from Codex `modelReasoningEffort` below                                                                                                                                                                                                                   |
+| `thinking`      | string \| object                             | Extended thinking. String shorthand: `'adaptive'` \| `'enabled'` \| `'disabled'`. Object form: `{ type: 'enabled', budgetTokens: 8000 }`                                                                                                                                                              |
+| `fallbackModel` | string                                       | Model to use if the primary model fails (e.g. `claude-haiku-4-5-20251001`)                                                                                                                                                                                                                            |
+| `betas`         | string[]                                     | SDK beta feature flags (non-empty array). Example: `['context-1m-2025-08-07']` for 1M-context Claude                                                                                                                                                                                                  |
+| `sandbox`       | object                                       | OS-level filesystem/network restrictions. Nested `network` / `filesystem` sub-objects — see [archon.diy/guides/authoring-workflows/#claude-sdk-advanced-options](https://archon.diy/guides/authoring-workflows/#claude-sdk-advanced-options) for the full schema. Layers on top of worktree isolation |
 
 Per-node-only (NOT valid at workflow level): `maxBudgetUsd`, `systemPrompt`.
 
 ### Codex-Specific Options
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `modelReasoningEffort` | `'minimal'` \| `'low'` \| `'medium'` \| `'high'` \| `'xhigh'` | Codex reasoning depth. Separate field from Claude's `effort` |
-| `webSearchMode` | `'disabled'` \| `'cached'` \| `'live'` | Codex web search behavior. Default: `disabled` |
-| `additionalDirectories` | string[] | Absolute paths Codex can read outside the codebase (shared libraries, docs repos) |
+| Field                   | Type                                                          | Description                                                                       |
+| ----------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `modelReasoningEffort`  | `'minimal'` \| `'low'` \| `'medium'` \| `'high'` \| `'xhigh'` | Codex reasoning depth. Separate field from Claude's `effort`                      |
+| `webSearchMode`         | `'disabled'` \| `'cached'` \| `'live'`                        | Codex web search behavior. Default: `disabled`                                    |
+| `additionalDirectories` | string[]                                                      | Absolute paths Codex can read outside the codebase (shared libraries, docs repos) |
 
 ### Complete workflow-level example
 
@@ -73,22 +73,22 @@ description: |
   sandbox and cost limits. Used by the ops team before destructive work.
 provider: claude
 model: sonnet
-interactive: true                   # required — this workflow has an approval gate
+interactive: true # required — this workflow has an approval gate
 
 worktree:
-  enabled: true                     # always isolate; reject --no-worktree
+  enabled: true # always isolate; reject --no-worktree
 
 effort: high
 thinking: adaptive
 fallbackModel: claude-haiku-4-5-20251001
-betas: ['context-1m-2025-08-07']
+betas: ["context-1m-2025-08-07"]
 sandbox:
   enabled: true
   network:
-    allowedDomains: ['api.github.com']
+    allowedDomains: ["api.github.com"]
     allowManagedDomainsOnly: true
   filesystem:
-    denyWrite: ['/etc', '/usr']
+    denyWrite: ["/etc", "/usr"]
 
 nodes:
   - id: plan
@@ -107,14 +107,18 @@ nodes:
 Each node must have exactly ONE of these fields: `command`, `prompt`, `bash`, `script`, `loop`, `approval`, or `cancel`.
 
 ### Command Node
+
 Runs a command file from `.archon/commands/`:
+
 ```yaml
 - id: investigate
-  command: investigate-issue         # Loads .archon/commands/investigate-issue.md
+  command: investigate-issue # Loads .archon/commands/investigate-issue.md
 ```
 
 ### Prompt Node
+
 Runs an inline AI prompt:
+
 ```yaml
 - id: classify
   prompt: |
@@ -123,12 +127,14 @@ Runs an inline AI prompt:
 ```
 
 ### Bash Node
+
 Runs a shell script without AI:
+
 ```yaml
 - id: fetch-data
   bash: |
     gh issue view 123 --json title,body,labels
-  timeout: 30000                    # ms, default: 120000 (2 min)
+  timeout: 30000 # ms, default: 120000 (2 min)
 ```
 
 - Script runs via `bash -c`
@@ -139,20 +145,23 @@ Runs a shell script without AI:
 - `$nodeId.output` substitutions are **auto shell-quoted** (safe to embed)
 
 ### Script Node
+
 Runs TypeScript/JavaScript (via `bun`) or Python (via `uv`) without AI. Same stdout/stderr contract as bash nodes.
 
 **Inline script (TypeScript):**
+
 ```yaml
 - id: parse
   script: |
     const raw = process.argv.slice(2).join(' ') || '{}';
     const data = JSON.parse(raw);
     console.log(JSON.stringify({ items: data.items?.length ?? 0 }));
-  runtime: bun                      # REQUIRED: 'bun' or 'uv'
-  timeout: 30000                    # ms, default: 120000
+  runtime: bun # REQUIRED: 'bun' or 'uv'
+  timeout: 30000 # ms, default: 120000
 ```
 
 **Inline script (Python) with uv dependencies:**
+
 ```yaml
 - id: fetch
   script: |
@@ -160,14 +169,15 @@ Runs TypeScript/JavaScript (via `bun`) or Python (via `uv`) without AI. Same std
     r = httpx.get("https://api.github.com/repos/anthropics/anthropic-cookbook")
     print(json.dumps({ "stars": r.json()["stargazers_count"] }))
   runtime: uv
-  deps: ["httpx>=0.27"]             # Optional — 'uv run --with <dep>'. Ignored for bun.
+  deps: ["httpx>=0.27"] # Optional — 'uv run --with <dep>'. Ignored for bun.
 ```
 
 **Named script from `.archon/scripts/`:**
+
 ```yaml
 - id: analyze
-  script: analyze-metrics           # Resolves .archon/scripts/analyze-metrics.py
-  runtime: uv                       # Must match file extension (.ts/.js → bun, .py → uv)
+  script: analyze-metrics # Resolves .archon/scripts/analyze-metrics.py
+  runtime: uv # Must match file extension (.ts/.js → bun, .py → uv)
   deps: ["pandas>=2.0"]
 ```
 
@@ -187,19 +197,21 @@ Runs TypeScript/JavaScript (via `bun`) or Python (via `uv`) without AI. Same std
 - AI-specific fields (`model`, `provider`, `hooks`, `mcp`, `skills`, `output_format`, `allowed_tools`, `denied_tools`, `agents`, `effort`, `thinking`, `maxBudgetUsd`, `systemPrompt`, `fallbackModel`, `betas`, `sandbox`) emit a loader warning and are ignored
 
 ### Loop Node
+
 Iterates an AI prompt until a completion signal or max iterations:
+
 ```yaml
 - id: implement
   depends_on: [setup]
-  idle_timeout: 600000              # Per-iteration idle timeout (ms)
+  idle_timeout: 600000 # Per-iteration idle timeout (ms)
   loop:
     prompt: |
       Read the PRD and implement the next unfinished story.
       When all stories are done: <promise>COMPLETE</promise>
-    until: COMPLETE                 # Completion signal string
-    max_iterations: 10              # Hard limit — node fails if exceeded
-    fresh_context: true             # true = fresh session each iteration
-    until_bash: "bun run test"      # Optional: exit 0 = complete
+    until: COMPLETE # Completion signal string
+    max_iterations: 10 # Hard limit — node fails if exceeded
+    fresh_context: true # true = fresh session each iteration
+    until_bash: "bun run test" # Optional: exit 0 = complete
 ```
 
 See the dedicated **Loop Nodes** section below for full details.
@@ -208,28 +220,28 @@ See the dedicated **Loop Nodes** section below for full details.
 
 All node types share these fields:
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `id` | string | **required** | Unique node identifier |
-| `depends_on` | string[] | `[]` | Node IDs that must settle before this node runs |
-| `when` | string | — | Condition expression. Node **skipped** when false |
-| `trigger_rule` | string | `all_success` | Join semantics for multiple dependencies |
-| `idle_timeout` | number (ms) | 300000 | Idle timeout for AI streaming (`command`, `prompt`) and per-iteration idle for `loop`. Accepted but ignored on `bash` and `script` — use `timeout` there |
+| Field          | Type        | Default       | Description                                                                                                                                              |
+| -------------- | ----------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | string      | **required**  | Unique node identifier                                                                                                                                   |
+| `depends_on`   | string[]    | `[]`          | Node IDs that must settle before this node runs                                                                                                          |
+| `when`         | string      | —             | Condition expression. Node **skipped** when false                                                                                                        |
+| `trigger_rule` | string      | `all_success` | Join semantics for multiple dependencies                                                                                                                 |
+| `idle_timeout` | number (ms) | 300000        | Idle timeout for AI streaming (`command`, `prompt`) and per-iteration idle for `loop`. Accepted but ignored on `bash` and `script` — use `timeout` there |
 
 **Command, prompt, and bash nodes** (silently ignored on loop nodes, except `retry` which is a hard error):
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `model` | string | inherited | Per-node model override |
-| `provider` | `claude` / `codex` | inherited | Per-node provider override |
-| `context` | `fresh` / `shared` | — | `fresh` = new session; `shared` = inherit from prior node. Defaults to `fresh` for parallel layers, inherited for sequential |
-| `output_format` | object | — | JSON Schema for structured output |
-| `allowed_tools` | string[] | all | Tool whitelist. `[]` = disable all. Claude only |
-| `denied_tools` | string[] | none | Tool blacklist. Claude only |
-| `retry` | object | 2 retries, 3s | Retry config. **Hard error on loop nodes** |
-| `hooks` | object | — | SDK hooks. Claude only. See `dag-advanced.md` |
-| `mcp` | string | — | MCP config path. Claude only. See `dag-advanced.md` |
-| `skills` | string[] | — | Skill names. Claude only. See `dag-advanced.md` |
+| Field           | Type               | Default       | Description                                                                                                                  |
+| --------------- | ------------------ | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `model`         | string             | inherited     | Per-node model override                                                                                                      |
+| `provider`      | `claude` / `codex` | inherited     | Per-node provider override                                                                                                   |
+| `context`       | `fresh` / `shared` | —             | `fresh` = new session; `shared` = inherit from prior node. Defaults to `fresh` for parallel layers, inherited for sequential |
+| `output_format` | object             | —             | JSON Schema for structured output                                                                                            |
+| `allowed_tools` | string[]           | all           | Tool whitelist. `[]` = disable all. Claude only                                                                              |
+| `denied_tools`  | string[]           | none          | Tool blacklist. Claude only                                                                                                  |
+| `retry`         | object             | 2 retries, 3s | Retry config. **Hard error on loop nodes**                                                                                   |
+| `hooks`         | object             | —             | SDK hooks. Claude only. See `dag-advanced.md`                                                                                |
+| `mcp`           | string             | —             | MCP config path. Claude only. See `dag-advanced.md`                                                                          |
+| `skills`        | string[]           | —             | Skill names. Claude only. See `dag-advanced.md`                                                                              |
 
 ## Dependencies and Parallel Execution
 
@@ -251,12 +263,12 @@ nodes:
 
 ## Trigger Rules
 
-| Value | Behavior |
-|-------|----------|
-| `all_success` | ALL deps succeeded **(default)** |
-| `one_success` | At least ONE dep succeeded |
+| Value                         | Behavior                                               |
+| ----------------------------- | ------------------------------------------------------ |
+| `all_success`                 | ALL deps succeeded **(default)**                       |
+| `one_success`                 | At least ONE dep succeeded                             |
 | `none_failed_min_one_success` | No deps failed AND at least one succeeded (skipped OK) |
-| `all_done` | All deps terminal (completed, failed, or skipped) |
+| `all_done`                    | All deps terminal (completed, failed, or skipped)      |
 
 ## Conditions (`when:`)
 
@@ -265,6 +277,7 @@ Gate whether a node runs based on upstream output. A condition that evaluates to
 ### Operators
 
 **String comparison** (literal string equality):
+
 ```yaml
 when: "$nodeId.output == 'VALUE'"
 when: "$nodeId.output != 'VALUE'"
@@ -272,6 +285,7 @@ when: "$nodeId.output.field == 'VALUE'"       # JSON dot notation (requires outp
 ```
 
 **Numeric comparison** (both sides auto-parsed as numbers; fail-closed if either side is not finite):
+
 ```yaml
 when: "$score.output > '80'"
 when: "$score.output >= '0.9'"
@@ -350,9 +364,9 @@ Override on command/prompt nodes:
 nodes:
   - id: classify
     prompt: "Quick classification"
-    model: haiku                    # Fast model
+    model: haiku # Fast model
   - id: implement
-    command: implement-changes      # Inherits workflow-level model
+    command: implement-changes # Inherits workflow-level model
 ```
 
 Loop nodes accept `provider`/`model` without error but ignore them at runtime.
@@ -376,24 +390,24 @@ Loop nodes iterate an AI prompt until a completion condition is met. Use them fo
 ```yaml
 - id: my-loop
   loop:
-    prompt: "..."              # Required. Sent each iteration
-    until: COMPLETE            # Required. Completion signal
-    max_iterations: 10         # Required. Integer >= 1. Fails if exceeded
-    fresh_context: true        # Optional. Default: false
-    until_bash: "..."          # Optional. Exit 0 = complete
-    interactive: true          # Optional. Pauses between iterations for user input
-    gate_message: "..."        # Required when interactive: true
+    prompt: "..." # Required. Sent each iteration
+    until: COMPLETE # Required. Completion signal
+    max_iterations: 10 # Required. Integer >= 1. Fails if exceeded
+    fresh_context: true # Optional. Default: false
+    until_bash: "..." # Optional. Exit 0 = complete
+    interactive: true # Optional. Pauses between iterations for user input
+    gate_message: "..." # Required when interactive: true
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `prompt` | string | Yes | Prompt template. Supports all variable substitution (`$ARGUMENTS`, `$nodeId.output`, `$LOOP_USER_INPUT`, etc.) |
-| `until` | string | Yes | Completion signal to detect in AI output |
-| `max_iterations` | number | Yes | Hard limit. Node **fails** if exceeded |
-| `fresh_context` | boolean | No | Default `false`. `true` = fresh AI session each iteration |
-| `until_bash` | string | No | Shell script run after each iteration. Exit 0 = complete. Variable substitution applies; `$nodeId.output` IS shell-quoted here |
-| `interactive` | boolean | No | Default `false`. `true` = pause after each non-completing iteration for user feedback via `/workflow approve <id> <text>` |
-| `gate_message` | string | **Required when `interactive: true`** | Message shown to the user at each pause. Validated at parse time — a loop with `interactive: true` and no `gate_message` fails to load |
+| Field            | Type    | Required                              | Description                                                                                                                            |
+| ---------------- | ------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `prompt`         | string  | Yes                                   | Prompt template. Supports all variable substitution (`$ARGUMENTS`, `$nodeId.output`, `$LOOP_USER_INPUT`, etc.)                         |
+| `until`          | string  | Yes                                   | Completion signal to detect in AI output                                                                                               |
+| `max_iterations` | number  | Yes                                   | Hard limit. Node **fails** if exceeded                                                                                                 |
+| `fresh_context`  | boolean | No                                    | Default `false`. `true` = fresh AI session each iteration                                                                              |
+| `until_bash`     | string  | No                                    | Shell script run after each iteration. Exit 0 = complete. Variable substitution applies; `$nodeId.output` IS shell-quoted here         |
+| `interactive`    | boolean | No                                    | Default `false`. `true` = pause after each non-completing iteration for user feedback via `/workflow approve <id> <text>`              |
+| `gate_message`   | string  | **Required when `interactive: true`** | Message shown to the user at each pause. Validated at parse time — a loop with `interactive: true` and no `gate_message` fails to load |
 
 ### Interactive Loops
 
@@ -402,7 +416,7 @@ Interactive loops pause between iterations so a human can provide feedback that 
 ```yaml
 name: guided-refine
 description: Refine an output with human feedback between iterations
-interactive: true                # REQUIRED at the workflow level for web UI
+interactive: true # REQUIRED at the workflow level for web UI
 
 nodes:
   - id: refine
@@ -414,12 +428,13 @@ nodes:
         When the output is satisfactory, output: <promise>DONE</promise>
       until: DONE
       max_iterations: 5
-      interactive: true          # node level — enables the pause
+      interactive: true # node level — enables the pause
       gate_message: |
         Review the output above. Reply with feedback, or type DONE to finish.
 ```
 
 The flow:
+
 1. Iteration N runs. AI produces output.
 2. If AI signalled completion (`<promise>DONE</promise>`) or `until_bash` exited 0, loop ends.
 3. Otherwise: `gate_message` is sent to the user, workflow pauses (status = `paused`).
@@ -432,6 +447,7 @@ The flow:
 ### Completion Detection
 
 Checked after each iteration:
+
 1. **AI signal** — `<promise>SIGNAL</promise>` in output (recommended) or plain signal at end
 2. **`until_bash`** — shell script exits 0
 
@@ -439,10 +455,10 @@ Either triggers completion. `<promise>` tags are stripped from output.
 
 ### Session Patterns
 
-| `fresh_context` | Behavior | Best for |
-|-----------------|----------|----------|
-| `true` | Fresh session each iteration. No memory. State on disk. | Multi-story PRDs, long loops |
-| `false` (default) | Sessions thread. AI remembers prior iterations. | Fix-iterate cycles, refinement |
+| `fresh_context`   | Behavior                                                | Best for                       |
+| ----------------- | ------------------------------------------------------- | ------------------------------ |
+| `true`            | Fresh session each iteration. No memory. State on disk. | Multi-story PRDs, long loops   |
+| `false` (default) | Sessions thread. AI remembers prior iterations.         | Fix-iterate cycles, refinement |
 
 First iteration is always fresh regardless.
 
@@ -460,6 +476,7 @@ First iteration is always fresh regardless.
 ### Patterns
 
 **Stateless (Ralph):**
+
 ```yaml
 - id: implement
   depends_on: [setup]
@@ -475,6 +492,7 @@ First iteration is always fresh regardless.
 ```
 
 **Test-fix cycle:**
+
 ```yaml
 - id: fix-tests
   loop:
@@ -497,21 +515,21 @@ Approval nodes **pause the workflow** until a human approves or rejects the gate
 - id: review-gate
   approval:
     message: "Review the plan above before proceeding with implementation."
-    capture_response: false        # Optional. true = user's comment stored as $review-gate.output
-    on_reject:                     # Optional. AI rework on rejection instead of cancel
+    capture_response: false # Optional. true = user's comment stored as $review-gate.output
+    on_reject: # Optional. AI rework on rejection instead of cancel
       prompt: "Revise based on feedback: $REJECTION_REASON"
-      max_attempts: 3              # Range 1–10, default 3. After max, workflow is cancelled.
+      max_attempts: 3 # Range 1–10, default 3. After max, workflow is cancelled.
   depends_on: [plan]
 ```
 
 ### Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `approval.message` | **Yes** | The message shown to the user when the workflow pauses |
-| `approval.capture_response` | No | `true` = user's approval comment stored as `$<node-id>.output` for downstream nodes. Default: `false` (downstream `$<node-id>.output` is empty string) |
-| `approval.on_reject.prompt` | No | Prompt run via AI when the user rejects. `$REJECTION_REASON` is substituted with the reject reason. After running, the workflow re-pauses at the same gate |
-| `approval.on_reject.max_attempts` | No | Max times the on_reject prompt runs before the workflow is cancelled. Range: 1–10. Default: 3 |
+| Field                             | Required | Description                                                                                                                                                |
+| --------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `approval.message`                | **Yes**  | The message shown to the user when the workflow pauses                                                                                                     |
+| `approval.capture_response`       | No       | `true` = user's approval comment stored as `$<node-id>.output` for downstream nodes. Default: `false` (downstream `$<node-id>.output` is empty string)     |
+| `approval.on_reject.prompt`       | No       | Prompt run via AI when the user rejects. `$REJECTION_REASON` is substituted with the reject reason. After running, the workflow re-pauses at the same gate |
+| `approval.on_reject.max_attempts` | No       | Max times the on_reject prompt runs before the workflow is cancelled. Range: 1–10. Default: 3                                                              |
 
 ### Web UI Requirement
 
@@ -519,7 +537,7 @@ Approval gates delivered on the Web UI require `interactive: true` at the **work
 
 ```yaml
 name: plan-approve-implement
-interactive: true   # REQUIRED for approval gates on web UI
+interactive: true # REQUIRED for approval gates on web UI
 nodes:
   - id: plan
     command: plan-feature
@@ -572,6 +590,7 @@ Cancel nodes **terminate the workflow run** with a reason string. Useful for gua
 ```
 
 When a cancel node runs, Archon:
+
 - Marks the workflow run as `cancelled` (not `failed`)
 - Stops in-flight parallel nodes via the existing cancellation plumbing
 - Records the reason string in the run's metadata
@@ -579,9 +598,9 @@ When a cancel node runs, Archon:
 
 ### Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `cancel` | **Yes** | Non-empty reason string shown to the user and recorded in metadata |
+| Field    | Required | Description                                                        |
+| -------- | -------- | ------------------------------------------------------------------ |
+| `cancel` | **Yes**  | Non-empty reason string shown to the user and recorded in metadata |
 
 Standard DAG fields (`id`, `depends_on`, `when`, `trigger_rule`, `idle_timeout`) all work. AI-specific fields emit a loader warning and are ignored — cancel nodes don't invoke AI.
 
@@ -593,6 +612,7 @@ Standard DAG fields (`id`, `depends_on`, `when`, `trigger_rule`, `idle_timeout`)
 ### Typical Patterns
 
 **Gate on upstream classification:**
+
 ```yaml
 - id: classify
   prompt: "Is the input safe to proceed? Output 'SAFE' or 'UNSAFE'."
@@ -610,6 +630,7 @@ Standard DAG fields (`id`, `depends_on`, `when`, `trigger_rule`, `idle_timeout`)
 ```
 
 **Stop before expensive step unless precondition met:**
+
 ```yaml
 - id: check-budget
   bash: |
@@ -638,6 +659,7 @@ archon validate workflows <name>
 ```
 
 Fix any errors and re-validate until the command returns clean. This checks:
+
 - YAML syntax and required fields
 - DAG structure (cycles, missing dependencies, invalid `$nodeId.output` refs)
 - All `command:` files exist on disk

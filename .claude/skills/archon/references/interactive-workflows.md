@@ -5,6 +5,7 @@ Interactive workflows use human-in-the-loop approval gates and interactive loops
 ## Identifying Interactive Workflows
 
 A workflow is interactive if it has `interactive: true` in its YAML definition. Key interactive workflows:
+
 - `archon-piv-loop` — Plan-Implement-Validate with iterative feedback
 - `archon-interactive-prd` — Guided PRD creation with approval gates
 
@@ -38,6 +39,7 @@ find ~/.archon/workspaces -name "<run-id>.jsonl" 2>/dev/null
 Parse the JSONL log for the last `"type":"assistant"` entry and display its `content` field **directly to the user**. Do not summarize, do not add commentary, do not say "the workflow asked..." — just show the output as if the user is talking to the workflow agent directly.
 
 **DO:**
+
 ```
 ## What I Understand
 
@@ -50,6 +52,7 @@ You want to add a --json flag to workflow status...
 ```
 
 **DON'T:**
+
 ```
 The workflow has paused and is asking you several questions. Here's what it found:
 - It discovered that the --json flag is partially implemented
@@ -70,6 +73,7 @@ Do not modify, summarize, or enhance the user's response. Pass it through verbat
 ### 5. Repeat until workflow completes
 
 The workflow will alternate between running and pausing. Each time it pauses:
+
 - Read the latest output from the log
 - Display it directly
 - Wait for the user's response

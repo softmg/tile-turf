@@ -22,14 +22,24 @@ Use Bun for this repo because `bun.lock` is present.
 - Install dependencies: `bun install`
 - Start dev server: `bun run dev`
 - Production build: `bun run build`
+- Test/static type gate: `bun run test`
 - Lint: `bun run lint`
 - Format: `bun run format`
 
 Notes:
 
 - `bun run build` may regenerate `src/routeTree.gen.ts`; do not edit that file manually.
+- Route changes belong under `src/routes/*`. Review `src/routeTree.gen.ts` after `bun run build` and keep only generated TanStack Router output.
 - `vite.config.ts` uses `@lovable.dev/vite-tanstack-config`, which already wires TanStack Start, React, Tailwind, aliases, and Cloudflare build behavior. Do not add duplicate Vite plugins there.
 - The current source tree uses CRLF line endings in many files, while Prettier reports LF expectations. If asked to fix lint, do it as a deliberate formatting pass and expect a large mechanical diff.
+
+## Local Agent Workflow
+
+- `AGENTS.md` is the shared root instruction source for local agents.
+- Keep `.agents/skills/archon` and `.claude/skills/archon` mirrored unless a provider-specific difference is documented inline.
+- `.archon/commands`, `.archon/workflows`, `.archon/scripts`, and tracked `.archon/state/plan-status.yaml` are repo workflow files that should stay aligned with this guidance.
+- Runtime logs and attempts under `.archon/state/autonomous-runs/` are generated local state and should stay ignored.
+- Tokens, private keys, and platform credentials belong in ignored env files such as `.env`, `.env.local`, or `.archon/.env`, or in user/global Archon configuration. Do not put secrets in tracked commands, workflows, docs, or generated route files.
 
 ## Working Rules
 

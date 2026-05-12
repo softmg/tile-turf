@@ -4,18 +4,18 @@ Variables are placeholders in command files and workflow prompts that get replac
 
 ## Variable Table
 
-| Variable | Scope | Description |
-|----------|-------|-------------|
-| `$ARGUMENTS` | All modes | The user's original message passed to the workflow |
-| `$USER_MESSAGE` | All modes | Same as `$ARGUMENTS` — both resolve to the user's message |
-| `$WORKFLOW_ID` | All modes | Unique workflow run ID (for tracking and logging) |
-| `$ARTIFACTS_DIR` | All modes | Pre-created directory for this workflow run's artifacts. Write outputs here |
-| `$BASE_BRANCH` | All modes | Base branch name. Auto-detected from git, or set via `worktree.baseBranch` in config. Throws if referenced but unresolvable |
-| `$CONTEXT` | All modes | GitHub issue/PR context (if available from platform). Empty string if unavailable |
-| `$EXTERNAL_CONTEXT` | All modes | Alias for `$CONTEXT` |
-| `$ISSUE_CONTEXT` | All modes | Alias for `$CONTEXT` |
-| `$nodeId.output` | DAG only | Full text output of a completed upstream node |
-| `$nodeId.output.field` | DAG only | JSON field access on structured output from upstream node (string/number/boolean) |
+| Variable               | Scope     | Description                                                                                                                 |
+| ---------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `$ARGUMENTS`           | All modes | The user's original message passed to the workflow                                                                          |
+| `$USER_MESSAGE`        | All modes | Same as `$ARGUMENTS` — both resolve to the user's message                                                                   |
+| `$WORKFLOW_ID`         | All modes | Unique workflow run ID (for tracking and logging)                                                                           |
+| `$ARTIFACTS_DIR`       | All modes | Pre-created directory for this workflow run's artifacts. Write outputs here                                                 |
+| `$BASE_BRANCH`         | All modes | Base branch name. Auto-detected from git, or set via `worktree.baseBranch` in config. Throws if referenced but unresolvable |
+| `$CONTEXT`             | All modes | GitHub issue/PR context (if available from platform). Empty string if unavailable                                           |
+| `$EXTERNAL_CONTEXT`    | All modes | Alias for `$CONTEXT`                                                                                                        |
+| `$ISSUE_CONTEXT`       | All modes | Alias for `$CONTEXT`                                                                                                        |
+| `$nodeId.output`       | DAG only  | Full text output of a completed upstream node                                                                               |
+| `$nodeId.output.field` | DAG only  | JSON field access on structured output from upstream node (string/number/boolean)                                           |
 
 ## Variable Availability
 

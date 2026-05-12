@@ -37,19 +37,19 @@ Create `.archon/config.yaml` only if you need to override defaults:
 
 ```yaml
 # AI provider for this repo (default: inherited from global config)
-assistant: claude                 # Repo-level key. In ~/.archon/config.yaml, use 'defaultAssistant' instead
+assistant: claude # Repo-level key. In ~/.archon/config.yaml, use 'defaultAssistant' instead
 
 # Worktree settings
 worktree:
-  baseBranch: main                # Branch to create worktrees from (default: auto-detected)
-  copyFiles:                      # Git-ignored files to copy into new worktrees
+  baseBranch: main # Branch to create worktrees from (default: auto-detected)
+  copyFiles: # Git-ignored files to copy into new worktrees
     - .env
     - .env.local
 
 # Control whether bundled defaults are loaded
 defaults:
-  loadDefaultCommands: true       # Include bundled default commands (default: true)
-  loadDefaultWorkflows: true      # Include bundled default workflows (default: true)
+  loadDefaultCommands: true # Include bundled default commands (default: true)
+  loadDefaultWorkflows: true # Include bundled default workflows (default: true)
 ```
 
 ## How Bundled Defaults Work
@@ -79,11 +79,11 @@ Add to your `.gitignore`:
 
 Archon loads env from three distinct paths at boot, with different trust levels and precedence:
 
-| Path | Scope | Trust | Loaded? |
-|------|-------|-------|---------|
-| `~/.archon/.env` | User (home) | Trusted — user owns it | Yes, with `override: true` |
-| `<cwd>/.archon/.env` | Repo (per-project, Archon-owned) | Trusted — user owns it | Yes, with `override: true` (overrides home) |
-| `<cwd>/.env` | Target repo | **Untrusted** — belongs to the project being worked on | **Stripped from `process.env`** before subprocess spawn to prevent secret leakage (see [archon.diy/reference/security/](https://archon.diy/reference/security/#target-repo-env-isolation) for the full trust model) |
+| Path                 | Scope                            | Trust                                                  | Loaded?                                                                                                                                                                                                             |
+| -------------------- | -------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `~/.archon/.env`     | User (home)                      | Trusted — user owns it                                 | Yes, with `override: true`                                                                                                                                                                                          |
+| `<cwd>/.archon/.env` | Repo (per-project, Archon-owned) | Trusted — user owns it                                 | Yes, with `override: true` (overrides home)                                                                                                                                                                         |
+| `<cwd>/.env`         | Target repo                      | **Untrusted** — belongs to the project being worked on | **Stripped from `process.env`** before subprocess spawn to prevent secret leakage (see [archon.diy/reference/security/](https://archon.diy/reference/security/#target-repo-env-isolation) for the full trust model) |
 
 Boot behavior emits observable log lines:
 
@@ -109,8 +109,8 @@ For env vars a workflow's `bash:` and `script:` subprocesses need (`GH_TOKEN` fo
 
 ```yaml
 env:
-  GH_TOKEN: $GH_TOKEN             # expanded from ~/.archon/.env at runtime
-  BUILD_TARGET: production        # literal value
+  GH_TOKEN: $GH_TOKEN # expanded from ~/.archon/.env at runtime
+  BUILD_TARGET: production # literal value
 ```
 
 **Option 2: Web UI Settings → Projects → Env Vars** — per-codebase, stored in the Archon DB, values never returned over the API (only keys are listed). Use this for values that should NOT appear in git.

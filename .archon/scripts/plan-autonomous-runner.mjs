@@ -143,7 +143,9 @@ function shouldFallback(mode, output) {
 
   if (
     mode === "start" &&
-    /(already exists|already active|existing worktree|already checked out|already being used)/i.test(output)
+    /(already exists|already active|existing worktree|already checked out|already being used)/i.test(
+      output,
+    )
   ) {
     return true;
   }
@@ -161,7 +163,16 @@ function executeChildWorkflow({ cwd, childWorkflow, step, attemptDir, log }) {
     selectedMode = mode;
     const args =
       mode === "start"
-        ? ["workflow", "run", childWorkflow, "--branch", step.branch, "--from", "main", step.request]
+        ? [
+            "workflow",
+            "run",
+            childWorkflow,
+            "--branch",
+            step.branch,
+            "--from",
+            "main",
+            step.request,
+          ]
         : ["continue", step.branch, "--workflow", childWorkflow, step.continueMessage];
 
     log(`Running child workflow via ${mode}: archon ${args.slice(0, -1).join(" ")} <message>`);
@@ -219,6 +230,8 @@ function main() {
     maxIterations,
     iterations: [],
     completed: false,
+    targetStepId: null,
+    stoppedReason: null,
   };
 
   appendLog(runnerLog, `Autonomous runner started. Deadline ${report.deadline}.`);
@@ -227,11 +240,27 @@ function main() {
     const step = runNodePlanStatus(cwd, ["select", "--state", stateFile]);
     if (!step.hasStep) {
       report.completed = true;
+      report.stoppedReason = "no-actionable-steps";
       appendLog(runnerLog, "No remaining actionable steps.");
       break;
     }
 
-    const iterationDir = path.join(attemptsRoot, `${String(iteration).padStart(3, "0")}-${step.stepId}`);
+    if (!report.targetStepId) {
+      report.targetStepId = step.stepId;
+      appendLog(runnerLog, `Selected target roadmap step ${step.stepId}.`);
+    } else if (step.stepId !== report.targetStepId) {
+      report.stoppedReason = "next-step-available";
+      appendLog(
+        runnerLog,
+        `Initial target step ${report.targetStepId} is no longer selected; next actionable step is ${step.stepId}. Stopping before advancing.`,
+      );
+      break;
+    }
+
+    const iterationDir = path.join(
+      attemptsRoot,
+      `${String(iteration).padStart(3, "0")}-${step.stepId}`,
+    );
     ensureDir(iterationDir);
     const record = {
       iteration,
@@ -241,11 +270,17 @@ function main() {
       startedAt: new Date().toISOString(),
     };
     report.iterations.push(record);
-    fs.writeFileSync(path.join(iterationDir, "selected-step.json"), `${JSON.stringify(step, null, 2)}\n`);
+    fs.writeFileSync(
+      path.join(iterationDir, "selected-step.json"),
+      `${JSON.stringify(step, null, 2)}\n`,
+    );
 
     if (hasActiveWorkflowForBranch(cwd, childWorkflow, step.branch)) {
       record.action = "wait-active-workflow";
-      appendLog(runnerLog, `Step ${step.stepId}: child workflow already active for ${step.branch}; waiting ${pollSeconds}s.`);
+      appendLog(
+        runnerLog,
+        `Step ${step.stepId}: child workflow already active for ${step.branch}; waiting ${pollSeconds}s.`,
+      );
       fs.writeFileSync(path.join(iterationDir, "wait-reason.txt"), "active child workflow\n");
       sleep(pollSeconds * 1000);
       continue;
@@ -292,6 +327,13 @@ function main() {
     if (update.status === "blocked") {
       appendLog(runnerLog, `Step ${step.stepId}: blocked; sleeping ${pollSeconds}s before retry.`);
       sleep(pollSeconds * 1000);
+    } else if (update.status === "done") {
+      report.stoppedReason = "target-step-done";
+      appendLog(
+        runnerLog,
+        `Step ${step.stepId}: done; stopping before selecting another roadmap step.`,
+      );
+      break;
     }
   }
 

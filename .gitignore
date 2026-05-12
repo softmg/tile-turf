@@ -16,9 +16,40 @@ dist-ssr
 .nitro
 *.local
 
+# Playwright
+test-results/
+playwright-report/
+.playwright-mcp/
+
+# Archon
+.archon/state/
+.archon/.env
+.archon/artifacts/
+.archon/conflict-worktrees/
+.archon/fullstack-worktrees/
+.archon/logs/
+.archon/tmp/
+
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
+
+# Local secrets / generated agent state
+.env
+.env.*
+!.env.example
+!.env.*.example
+.archon/.env
+.archon/.env.*
+!.archon/.env.example
+!.archon/.env.*.example
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+.archon/state/autonomous-runs/
 
 # Editor directories and files
 .vscode/*

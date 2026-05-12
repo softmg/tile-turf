@@ -147,11 +147,11 @@ bun run format
 Отдельного автоматизированного игрового test suite пока нет. Пока раунд смонтирован, компонент выставляет в браузере два хука:
 
 ```js
-window.render_game_to_text()
-window.advanceTime(ms)
+window.render_game_to_text();
+window.advanceTime(ms);
 ```
 
-Эти хуки предназначены для детерминированных browser smoke tests. `advanceTime(ms)` продвигает игровые таймеры шагами до 50 мс и возвращает текстовое представление поля.
+Эти хуки предназначены для детерминированных browser smoke tests. Откройте игру с `?manualTicker=1` или заранее выставьте `window.__HOP_AND_FILL_MANUAL_TICKER__ = true`, чтобы Pixi ticker не соревновался с ручным временем. `advanceTime(ms)` продвигает общий gameplay loop шагами до 50 мс и возвращает текстовое представление поля.
 
 В dev-сборке кнопка `DBG` в левом нижнем углу включает performance overlay: FPS, время кадра, частоту покраски, работу миникарты, число анимаций, бомб и активных ботов.
 

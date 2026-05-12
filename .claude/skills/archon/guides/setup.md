@@ -3,6 +3,7 @@
 Interactive setup guide. Follow these steps in order, using AskUserQuestion to gather input.
 
 **IMPORTANT — When to use AskUserQuestion vs plain text**:
+
 - **AskUserQuestion**: Use ONLY for multiple-choice decisions (pick A or B).
 - **Plain text**: Use for freeform input (paths, URLs, tokens, usernames). Just ask the user directly in your message — e.g., "Paste the path to your repo here." Never wrap freeform input in AskUserQuestion with an "I'll provide it" option — that creates a pointless double question.
 
@@ -18,13 +19,16 @@ git --version
 **If `git` is not installed**: Try to install it automatically based on the platform:
 
 **macOS:**
+
 ```bash
 # Try Homebrew first, fall back to Xcode CLI tools
 brew install git || xcode-select --install
 ```
+
 Note: `xcode-select --install` opens a GUI dialog - tell the user to click "Install" and wait.
 
 **Linux (detect package manager):**
+
 ```bash
 # Try in order: apt, dnf, pacman, apk
 sudo apt-get install -y git 2>/dev/null || \
@@ -34,6 +38,7 @@ sudo apk add git 2>/dev/null
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 winget install Git.Git
 ```
@@ -43,6 +48,7 @@ If installation fails (e.g., no sudo access, no package manager), tell the user 
 **If `bun` is not installed**: Install it automatically based on the platform:
 
 **macOS/Linux:**
+
 ```bash
 curl -fsSL https://bun.sh/install | bash
 ```
@@ -50,11 +56,13 @@ curl -fsSL https://bun.sh/install | bash
 The installer adds Bun to the shell config, but it won't take effect until a new shell starts. For the rest of this setup session, use the full path `~/.bun/bin/bun` instead of just `bun`.
 
 Verify installation:
+
 ```bash
 ~/.bun/bin/bun --version
 ```
 
 **Windows (PowerShell):**
+
 ```powershell
 irm bun.sh/install.ps1 | iex
 ```
@@ -85,11 +93,13 @@ The user will either select "Clone from GitHub" or type a local path via "Other"
 Store the result as `<target-repo>`.
 
 If "Clone from GitHub": ask for the URL in plain text (not AskUserQuestion), then:
+
 ```bash
 archon-repo-path=$(pwd)
 mkdir -p ~/.archon/workspaces
 cd ~/.archon/workspaces && git clone <url>
 ```
+
 Set `<target-repo>` to the cloned directory.
 
 ## Step 2: Ask for Platforms
@@ -142,6 +152,7 @@ Tell the user:
 > "Time to configure your credentials. This runs in a separate terminal so your keys stay private — I won't see them.
 >
 > The wizard will walk you through:
+>
 > 1. Database selection (SQLite default or PostgreSQL)
 > 2. AI assistant configuration (Claude and/or Codex)
 > 3. Platform tokens for any integrations you selected
@@ -149,9 +160,11 @@ Tell the user:
 > By default it saves to `~/.archon/.env` (user scope). Re-run with `archon setup --scope project` to write `<repo>/.archon/.env` instead (project overrides user for this repo). Existing values are preserved — a timestamped backup is written before every rewrite."
 
 **If the terminal opened automatically**, add:
+
 > "Complete the wizard in the new terminal window that just opened."
 
 **If the output says to run it manually** (common on VPS, WSL, SSH, Docker), add:
+
 > "Open a separate terminal or SSH session and run the command shown in the output. Come back here and let me know when you finish so I can continue with validation."
 
 Both paths are normal — the manual path is not an error.
@@ -169,6 +182,7 @@ archon version
 ```
 
 Should show:
+
 - `Database: sqlite` (default, zero setup) or `Database: postgresql` (if DATABASE_URL was configured)
 - No errors about missing configuration
 
@@ -193,15 +207,16 @@ test -n "$DATABASE_URL" && psql $DATABASE_URL < migrations/000_combined.sql
 
 The setup wizard already collected credentials for platforms selected in Step 3. Verify each one:
 
-| Platform | Verification |
-|----------|-------------|
-| CLI only | Done — skip to Step 6 |
-| GitHub | Check `GITHUB_TOKEN` and `WEBHOOK_SECRET` are in `.env` |
-| Telegram | Check `TELEGRAM_BOT_TOKEN` is in `.env` |
-| Slack | Check `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are in `.env` |
-| Discord | Check `DISCORD_BOT_TOKEN` is in `.env` |
+| Platform | Verification                                                |
+| -------- | ----------------------------------------------------------- |
+| CLI only | Done — skip to Step 6                                       |
+| GitHub   | Check `GITHUB_TOKEN` and `WEBHOOK_SECRET` are in `.env`     |
+| Telegram | Check `TELEGRAM_BOT_TOKEN` is in `.env`                     |
+| Slack    | Check `SLACK_BOT_TOKEN` and `SLACK_APP_TOKEN` are in `.env` |
+| Discord  | Check `DISCORD_BOT_TOKEN` is in `.env`                      |
 
 For advanced platform configuration (webhook URLs, bot permissions, etc.), refer to the platform-specific guides:
+
 - `guides/github.md` — GitHub webhook setup details
 - `guides/telegram.md` — BotFather commands
 - `guides/slack.md` — Slack app configuration
@@ -212,6 +227,7 @@ For advanced platform configuration (webhook URLs, bot permissions, etc.), refer
 Bundled default commands and workflows are loaded automatically at runtime from the Archon installation — nothing needs to be copied into the target repo.
 
 Tell the user:
+
 - "Default commands and workflows are loaded automatically at runtime — no files are added to your repo."
 - "To browse defaults, look in `<archon-repo>/.archon/commands/defaults/` and `<archon-repo>/.archon/workflows/defaults/`."
 - "To customize a default, copy the specific file into your repo's `.archon/commands/` or `.archon/workflows/` directory with the same filename. Your repo version takes priority over the bundled default."
@@ -240,14 +256,14 @@ cd <target-repo> && archon workflow run archon-assist "Say hello"
 
 If verification fails:
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `archon: command not found` | CLI not linked | Re-run `cd <archon-repo>/packages/cli && bun link` |
-| `Not a git repository` | Not in a git repo | `cd` to the target repo root |
-| `No workflows found` | Missing `.archon/workflows/` | Default workflows load automatically — check `archon version` works first |
-| Auth errors | Claude not authenticated | Run `claude /login` |
-| `relation "remote_agent_*" does not exist` | DATABASE_URL missing or tables not created | Ensure `~/.archon/.env` has DATABASE_URL and run migrations |
-| `Database: sqlite` but expected PostgreSQL | `~/.archon/.env` missing DATABASE_URL | Add DATABASE_URL to `~/.archon/.env` |
+| Error                                      | Cause                                      | Fix                                                                       |
+| ------------------------------------------ | ------------------------------------------ | ------------------------------------------------------------------------- |
+| `archon: command not found`                | CLI not linked                             | Re-run `cd <archon-repo>/packages/cli && bun link`                        |
+| `Not a git repository`                     | Not in a git repo                          | `cd` to the target repo root                                              |
+| `No workflows found`                       | Missing `.archon/workflows/`               | Default workflows load automatically — check `archon version` works first |
+| Auth errors                                | Claude not authenticated                   | Run `claude /login`                                                       |
+| `relation "remote_agent_*" does not exist` | DATABASE_URL missing or tables not created | Ensure `~/.archon/.env` has DATABASE_URL and run migrations               |
+| `Database: sqlite` but expected PostgreSQL | `~/.archon/.env` missing DATABASE_URL      | Add DATABASE_URL to `~/.archon/.env`                                      |
 
 ## Step 9: Copy Skill to Target Repo (Optional)
 
@@ -280,11 +296,13 @@ Tell the user what was set up, then give these instructions:
 4. The archon skill is now loaded — ask Claude to run workflows, fix issues, review PRs, etc.
 
 Example first command in the target repo:
+
 ```
 "Use archon to fix issue #1"
 ```
 
 Tell the user:
+
 - Default commands and workflows load automatically at runtime — nothing was added to your repo
 - `.claude/skills/archon/` — skill for Claude Code integration
 - To customize a default, copy the specific file from `<archon-repo>/.archon/commands/defaults/` or `<archon-repo>/.archon/workflows/defaults/` into your repo's `.archon/commands/` or `.archon/workflows/` with the same filename
@@ -303,11 +321,11 @@ For advanced users — these are not needed for basic setup:
 
 Archon's env model is scoped by directory ownership: `.archon/` is archon-owned, anything else belongs to you.
 
-| Path | Stripped at boot? | Archon loads? | `archon setup` writes? |
-|------|-------------------|---------------|------------------------|
-| `<cwd>/.env` | **yes** (safety guard) | never | never |
-| `<cwd>/.archon/.env` | no | yes (project scope, overrides user scope) | yes iff `--scope project` |
-| `~/.archon/.env` | no | yes (user scope) | yes iff `--scope home` (default) |
+| Path                 | Stripped at boot?      | Archon loads?                             | `archon setup` writes?           |
+| -------------------- | ---------------------- | ----------------------------------------- | -------------------------------- |
+| `<cwd>/.env`         | **yes** (safety guard) | never                                     | never                            |
+| `<cwd>/.archon/.env` | no                     | yes (project scope, overrides user scope) | yes iff `--scope project`        |
+| `~/.archon/.env`     | no                     | yes (user scope)                          | yes iff `--scope home` (default) |
 
 **Which should I use?**
 
@@ -321,21 +339,21 @@ Archon's env model is scoped by directory ownership: `.archon/` is archon-owned,
 
 Project-specific settings use layered YAML configs:
 
-| Location | Scope | Purpose |
-|----------|-------|---------|
-| `~/.archon/config.yaml` | Global | Default AI assistant, streaming modes, concurrency |
-| `<repo>/.archon/config.yaml` | Per-repo | AI assistant, worktree settings, commands config |
+| Location                     | Scope    | Purpose                                            |
+| ---------------------------- | -------- | -------------------------------------------------- |
+| `~/.archon/config.yaml`      | Global   | Default AI assistant, streaming modes, concurrency |
+| `<repo>/.archon/config.yaml` | Per-repo | AI assistant, worktree settings, commands config   |
 
 Environment variables in `.env` override matching `config.yaml` values.
 
 ### Repo Config Options Reference
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `assistant` | `claude` \| `codex` | `claude` | AI assistant for this repo |
-| `commands.folder` | string | `.archon/commands` | Custom command folder path (relative to repo root) |
-| `commands.autoLoad` | boolean | `true` | Auto-load commands on clone |
-| `worktree.baseBranch` | string | auto-detected | Base branch for worktree creation |
-| `worktree.copyFiles` | string[] | `[]` | Files to copy into new worktrees (supports `"source -> dest"` syntax) |
-| `defaults.loadDefaultCommands` | boolean | `true` | Load bundled default commands at runtime |
-| `defaults.loadDefaultWorkflows` | boolean | `true` | Load bundled default workflows at runtime |
+| Option                          | Type                | Default            | Description                                                           |
+| ------------------------------- | ------------------- | ------------------ | --------------------------------------------------------------------- |
+| `assistant`                     | `claude` \| `codex` | `claude`           | AI assistant for this repo                                            |
+| `commands.folder`               | string              | `.archon/commands` | Custom command folder path (relative to repo root)                    |
+| `commands.autoLoad`             | boolean             | `true`             | Auto-load commands on clone                                           |
+| `worktree.baseBranch`           | string              | auto-detected      | Base branch for worktree creation                                     |
+| `worktree.copyFiles`            | string[]            | `[]`               | Files to copy into new worktrees (supports `"source -> dest"` syntax) |
+| `defaults.loadDefaultCommands`  | boolean             | `true`             | Load bundled default commands at runtime                              |
+| `defaults.loadDefaultWorkflows` | boolean             | `true`             | Load bundled default workflows at runtime                             |

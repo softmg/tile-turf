@@ -23,7 +23,5 @@ export const scoreOwners = (owners: OwnerGrid) => {
   return next;
 };
 
-export const scoresChanged = (
-  prev: Record<SkinId, number>,
-  next: Record<SkinId, number>,
-) => SKIN_IDS.some((id) => prev[id] !== next[id]);
+export const scoresChanged = (prev: Record<SkinId, number>, next: Record<SkinId, number>) =>
+  SKIN_IDS.some((id) => prev[id] !== next[id]);

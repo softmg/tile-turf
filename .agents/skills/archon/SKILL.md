@@ -1,8 +1,6 @@
 ---
 name: archon
-description: |
-  Use this skill to run Archon workflows, create workflow or command
-  definitions, set up Archon, and update Archon configuration.
+description: Use when the user asks to run, create, initialize, configure, or troubleshoot Archon workflows, commands, CLI setup, or repo .archon files. Handles Archon workflow runs in isolated worktrees, workflow and command authoring, setup/install guidance, config edits, and repo initialization. Not for direct local coding work unless delegating through Archon CLI.
 argument-hint: "[workflow] [message or issue number]"
 ---
 
@@ -18,21 +16,21 @@ Archon is a remote agentic coding platform that runs AI workflows in isolated gi
 
 Determine the user's intent and dispatch to the appropriate guide:
 
-| Intent | Action |
-|--------|--------|
-| **Setup / install / "how to use"** | Read `guides/setup.md` — interactive setup wizard |
-| **Config / settings** | Read `guides/config.md` — interactive config editor |
-| **Initialize .archon/ in a repo** | Read `references/repo-init.md` |
-| **Create a workflow** | Read `references/workflow-dag.md` — the complete workflow authoring guide |
+| Intent                                                            | Action                                                                                             |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| **Setup / install / "how to use"**                                | Read `guides/setup.md` — interactive setup wizard                                                  |
+| **Config / settings**                                             | Read `guides/config.md` — interactive config editor                                                |
+| **Initialize .archon/ in a repo**                                 | Read `references/repo-init.md`                                                                     |
+| **Create a workflow**                                             | Read `references/workflow-dag.md` — the complete workflow authoring guide                          |
 | **Quick parameter lookup — which field works on which node type** | Read `references/parameter-matrix.md` — master matrix, intent-based lookup, silent-failure catalog |
-| **Advanced features (hooks/MCP/skills)** | Read `references/dag-advanced.md` |
-| **Create a command file** | Read `references/authoring-commands.md` |
-| **Variable substitution reference** | Read `references/variables.md` |
-| **CLI command reference** | Read `references/cli-commands.md` |
-| **Run an interactive workflow** | Read `references/interactive-workflows.md` — transparent relay protocol |
-| **Workflow good practices / anti-patterns** | Read `references/good-practices.md` — read before designing a non-trivial workflow |
-| **Troubleshoot a failing / stuck workflow** | Read `references/troubleshooting.md` — log locations, common failure modes |
-| **Run a workflow (default)** | Continue with "Running Workflows" below |
+| **Advanced features (hooks/MCP/skills)**                          | Read `references/dag-advanced.md`                                                                  |
+| **Create a command file**                                         | Read `references/authoring-commands.md`                                                            |
+| **Variable substitution reference**                               | Read `references/variables.md`                                                                     |
+| **CLI command reference**                                         | Read `references/cli-commands.md`                                                                  |
+| **Run an interactive workflow**                                   | Read `references/interactive-workflows.md` — transparent relay protocol                            |
+| **Workflow good practices / anti-patterns**                       | Read `references/good-practices.md` — read before designing a non-trivial workflow                 |
+| **Troubleshoot a failing / stuck workflow**                       | Read `references/troubleshooting.md` — log locations, common failure modes                         |
+| **Run a workflow (default)**                                      | Continue with "Running Workflows" below                                                            |
 
 If the intent is ambiguous, ask the user to clarify.
 
@@ -51,24 +49,24 @@ The references in this skill are a distilled subset. The full, canonical docs li
 
 ### URL map
 
-| Topic | URL |
-|-------|-----|
-| Landing + install | [archon.diy](https://archon.diy) |
-| Getting started (installation, quick start, concepts) | [archon.diy/getting-started/](https://archon.diy/getting-started/overview/) |
-| The book (tutorial-style walkthrough) | [archon.diy/book/](https://archon.diy/book/) |
-| Workflow authoring guide | [archon.diy/guides/authoring-workflows/](https://archon.diy/guides/authoring-workflows/) |
-| Command authoring guide | [archon.diy/guides/authoring-commands/](https://archon.diy/guides/authoring-commands/) |
-| Node type guides | [archon.diy/guides/loop-nodes/](https://archon.diy/guides/loop-nodes/), [/approval-nodes/](https://archon.diy/guides/approval-nodes/), [/script-nodes/](https://archon.diy/guides/script-nodes/) |
-| Per-node features (Claude only) | [/hooks/](https://archon.diy/guides/hooks/), [/mcp-servers/](https://archon.diy/guides/mcp-servers/), [/skills/](https://archon.diy/guides/skills/) |
-| Global workflows/commands/scripts | [archon.diy/guides/global-workflows/](https://archon.diy/guides/global-workflows/) |
-| Variables reference | [archon.diy/reference/variables/](https://archon.diy/reference/variables/) |
-| CLI reference | [archon.diy/reference/cli/](https://archon.diy/reference/cli/) |
-| Security model (env, sandbox, target-repo `.env` stripping) | [archon.diy/reference/security/](https://archon.diy/reference/security/) |
-| Architecture | [archon.diy/reference/architecture/](https://archon.diy/reference/architecture/) |
-| Configuration (`.archon/config.yaml` full schema) | [archon.diy/reference/configuration/](https://archon.diy/reference/configuration/) |
-| Troubleshooting | [archon.diy/reference/troubleshooting/](https://archon.diy/reference/troubleshooting/) |
-| Adapter setup (Slack/Telegram/GitHub/Web/Discord/Gitea/GitLab) | [archon.diy/adapters/](https://archon.diy/adapters/) |
-| Deployment (Docker, cloud, Windows) | [archon.diy/deployment/](https://archon.diy/deployment/) |
+| Topic                                                          | URL                                                                                                                                                                                              |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Landing + install                                              | [archon.diy](https://archon.diy)                                                                                                                                                                 |
+| Getting started (installation, quick start, concepts)          | [archon.diy/getting-started/](https://archon.diy/getting-started/overview/)                                                                                                                      |
+| The book (tutorial-style walkthrough)                          | [archon.diy/book/](https://archon.diy/book/)                                                                                                                                                     |
+| Workflow authoring guide                                       | [archon.diy/guides/authoring-workflows/](https://archon.diy/guides/authoring-workflows/)                                                                                                         |
+| Command authoring guide                                        | [archon.diy/guides/authoring-commands/](https://archon.diy/guides/authoring-commands/)                                                                                                           |
+| Node type guides                                               | [archon.diy/guides/loop-nodes/](https://archon.diy/guides/loop-nodes/), [/approval-nodes/](https://archon.diy/guides/approval-nodes/), [/script-nodes/](https://archon.diy/guides/script-nodes/) |
+| Per-node features (Claude only)                                | [/hooks/](https://archon.diy/guides/hooks/), [/mcp-servers/](https://archon.diy/guides/mcp-servers/), [/skills/](https://archon.diy/guides/skills/)                                              |
+| Global workflows/commands/scripts                              | [archon.diy/guides/global-workflows/](https://archon.diy/guides/global-workflows/)                                                                                                               |
+| Variables reference                                            | [archon.diy/reference/variables/](https://archon.diy/reference/variables/)                                                                                                                       |
+| CLI reference                                                  | [archon.diy/reference/cli/](https://archon.diy/reference/cli/)                                                                                                                                   |
+| Security model (env, sandbox, target-repo `.env` stripping)    | [archon.diy/reference/security/](https://archon.diy/reference/security/)                                                                                                                         |
+| Architecture                                                   | [archon.diy/reference/architecture/](https://archon.diy/reference/architecture/)                                                                                                                 |
+| Configuration (`.archon/config.yaml` full schema)              | [archon.diy/reference/configuration/](https://archon.diy/reference/configuration/)                                                                                                               |
+| Troubleshooting                                                | [archon.diy/reference/troubleshooting/](https://archon.diy/reference/troubleshooting/)                                                                                                           |
+| Adapter setup (Slack/Telegram/GitHub/Web/Discord/Gitea/GitLab) | [archon.diy/adapters/](https://archon.diy/adapters/)                                                                                                                                             |
+| Deployment (Docker, cloud, Windows)                            | [archon.diy/deployment/](https://archon.diy/deployment/)                                                                                                                                         |
 
 URL shape is `archon.diy/<section>/<page>/` — the paths mirror the filenames under `packages/docs-web/src/content/docs/`.
 
@@ -96,35 +94,35 @@ archon workflow run <workflow-name> --branch <branch-name> "<message>"
 
 ### Isolation Modes
 
-| Mode | Flag | When to Use |
-|------|------|-------------|
-| **Worktree (Default)** | `--branch <name>` | Always use this unless told otherwise |
-| **Custom start-point** | `--branch <name> --from <base>` | Start from a specific branch |
-| **Direct checkout** | `--no-worktree` | Only if user explicitly requests no isolation |
-| **Resume failed run** | `--resume` | Resume from the last failure point |
+| Mode                   | Flag                            | When to Use                                   |
+| ---------------------- | ------------------------------- | --------------------------------------------- |
+| **Worktree (Default)** | `--branch <name>`               | Always use this unless told otherwise         |
+| **Custom start-point** | `--branch <name> --from <base>` | Start from a specific branch                  |
+| **Direct checkout**    | `--no-worktree`                 | Only if user explicitly requests no isolation |
+| **Resume failed run**  | `--resume`                      | Resume from the last failure point            |
 
 ### Workflow Selection
 
 Match the user's intent to a workflow from the live list above. Common patterns:
 
-| User Intent | Typical Workflow | Branch Pattern |
-|-------------|-----------------|----------------|
-| "Fix issue #X" / "Resolve bug" | `archon-fix-github-issue` | `fix/issue-{N}` |
-| "Review PR #X" / "Full review" | `archon-comprehensive-pr-review` | `review/pr-{N}` |
-| "Quick review PR #X" | `archon-smart-pr-review` | `review/pr-{N}` |
-| "Validate PR #X" / "Check PR" | `archon-validate-pr` | `review/pr-{N}` |
-| "Implement from plan" | `archon-feature-development` | `feat/{name}` |
-| "Plan and implement feature" | `archon-idea-to-pr` | `feat/{name}` |
-| "Execute plan file" | `archon-plan-to-pr` | `feat/{name}` |
-| "Run ralph" / "Implement PRD" | `archon-ralph-dag` | `feat/{name}` |
-| "Resolve conflicts" | `archon-resolve-conflicts` | `resolve/pr-{N}` |
-| "Create issue" / "File a bug" | `archon-create-issue` | `issue/{name}` |
-| "Review issue #X fully" | `archon-issue-review-full` | `review/issue-{N}` |
-| "Refactor safely" | `archon-refactor-safely` | `refactor/{name}` |
-| "Architecture review" | `archon-architect` | `review/{name}` |
-| "PIV loop" / "guided dev" | `archon-piv-loop` ⚡ | `piv/{name}` |
-| "Create a PRD" / "interactive PRD" | `archon-interactive-prd` ⚡ | `prd/{name}` |
-| General / debugging | `archon-assist` | `assist/{description}` |
+| User Intent                        | Typical Workflow                 | Branch Pattern         |
+| ---------------------------------- | -------------------------------- | ---------------------- |
+| "Fix issue #X" / "Resolve bug"     | `archon-fix-github-issue`        | `fix/issue-{N}`        |
+| "Review PR #X" / "Full review"     | `archon-comprehensive-pr-review` | `review/pr-{N}`        |
+| "Quick review PR #X"               | `archon-smart-pr-review`         | `review/pr-{N}`        |
+| "Validate PR #X" / "Check PR"      | `archon-validate-pr`             | `review/pr-{N}`        |
+| "Implement from plan"              | `archon-feature-development`     | `feat/{name}`          |
+| "Plan and implement feature"       | `archon-idea-to-pr`              | `feat/{name}`          |
+| "Execute plan file"                | `archon-plan-to-pr`              | `feat/{name}`          |
+| "Run ralph" / "Implement PRD"      | `archon-ralph-dag`               | `feat/{name}`          |
+| "Resolve conflicts"                | `archon-resolve-conflicts`       | `resolve/pr-{N}`       |
+| "Create issue" / "File a bug"      | `archon-create-issue`            | `issue/{name}`         |
+| "Review issue #X fully"            | `archon-issue-review-full`       | `review/issue-{N}`     |
+| "Refactor safely"                  | `archon-refactor-safely`         | `refactor/{name}`      |
+| "Architecture review"              | `archon-architect`               | `review/{name}`        |
+| "PIV loop" / "guided dev"          | `archon-piv-loop` ⚡             | `piv/{name}`           |
+| "Create a PRD" / "interactive PRD" | `archon-interactive-prd` ⚡      | `prd/{name}`           |
+| General / debugging                | `archon-assist`                  | `assist/{description}` |
 
 ⚡ = **Interactive workflow** — requires the transparent relay protocol. Read `references/interactive-workflows.md` before running.
 
@@ -172,11 +170,11 @@ Archon uses a single workflow format: **nodes** (DAG). Workflows are YAML files 
 ```yaml
 name: my-workflow
 description: What this workflow does
-provider: claude          # Optional: 'claude' or 'codex'
-model: sonnet             # Optional: model override
+provider: claude # Optional: 'claude' or 'codex'
+model: sonnet # Optional: model override
 nodes:
   - id: first-node
-    command: my-command    # Loads .archon/commands/my-command.md
+    command: my-command # Loads .archon/commands/my-command.md
   - id: second-node
     prompt: "Use the output: $first-node.output"
     depends_on: [first-node]
@@ -187,12 +185,14 @@ nodes:
 Each node has exactly ONE of: `command`, `prompt`, `bash`, `script`, `loop`, `approval`, or `cancel`.
 
 **Command node** — runs a `.archon/commands/*.md` file:
+
 ```yaml
 - id: investigate
   command: investigate-issue
 ```
 
 **Prompt node** — inline AI prompt:
+
 ```yaml
 - id: classify
   prompt: "Classify this issue: $ARGUMENTS"
@@ -201,6 +201,7 @@ Each node has exactly ONE of: `command`, `prompt`, `bash`, `script`, `loop`, `ap
 ```
 
 **Bash node** — shell script, no AI, stdout captured as output:
+
 ```yaml
 - id: fetch-data
   bash: "gh issue view 42 --json title,body"
@@ -208,22 +209,24 @@ Each node has exactly ONE of: `command`, `prompt`, `bash`, `script`, `loop`, `ap
 ```
 
 **Script node** — TypeScript/JavaScript (via `bun`) or Python (via `uv`), no AI, stdout captured as output:
+
 ```yaml
 - id: transform
   script: |
     const raw = process.argv.slice(2).join(' ') || '{}';
     console.log(JSON.stringify({ parsed: JSON.parse(raw) }));
-  runtime: bun           # 'bun' (.ts/.js) or 'uv' (.py) — REQUIRED
-  timeout: 30000         # Optional, ms, default 120000
+  runtime: bun # 'bun' (.ts/.js) or 'uv' (.py) — REQUIRED
+  timeout: 30000 # Optional, ms, default 120000
 
 # Or reference a named script from .archon/scripts/ or ~/.archon/scripts/
 - id: analyze
-  script: analyze-metrics   # loads .archon/scripts/analyze-metrics.py
+  script: analyze-metrics # loads .archon/scripts/analyze-metrics.py
   runtime: uv
-  deps: ["pandas>=2.0"]     # Optional, uv only — 'uv run --with <dep>'
+  deps: ["pandas>=2.0"] # Optional, uv only — 'uv run --with <dep>'
 ```
 
 **Loop node** — iterates AI prompt until completion:
+
 ```yaml
 - id: implement
   loop:
@@ -231,25 +234,27 @@ Each node has exactly ONE of: `command`, `prompt`, `bash`, `script`, `loop`, `ap
     until: COMPLETE
     max_iterations: 10
     fresh_context: true
-    until_bash: "bun run test"    # Optional: exit 0 = done
+    until_bash: "bun run test" # Optional: exit 0 = done
 ```
 
 **Approval node** — pauses the workflow for human review. Requires `interactive: true` at the workflow level for Web UI delivery:
+
 ```yaml
-interactive: true   # workflow level — required for web UI
+interactive: true # workflow level — required for web UI
 
 nodes:
   - id: review-gate
     approval:
       message: "Review the plan above before proceeding."
-      capture_response: true      # Optional: user's comment → $review-gate.output
-      on_reject:                  # Optional: AI rework on rejection instead of cancel
+      capture_response: true # Optional: user's comment → $review-gate.output
+      on_reject: # Optional: AI rework on rejection instead of cancel
         prompt: "Revise based on feedback: $REJECTION_REASON"
-        max_attempts: 3           # Range 1-10, default 3
+        max_attempts: 3 # Range 1-10, default 3
     depends_on: [plan]
 ```
 
 **Cancel node** — terminates the workflow with a reason. Typically gated with `when:`:
+
 ```yaml
 - id: stop-if-unsafe
   cancel: "Refusing to proceed: input flagged UNSAFE."
@@ -281,13 +286,13 @@ For the full command authoring guide: Read `references/authoring-commands.md`
 
 ### Key Variables
 
-| Variable | Description |
-|----------|-------------|
-| `$ARGUMENTS` | User's input message |
+| Variable         | Description                                  |
+| ---------------- | -------------------------------------------- |
+| `$ARGUMENTS`     | User's input message                         |
 | `$ARTIFACTS_DIR` | Pre-created directory for workflow artifacts |
-| `$BASE_BRANCH` | Base branch (auto-detected from git) |
-| `$WORKFLOW_ID` | Unique workflow run ID |
-| `$nodeId.output` | Output from upstream node |
+| `$BASE_BRANCH`   | Base branch (auto-detected from git)         |
+| `$WORKFLOW_ID`   | Unique workflow run ID                       |
+| `$nodeId.output` | Output from upstream node                    |
 
 Full variable reference: Read `references/variables.md`
 
@@ -307,11 +312,13 @@ For details: Read `references/dag-advanced.md`
 ## Example Interactions
 
 **User**: "Use Archon to fix issue #42"
+
 ```bash
 archon workflow run archon-fix-github-issue --branch fix/issue-42 "Fix issue #42"
 ```
 
 **User**: "Have Archon review PR #15"
+
 ```bash
 archon workflow run archon-comprehensive-pr-review --branch review/pr-15 "Review PR #15"
 ```

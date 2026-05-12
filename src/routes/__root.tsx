@@ -73,17 +73,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Tile turf" },
-      { name: "description", content: "Interactive isometric grid game with player movement, painting mechanics, and mobile controls." },
+      {
+        name: "description",
+        content:
+          "Interactive isometric grid game with player movement, painting mechanics, and mobile controls.",
+      },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "Tile turf" },
-      { property: "og:description", content: "Interactive isometric grid game with player movement, painting mechanics, and mobile controls." },
+      {
+        property: "og:description",
+        content:
+          "Interactive isometric grid game with player movement, painting mechanics, and mobile controls.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Tile turf" },
-      { name: "twitter:description", content: "Interactive isometric grid game with player movement, painting mechanics, and mobile controls." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1e2bf9da-6f44-407c-90a3-e06d2c60484a/id-preview-04c848a4--35e87f47-2309-49bc-a61a-973b9fbd8342.lovable.app-1778240684801.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1e2bf9da-6f44-407c-90a3-e06d2c60484a/id-preview-04c848a4--35e87f47-2309-49bc-a61a-973b9fbd8342.lovable.app-1778240684801.png" },
+      {
+        name: "twitter:description",
+        content:
+          "Interactive isometric grid game with player movement, painting mechanics, and mobile controls.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1e2bf9da-6f44-407c-90a3-e06d2c60484a/id-preview-04c848a4--35e87f47-2309-49bc-a61a-973b9fbd8342.lovable.app-1778240684801.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1e2bf9da-6f44-407c-90a3-e06d2c60484a/id-preview-04c848a4--35e87f47-2309-49bc-a61a-973b9fbd8342.lovable.app-1778240684801.png",
+      },
     ],
     links: [
       {

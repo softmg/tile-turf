@@ -4,7 +4,7 @@ import { TILE_H, TILE_W } from "@/game/game-constants";
 export interface Bomb {
   gx: number;
   gy: number;
-  warning: Sprite;
+  warning: Sprite | null;
   boom: Sprite | null;
   phase: "warning" | "explosion";
   warningElapsed: number;
@@ -20,8 +20,7 @@ export interface ArrowState {
   lifeElapsed: number;
 }
 
-export const hazardSpriteScale = (tex: Texture, target: number) =>
-  target / Math.max(tex.height, 1);
+export const hazardSpriteScale = (tex: Texture, target: number) => target / Math.max(tex.height, 1);
 
 export const arrowDirectionVector = (d: number): [number, number] => {
   if (d === 0) return [-TILE_W / 2, -TILE_H / 2];

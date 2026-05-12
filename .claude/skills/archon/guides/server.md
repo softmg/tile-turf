@@ -13,6 +13,7 @@ ls -la <archon-repo>/.env
 ```
 
 If it doesn't exist yet:
+
 ```bash
 cd <archon-repo> && cp .env.example .env
 ```
@@ -50,6 +51,7 @@ psql $DATABASE_URL < migrations/001_initial_schema.sql
 For persistent operation, choose one:
 
 **tmux/screen:**
+
 ```bash
 tmux new -s archon
 cd <archon-repo> && bun run dev
@@ -57,6 +59,7 @@ cd <archon-repo> && bun run dev
 ```
 
 **Docker (production):**
+
 ```bash
 cd <archon-repo> && docker-compose --profile with-db up -d --build
 ```

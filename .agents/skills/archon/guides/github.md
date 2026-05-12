@@ -39,18 +39,22 @@ Options:
 ```
 
 If yes, run:
+
 ```bash
 brew install ngrok
 ```
 
 **If ngrok is not authenticated**, check and guide:
+
 ```bash
 ngrok config check 2>&1
 ```
 
 If it needs auth:
+
 1. Tell the user: "Sign up at https://ngrok.com (free tier works), then copy your auth token from the dashboard."
 2. Ask the user in plain text to paste the token, then run:
+
 ```bash
 ngrok config add-authtoken <token>
 ```
@@ -90,6 +94,7 @@ Present all missing items together in a single message, then let the user respon
 For example, if both token and username are missing:
 
 > "I need two things from you:
+>
 > 1. **GitHub token** — Go to github.com/settings/tokens and create a fine-grained token with repository access for `<target-repo>` and permissions: Issues (R/W), Pull Requests (R/W), Contents (Read).
 > 2. **GitHub username** — Your GitHub username (used for authorization).
 >
@@ -102,6 +107,7 @@ If the user says they've already added values to `.env`, read the file to confir
 Write only the **missing** values to `.env`. Do not overwrite existing values.
 
 Values to set (if missing):
+
 ```env
 WEBHOOK_SECRET=<webhook-secret>
 GITHUB_TOKEN=<token>
@@ -120,6 +126,7 @@ Tell the user to go to their **target repo** on GitHub > **Settings** > **Webhoo
 - Click **Add webhook**
 
 Use **AskUserQuestion** to confirm when done:
+
 ```
 Header: "Webhook"
 Question: "Have you added the webhook to your GitHub repo?"
@@ -147,6 +154,7 @@ curl -s <ngrok-url>/health
 Both should return `{"status":"ok"}`. If the ngrok check fails, make sure the ngrok terminal is still running.
 
 Stop the background server when done verifying:
+
 ```bash
 kill %1 2>/dev/null
 ```

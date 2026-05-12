@@ -5,7 +5,7 @@ description: |
   level select, mobile layout fixes, and focused bug fixes.
 
   Does: captures project context, creates a focused implementation plan,
-  implements the requested slice, runs npm test/lint/build deterministically,
+  implements the requested slice, runs Bun test/lint/build deterministically,
   iterates on validation failures, reviews the final diff, and summarizes the
   result with artifact paths.
 
@@ -85,9 +85,9 @@ nodes:
       }
 
       : > "$ARTIFACTS_DIR/validation/status.env"
-      run_check test npm run test
-      run_check lint npm run lint
-      run_check build npm run build
+      run_check test bun run test
+      run_check lint bun run lint
+      run_check build bun run build
 
       test_status=$(awk -F= '$1=="test"{print $2}' "$ARTIFACTS_DIR/validation/status.env")
       lint_status=$(awk -F= '$1=="lint"{print $2}' "$ARTIFACTS_DIR/validation/status.env")
@@ -124,12 +124,12 @@ nodes:
         user changes. After changes, update $ARTIFACTS_DIR/validation-fixes.md
         with what failed, what changed, and any remaining risk.
 
-        When npm run test, npm run lint, and npm run build all pass, output:
+        When bun run test, bun run lint, and bun run build all pass, output:
         <promise>VALIDATION_FIXED</promise>
       until: VALIDATION_FIXED
       max_iterations: 4
       fresh_context: false
-      until_bash: "npm run test && npm run lint && npm run build"
+      until_bash: "bun run test && bun run lint && bun run build"
 
   - id: final-validation
     depends_on: [validate, fix-validation]
@@ -147,9 +147,9 @@ nodes:
       }
 
       : > "$ARTIFACTS_DIR/final-validation/status.env"
-      run_check test npm run test
-      run_check lint npm run lint
-      run_check build npm run build
+      run_check test bun run test
+      run_check lint bun run lint
+      run_check build bun run build
 
       test_status=$(awk -F= '$1=="test"{print $2}' "$ARTIFACTS_DIR/final-validation/status.env")
       lint_status=$(awk -F= '$1=="lint"{print $2}' "$ARTIFACTS_DIR/final-validation/status.env")

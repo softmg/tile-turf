@@ -243,9 +243,7 @@ function parseReviewVerdict(reviewPath) {
   }
 
   const content = fs.readFileSync(reviewPath, "utf8");
-  const verdictLine = content
-    .split(/\r?\n/)
-    .find((line) => /^Verdict:/i.test(line.trim()));
+  const verdictLine = content.split(/\r?\n/).find((line) => /^Verdict:/i.test(line.trim()));
 
   if (!verdictLine) {
     return null;
@@ -264,13 +262,7 @@ function ensureNumber(value, fallback = null) {
 }
 
 function updateAfterRun(stateFile, options) {
-  const {
-    step: stepId,
-    startedAt,
-    runRoot,
-    exitCode: exitCodeRaw,
-    artifactsDir,
-  } = options;
+  const { step: stepId, startedAt, runRoot, exitCode: exitCodeRaw, artifactsDir } = options;
 
   if (!stepId || !startedAt || !runRoot || !artifactsDir) {
     fail("update-after-run requires --step, --started-at, --run-root, and --artifacts-dir.");
@@ -287,9 +279,7 @@ function updateAfterRun(stateFile, options) {
   const finalValidation = runDir
     ? readEnvFile(path.join(runDir, "final-validation", "status.env"))
     : null;
-  const validation = runDir
-    ? readEnvFile(path.join(runDir, "validation", "status.env"))
-    : null;
+  const validation = runDir ? readEnvFile(path.join(runDir, "validation", "status.env")) : null;
   const reviewVerdict = runDir ? parseReviewVerdict(path.join(runDir, "review.md")) : null;
 
   let nextStatus = "blocked";
@@ -337,19 +327,19 @@ function updateAfterRun(stateFile, options) {
   };
 
   fs.mkdirSync(artifactsDir, { recursive: true });
-  fs.writeFileSync(path.join(artifactsDir, "state-update.json"), `${JSON.stringify(summary, null, 2)}\n`);
+  fs.writeFileSync(
+    path.join(artifactsDir, "state-update.json"),
+    `${JSON.stringify(summary, null, 2)}\n`,
+  );
   printJson(summary);
 }
 
 function summary(stateFile) {
   const data = loadState(stateFile);
-  const counts = data.steps.reduce(
-    (accumulator, step) => {
-      accumulator[step.status] = (accumulator[step.status] ?? 0) + 1;
-      return accumulator;
-    },
-    {},
-  );
+  const counts = data.steps.reduce((accumulator, step) => {
+    accumulator[step.status] = (accumulator[step.status] ?? 0) + 1;
+    return accumulator;
+  }, {});
 
   printJson({
     total: data.steps.length,

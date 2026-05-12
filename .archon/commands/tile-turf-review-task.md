@@ -14,19 +14,23 @@ documentation/artifact correction. Review the code diff and artifacts.
 ## Phase 1: Load
 
 Read:
+
 - `$ARTIFACTS_DIR/plan.md`
 - `$ARTIFACTS_DIR/implementation.md`
 - `$ARTIFACTS_DIR/final-validation/status.env`
 - final validation logs if any command failed
 
 Inspect:
+
 - `git diff --stat`
 - `git diff`
+- `git diff -- src/routes src/routeTree.gen.ts` when generated routes changed
 - relevant tests
 
 ## Phase 2: Review Criteria
 
 Check for:
+
 - behavior that contradicts the plan
 - progression/save regressions
 - Yandex SDK calls that can crash outside the platform
@@ -34,11 +38,14 @@ Check for:
 - React state bugs and stale closures
 - mobile layout regressions
 - missing or weak tests for changed domain behavior
+- generated route diffs that do not match route source changes after `bun run build`
+- tokens, private keys, or credentials added to tracked repo files
 - unnecessary broad refactors
 
 ## Phase 3: Artifact
 
 Write `$ARTIFACTS_DIR/review.md` with:
+
 - Verdict: pass, pass-with-notes, or needs-follow-up
 - Findings ordered by severity with file paths
 - Validation status
@@ -49,5 +56,6 @@ Write `$ARTIFACTS_DIR/review.md` with:
 Return a short review verdict and the artifact path.
 
 ### CHECKPOINT
+
 - [ ] `$ARTIFACTS_DIR/review.md` exists
 - [ ] Review covers diff, tests, and platform/gameplay risks

@@ -18,8 +18,8 @@ Follow the step-by-step instructions in **[docs/slack-setup.md](../../../../../d
 ## `.env` Configuration (in the archon repo root)
 
 ```env
-SLACK_BOT_TOKEN=xoxb-your-bot-token
-SLACK_APP_TOKEN=xapp-your-app-token
+SLACK_BOT_TOKEN=<xoxb-bot-token>
+SLACK_APP_TOKEN=<xapp-app-token>
 SLACK_ALLOWED_USER_IDS=<your Slack user ID>
 SLACK_STREAMING_MODE=batch
 ```

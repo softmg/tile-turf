@@ -1,10 +1,10 @@
 version: 1
-updatedAt: "2026-05-09T00:00:00.000Z"
+updatedAt: "2026-05-09T06:08:16.000Z"
 steps:
   - id: step-1
     title: Make bun run lint usable as a gate
     branch: chore/lint-prettier-crlf
-    status: pending
+    status: done
     request: >-
       Make `bun run lint` usable as a reliable gate. Run a deliberate formatting pass for repo-wide CRLF/Prettier
       issues, expecting a large mechanical diff. Do not change gameplay behavior. Re-run `bun run lint` after formatting
@@ -12,11 +12,19 @@ steps:
     continueMessage: >-
       Continue only the lint gate cleanup. Read the latest validation artifacts, fix remaining Prettier/CRLF or lint
       issues, and do not start the next plan step.
-
+    updatedAt: "2026-05-09T07:03:28.595Z"
+    lastAttemptAt: "2026-05-09T06:50:56.015Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/tile-turf/artifacts/runs/054f402fbcfa8b6bef5fc548ea4d9be7
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
   - id: step-2
     title: Continue splitting IsoGrid systems
     branch: refactor/isogrid-systems
-    status: pending
+    status: done
     request: >-
       Continue splitting `src/components/IsoGrid.tsx` into focused modules while preserving behavior. Target Pixi
       application lifecycle and asset loading, input systems, HUD and modal UI components, bot AI, minimap rendering,
@@ -24,11 +32,19 @@ steps:
     continueMessage: >-
       Continue only the `IsoGrid.tsx` extraction work. Preserve gameplay behavior, do not revert unrelated changes, and
       keep the diff scoped to the current extraction slice.
-
+    updatedAt: "2026-05-09T07:48:43.957Z"
+    lastAttemptAt: "2026-05-09T07:27:09.708Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/tile-turf/artifacts/runs/0ce36fe08c2d5480312acae24088e43a
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
   - id: step-3
     title: Maintain agent and generated-route setup
     branch: chore/agent-route-state
-    status: pending
+    status: done
     request: >-
       Review and normalize the local agent and generated-route setup. Keep `AGENTS.md`, `.agents/`, `.archon/`, and
       `.claude/` in sync when the local agent workflow changes. Keep secrets out of repo files and use ignored env files
@@ -37,11 +53,19 @@ steps:
     continueMessage: >-
       Continue only the agent and generated-route setup cleanup. Do not change gameplay behavior or start the next plan
       step.
-
+    updatedAt: "2026-05-09T09:29:01.748Z"
+    lastAttemptAt: "2026-05-09T09:14:20.631Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/tile-turf/artifacts/runs/42680ecce5a6ee9ed5f7b09461e9045a
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
   - id: step-4
     title: Add automated game tests
     branch: test/deterministic-game-hooks
-    status: pending
+    status: done
     request: >-
       Add focused automated game tests using the deterministic hooks `window.render_game_to_text()` and
       `window.advanceTime(ms)`. Cover fresh storage hydration, pause freezing game time and hazard timers, chest banking
@@ -50,3 +74,122 @@ steps:
     continueMessage: >-
       Continue only the automated game test work. Use deterministic hooks instead of real-time waits where possible, and
       do not start the next plan step.
+    updatedAt: "2026-05-09T10:03:27.821Z"
+    lastAttemptAt: "2026-05-09T09:29:02.091Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/tile-turf/artifacts/runs/277f8597aeb11dbdc28597e51a724316
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-5
+    title: Harden Pixi lifecycle and asset loading
+    branch: fix/pixi-lifecycle-assets
+    status: done
+    request: >-
+      Apply the PixiJS v8 lifecycle findings from the audit. In `src/components/IsoGrid.tsx`, wrap the full async
+      `Application.init` plus `Assets.load` sequence in recoverable error handling, avoid unhandled asset-load
+      rejections, and make destroyed/unmounted races explicit. Replace `app.destroy(true, { children: true })` with the
+      v8 destroy shape that removes the canvas and releases global renderer resources during round/app teardown:
+      `app.destroy({ removeView: true, releaseGlobalResources: true }, { children: true })`. Keep cached game textures
+      only if that is intentional; otherwise unload abandoned assets. Move texture options such as scale mode and mipmap
+      generation into `Assets.load` descriptors where possible instead of mutating `texture.source` after load. Remove
+      or dev-gate routine Pixi console logs. Verify by repeatedly starting/ending rounds and hot-reloading without
+      console errors, stale canvases, or texture flicker.
+    continueMessage: >-
+      Continue only the Pixi lifecycle and asset-loading hardening. Preserve gameplay behavior and validate repeated
+      mount/unmount, round restart, and browser console cleanliness before moving on.
+    updatedAt: "2026-05-09T11:05:14.692Z"
+    lastAttemptAt: "2026-05-09T10:47:35.734Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/tile-turf/artifacts/runs/49339d951811398ee9cf28354f61018a
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-6
+    title: Fix Pixi input and mobile touch handling
+    branch: fix/pixi-input-touch
+    status: done
+    request: >-
+      Fix the Pixi event/input risks found in the audit. Use `globalpointermove` for joystick dragging so movement does
+      not stop when the pointer leaves the stage hit area, handle `pointercancel` consistently, and reset drag state
+      when pause/tutorial/game-over modals open. Prevent two-finger pinch zoom from also starting or continuing the Pixi
+      joystick gesture by tracking active touch pointers or an explicit pinch-active flag. Recheck `app.stage` `hitArea`
+      after Pixi resizes and after viewport changes. Smoke test keyboard movement, pointer/touch movement, pinch zoom,
+      pause/resume, and mobile viewport behavior with no console warnings.
+    continueMessage: >-
+      Continue only the Pixi input/touch fixes. Keep desktop keyboard controls, mobile joystick, pinch zoom, and modal
+      pause behavior intact.
+    updatedAt: "2026-05-09T12:24:53.430Z"
+    lastAttemptAt: "2026-05-09T12:06:48.501Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/tile-turf/artifacts/runs/db01e6c79ed231995cd018ac3146c40f
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-7
+    title: Split Pixi scene layers and reduce sorting work
+    branch: refactor/pixi-scene-layers
+    status: done
+    request: >-
+      Refactor the Pixi scene graph around the audit findings without changing gameplay. Split static board tiles,
+      dynamic actors, hazards/pickups, minimap, and joystick into focused layers or small modules instead of adding more
+      responsibility to `IsoGrid.tsx`. Avoid sorting static tile sprites every frame while preserving isometric depth
+      ordering for actors, chests, bombs, boots, and arrows. Consider `isRenderGroup` and fixed `boundsArea` only for
+      stable subtrees where profiling or the debug HUD shows a benefit. Keep leaves (`Sprite`, `Graphics`) child-free,
+      centralize display-object factories, and ensure every dynamically created Pixi object has a clear owner and
+      teardown path.
+    continueMessage: >-
+      Continue only the Pixi scene/layer refactor. Keep the visual result identical on desktop and mobile, and verify no
+      leaf display object receives children.
+    updatedAt: "2026-05-09T14:07:04.838Z"
+    lastAttemptAt: "2026-05-09T13:50:18.833Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/tile-turf/artifacts/runs/c371710f35b04027b967d48967d22baf
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-8
+    title: Make deterministic hooks drive the real game loop
+    branch: test/pixi-deterministic-loop
+    status: done
+    request: >-
+      Fix the deterministic testing gap found during the audit. `window.advanceTime(ms)` currently advances game time,
+      timers, bombs, and arrows, but it does not run the same movement, animation landing, enemy AI, score flushing,
+      aura/stun, minimap marker, and pickup/chest collision path as `app.ticker`. Extract a shared fixed-step update
+      function used by both the Pixi ticker and deterministic hooks, and add a test/manual mode that prevents the real
+      ticker from racing `advanceTime`. Keep seeded RNG deterministic. Use this before expanding tests for pause,
+      hazards, chest banking, arrow painting, and bot movement.
+    continueMessage: >-
+      Continue only the deterministic loop/hook work. The acceptance target is that `advanceTime(ms)` produces the same
+      gameplay transitions as elapsed ticker time, without real-time flakiness.
+    updatedAt: "2026-05-09T14:38:18.121Z"
+    lastAttemptAt: "2026-05-09T14:07:05.220Z"
+    lastExitCode: 0
+    lastRunArtifacts: /Users/fenix007/.archon/workspaces/softmg/tile-turf/artifacts/runs/94d4adf81222fd7c4e18eb5be7bb553e
+    lastReviewVerdict: pass-with-notes
+    lastValidation:
+      test: "0"
+      lint: "0"
+      build: "0"
+  - id: step-9
+    title: Add Pixi smoke-test observability
+    branch: test/pixi-smoke-observability
+    status: pending
+    request: >-
+      Add lightweight development-only observability for future Pixi smoke tests. Expose or log, behind dev/debug
+      gating, renderer backend (`app.renderer.name`), resolution/DPR cap, stage/world child counts, active bombs, active
+      animations, minimap dirty passes, and texture load failures. Keep high-frequency values out of React state except
+      for throttled HUD/debug output. Use these signals in browser smoke checks after `bun run build` so future agents
+      can verify that the canvas is nonblank, the renderer initialized, controls work, and the console has no
+      Pixi/runtime errors.
+    continueMessage: >-
+      Continue only the Pixi smoke-test observability work. Keep instrumentation dev-only or debug-gated and do not add
+      production HUD noise.

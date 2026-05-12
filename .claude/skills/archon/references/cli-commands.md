@@ -27,15 +27,16 @@ archon workflow run quick-fix --no-worktree "Fix the typo in README"
 archon workflow run archon-fix-github-issue --resume
 ```
 
-| Flag | Description |
-|------|-------------|
-| `--branch <name>` / `-b` | Branch name for worktree. Reuses existing worktree if healthy |
-| `--from <name>` / `--from-branch <name>` | Start-point branch for new worktree (default: repo default branch) |
-| `--no-worktree` | Skip isolation — run in the live checkout |
-| `--resume` | Resume the last failed run of this workflow at this cwd (skips completed nodes) |
-| `--cwd <path>` | Working directory override |
+| Flag                                     | Description                                                                     |
+| ---------------------------------------- | ------------------------------------------------------------------------------- |
+| `--branch <name>` / `-b`                 | Branch name for worktree. Reuses existing worktree if healthy                   |
+| `--from <name>` / `--from-branch <name>` | Start-point branch for new worktree (default: repo default branch)              |
+| `--no-worktree`                          | Skip isolation — run in the live checkout                                       |
+| `--resume`                               | Resume the last failed run of this workflow at this cwd (skips completed nodes) |
+| `--cwd <path>`                           | Working directory override                                                      |
 
 **Flag conflicts** (errors):
+
 - `--branch` + `--no-worktree`
 - `--from` + `--no-worktree`
 - `--resume` + `--branch`
@@ -148,11 +149,11 @@ archon isolation cleanup --merged --include-closed   # Also remove worktrees who
 
 **Flags:**
 
-| Flag | Description |
-|------|-------------|
-| `[days]` | Positional — age threshold in days. Environments untouched for longer than this are removed. Default: 7 |
-| `--merged` | Union of three signals — ancestry (`git branch --merged`), patch equivalence (`git cherry`), and PR state (`gh`) — safely catches squash-merges |
-| `--include-closed` | With `--merged`, also remove worktrees whose PRs were closed (abandoned, not merged) |
+| Flag               | Description                                                                                                                                     |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `[days]`           | Positional — age threshold in days. Environments untouched for longer than this are removed. Default: 7                                         |
+| `--merged`         | Union of three signals — ancestry (`git branch --merged`), patch equivalence (`git cherry`), and PR state (`gh`) — safely catches squash-merges |
+| `--include-closed` | With `--merged`, also remove worktrees whose PRs were closed (abandoned, not merged)                                                            |
 
 ## Validate Commands
 
@@ -225,20 +226,20 @@ archon chat "/status"
 
 ## Global Flags
 
-| Flag | Short | Description |
-|------|-------|-------------|
-| `--cwd <path>` | — | Working directory override |
-| `--quiet` | `-q` | Set log level to `warn` (errors only) |
-| `--verbose` | `-v` | Set log level to `debug` |
-| `--json` | — | Machine-readable JSON output (workflow list) |
-| `--help` | `-h` | Print usage and exit |
+| Flag           | Short | Description                                  |
+| -------------- | ----- | -------------------------------------------- |
+| `--cwd <path>` | —     | Working directory override                   |
+| `--quiet`      | `-q`  | Set log level to `warn` (errors only)        |
+| `--verbose`    | `-v`  | Set log level to `debug`                     |
+| `--json`       | —     | Machine-readable JSON output (workflow list) |
+| `--help`       | `-h`  | Print usage and exit                         |
 
 ## Key Environment Variables
 
-| Variable | Purpose |
-|----------|---------|
-| `CLAUDE_API_KEY` | Claude API key (explicit auth) |
-| `CLAUDE_USE_GLOBAL_AUTH` | `true` to use `claude /login` credentials |
-| `ARCHON_HOME` | Override base directory (default: `~/.archon`) |
-| `LOG_LEVEL` | Pino log level: `fatal\|error\|warn\|info\|debug\|trace` |
-| `DATABASE_URL` | PostgreSQL URL (omit for SQLite default) |
+| Variable                 | Purpose                                                  |
+| ------------------------ | -------------------------------------------------------- |
+| `CLAUDE_API_KEY`         | Claude API key (explicit auth)                           |
+| `CLAUDE_USE_GLOBAL_AUTH` | `true` to use `claude /login` credentials                |
+| `ARCHON_HOME`            | Override base directory (default: `~/.archon`)           |
+| `LOG_LEVEL`              | Pino log level: `fatal\|error\|warn\|info\|debug\|trace` |
+| `DATABASE_URL`           | PostgreSQL URL (omit for SQLite default)                 |

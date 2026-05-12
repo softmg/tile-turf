@@ -56,6 +56,7 @@ argument-hint: <issue-number> or (no arguments)
 [Instructions for writing artifacts]
 
 ### PHASE_3_CHECKPOINT
+
 - [ ] Artifact written to `$ARTIFACTS_DIR/output.md`
 - [ ] Summary prepared
 
@@ -66,10 +67,10 @@ argument-hint: <issue-number> or (no arguments)
 
 ### Frontmatter Fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `description` | Recommended | Human-readable description (shown in listings) |
-| `argument-hint` | Optional | Expected arguments hint (e.g., `<issue-number>`, `(no arguments)`) |
+| Field           | Required    | Description                                                        |
+| --------------- | ----------- | ------------------------------------------------------------------ |
+| `description`   | Recommended | Human-readable description (shown in listings)                     |
+| `argument-hint` | Optional    | Expected arguments hint (e.g., `<issue-number>`, `(no arguments)`) |
 
 The frontmatter is metadata for discovery. The entire file content (including frontmatter) becomes the prompt sent to the AI.
 
@@ -78,6 +79,7 @@ The frontmatter is metadata for discovery. The entire file content (including fr
 Variables are replaced at execution time. See `references/variables.md` for the complete list.
 
 Most commonly used:
+
 - `$ARGUMENTS` — the user's input message
 - `$ARTIFACTS_DIR` — write artifacts here (pre-created directory)
 - `$WORKFLOW_ID` — for tracking
@@ -86,6 +88,7 @@ Most commonly used:
 ## Name Validation Rules
 
 Command names must:
+
 - Not contain `/`, `\`, or `..`
 - Not start with `.`
 - Not be empty
@@ -105,10 +108,11 @@ First match wins. To override a bundled command, drop a file with the same name 
 ## Referencing Commands from Workflows
 
 In workflow YAML, use the `command:` field on a node:
+
 ```yaml
 nodes:
   - id: review
-    command: my-command       # Loads .archon/commands/my-command.md
+    command: my-command # Loads .archon/commands/my-command.md
     depends_on: [implement]
 ```
 
@@ -128,16 +132,16 @@ Each phase should have a `PHASE_N_CHECKPOINT` with a checklist to keep the AI on
 
 Artifacts are how steps communicate in multi-step workflows. Write outputs to `$ARTIFACTS_DIR/`:
 
-| Convention | Purpose |
-|------------|---------|
-| `$ARTIFACTS_DIR/plan.md` | Implementation plan |
-| `$ARTIFACTS_DIR/investigation.md` | Bug investigation results |
-| `$ARTIFACTS_DIR/implementation.md` | Implementation summary |
-| `$ARTIFACTS_DIR/validation.md` | Test/lint results |
-| `$ARTIFACTS_DIR/pr-body.md` | PR description content |
-| `$ARTIFACTS_DIR/.pr-number` | PR number (metadata) |
-| `$ARTIFACTS_DIR/.pr-url` | PR URL (metadata) |
-| `$ARTIFACTS_DIR/review/` | Review agent outputs (subdirectory) |
+| Convention                         | Purpose                             |
+| ---------------------------------- | ----------------------------------- |
+| `$ARTIFACTS_DIR/plan.md`           | Implementation plan                 |
+| `$ARTIFACTS_DIR/investigation.md`  | Bug investigation results           |
+| `$ARTIFACTS_DIR/implementation.md` | Implementation summary              |
+| `$ARTIFACTS_DIR/validation.md`     | Test/lint results                   |
+| `$ARTIFACTS_DIR/pr-body.md`        | PR description content              |
+| `$ARTIFACTS_DIR/.pr-number`        | PR number (metadata)                |
+| `$ARTIFACTS_DIR/.pr-url`           | PR URL (metadata)                   |
+| `$ARTIFACTS_DIR/review/`           | Review agent outputs (subdirectory) |
 
 ## Anti-Patterns
 
@@ -164,7 +168,7 @@ Analyze the codebase and help the user with their request. Use Read, Grep, Glob,
 
 ## Complex Command Example
 
-```markdown
+````markdown
 ---
 description: Validate implementation against the plan
 argument-hint: (no arguments - reads from workflow artifacts)
@@ -179,6 +183,7 @@ argument-hint: (no arguments - reads from workflow artifacts)
 ## Phase 1: LOAD
 
 Read the plan context:
+
 - Read `$ARTIFACTS_DIR/plan-context.md` for the implementation plan
 - Read `$ARTIFACTS_DIR/implementation.md` for what was implemented
 
@@ -191,10 +196,12 @@ bun run type-check
 bun run lint
 bun run test
 ```
+````
 
 Record all failures with file paths and error messages.
 
 ### PHASE_2_CHECKPOINT
+
 - [ ] Type-check results recorded
 - [ ] Lint results recorded
 - [ ] Test results recorded
@@ -202,7 +209,11 @@ Record all failures with file paths and error messages.
 ## Phase 3: REPORT
 
 Write validation results to `$ARTIFACTS_DIR/validation.md` with:
+
 - Pass/fail status for each check
 - Specific error details for failures
 - Summary recommendation (proceed / needs fixes)
+
+```
+
 ```
