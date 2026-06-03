@@ -981,11 +981,11 @@ function IsoRound({
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       const moveCharacter = (c: Character, direction: Direction) => {
-        if (gameOverRef.current || !startedRef.current || pausedRef.current) return;
-        if (c.anim) return;
-        if (gameNow() < c.stunnedUntil) return;
+        if (gameOverRef.current || !startedRef.current || pausedRef.current) return false;
+        if (c.anim) return false;
+        if (gameNow() < c.stunnedUntil) return false;
         const next = nextGridPosition(c.gx, c.gy, direction);
-        if (!isInsideBoard(next.gx, next.gy)) return;
+        if (!isInsideBoard(next.gx, next.gy)) return false;
         const fromX = c.gx;
         const fromY = c.gy;
         c.gx = next.gx;
@@ -1001,6 +1001,7 @@ function IsoRound({
           duration: jumpDurationFor(c),
           arrowDir,
         };
+        return true;
       };
 
       const movePlayer = (d: Direction) => moveCharacter(player, d);
@@ -1203,6 +1204,8 @@ function IsoRound({
       window.render_game_to_text = renderGameToText;
       window.advanceTime = advanceTime;
 
+      let advanceJoystickMovement: (now?: number) => void = () => {};
+
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
 
@@ -1261,6 +1264,7 @@ function IsoRound({
         world.x += (cameraTargetX - world.x) * camSmooth;
         world.y += (cameraTargetY - world.y) * camSmooth;
 
+        advanceJoystickMovement();
         if (!manualTicker && !deterministicTestMode.enabled) advanceGameplayBy(dtMs);
       });
 
@@ -1280,6 +1284,7 @@ function IsoRound({
       let activeJoystickPointerType: FederatedPointerEvent["pointerType"] | null = null;
       let baseX = 0;
       let baseY = 0;
+      let joystickDirection: Direction | null = null;
       let lastMoveTime = 0;
       const MAX_RADIUS = 40;
       const THRESHOLD = 30;
@@ -1289,6 +1294,7 @@ function IsoRound({
         isDragging = false;
         activeJoystickPointerId = null;
         activeJoystickPointerType = null;
+        joystickDirection = null;
         joystick.visible = false;
         knob.x = 0;
         knob.y = 0;
@@ -1309,11 +1315,33 @@ function IsoRound({
         activeJoystickPointerId === e.pointerId &&
         activeJoystickPointerType === e.pointerType;
 
+      const directionFromJoystickAngle = (angle: number): Direction => {
+        const deg = (angle * 180) / Math.PI;
+        if (deg >= -90 && deg < 0) return "UP";
+        if (deg >= 0 && deg < 90) return "RIGHT";
+        if (deg >= 90 && deg <= 180) return "DOWN";
+        return "LEFT";
+      };
+
+      advanceJoystickMovement = (now = performance.now()) => {
+        if (!isDragging || !joystickDirection) return;
+        if (
+          isJoystickBlocked() ||
+          (activeJoystickPointerType === "touch" && touchPointersRef.current.size > 1)
+        ) {
+          resetJoystickDrag();
+          return;
+        }
+        if (now - lastMoveTime < COOLDOWN) return;
+        if (movePlayer(joystickDirection)) lastMoveTime = now;
+      };
+
       const onDown = (e: FederatedPointerEvent) => {
         if (isDragging || isJoystickBlocked()) return;
         if (e.pointerType === "touch" && touchPointersRef.current.size > 1) return;
         activeJoystickPointerId = e.pointerId;
         activeJoystickPointerType = e.pointerType;
+        joystickDirection = null;
         baseX = e.global.x;
         baseY = e.global.y;
         joystick.x = baseX;
@@ -1342,19 +1370,8 @@ function IsoRound({
         knob.x = Math.cos(angle) * clamped;
         knob.y = (Math.sin(angle) * clamped) / 0.5;
 
-        if (dist < THRESHOLD) return;
-        const now = performance.now();
-        if (now - lastMoveTime < COOLDOWN) return;
-
-        const deg = (angle * 180) / Math.PI;
-        let dir: Direction;
-        if (deg >= -90 && deg < 0) dir = "UP";
-        else if (deg >= 0 && deg < 90) dir = "RIGHT";
-        else if (deg >= 90 && deg <= 180) dir = "DOWN";
-        else dir = "LEFT";
-
-        movePlayer(dir);
-        lastMoveTime = now;
+        joystickDirection = dist < THRESHOLD ? null : directionFromJoystickAngle(angle);
+        advanceJoystickMovement();
       };
 
       const onUp = (e: FederatedPointerEvent) => {
