@@ -9,7 +9,6 @@ export interface JoystickView {
 export const createJoystickView = (parent: Container): JoystickView => {
   const container = new Container({ label: "joystick" });
   container.visible = false;
-  container.scale.y = 0.5;
   parent.addChild(container);
 
   const base = new Graphics({ label: "joystick-base" });

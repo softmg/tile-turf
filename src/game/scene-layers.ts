@@ -1,4 +1,5 @@
 import { Container, type Application } from "pixi.js";
+import { BOARD_SIZE } from "@/game/game-constants";
 
 export interface SceneLayers {
   world: Container;
@@ -19,8 +20,8 @@ export const DEPTH_OFFSETS = {
   BOMB_EXPLOSION: 0.5,
 } as const;
 
-export const isoDepth = (gx: number, gy: number, offset: number = DEPTH_OFFSETS.TILE_BASE) =>
-  gx + gy + offset;
+export const gridDepth = (gx: number, gy: number, offset: number = DEPTH_OFFSETS.TILE_BASE) =>
+  gy * BOARD_SIZE + gx * 0.001 + offset;
 
 export const createSceneLayers = (app: Application): SceneLayers => {
   const world = new Container({ label: "world" });

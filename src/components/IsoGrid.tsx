@@ -37,7 +37,14 @@ import {
   type SkinId,
   zeroScores,
 } from "@/game/game-constants";
-import { isoPos, isInsideBoard, manhattanDistance, nextGridPosition } from "@/game/grid-math";
+import {
+  boardBounds,
+  gridPos,
+  isInsideBoard,
+  manhattanDistance,
+  nextGridPosition,
+  perspectiveScale,
+} from "@/game/grid-math";
 import {
   countOwned as countOwnedTiles,
   scoreOwners,
@@ -56,7 +63,7 @@ import type { ArrowState, Bomb } from "@/game/hazards";
 import { createJoystickView } from "@/game/joystick-view";
 import { createMinimapView, MINI_CELL } from "@/game/minimap-view";
 import {
-  addBoardTilesInIsoOrder,
+  addBoardTilesInRowOrder,
   createArrowGraphic,
   createBoardTile,
   createBombExplosionSprite,
@@ -410,7 +417,7 @@ function IsoRound({
         owners[x] = [];
         for (let y = 0; y < BOARD_SIZE; y++) owners[x][y] = null;
       }
-      addBoardTilesInIsoOrder(
+      addBoardTilesInRowOrder(
         (x, y) => {
           const tile = createBoardTile(unpaintedTex, x, y);
           tiles[x][y] = tile;
@@ -552,15 +559,12 @@ function IsoRound({
 
       const computeCameraTarget = () => {
         const z = zoomRef.current;
-        const p = isoPos(player.gx, player.gy);
-        const minX = isoPos(0, 7).x;
-        const maxX = isoPos(7, 0).x;
-        const minY = isoPos(0, 0).y;
-        const maxY = isoPos(7, 7).y;
-        const gridW = (maxX - minX + TILE_SIZE) * z;
-        const gridH = (maxY - minY + TILE_SIZE) * z;
-        const gridCx = (minX + maxX) / 2;
-        const gridCy = (minY + maxY) / 2;
+        const p = gridPos(player.gx, player.gy);
+        const bounds = boardBounds(TILE_SIZE);
+        const gridW = bounds.width * z;
+        const gridH = bounds.height * z;
+        const gridCx = bounds.centerX;
+        const gridCy = bounds.centerY;
 
         if (gridW <= app.screen.width && gridH <= app.screen.height) {
           cameraTargetX = app.screen.width / 2 - gridCx * z;
@@ -574,12 +578,9 @@ function IsoRound({
       const centerCamera = () => {
         if (!cameraInitialized) {
           // Fit grid to screen on first render
-          const minX = isoPos(0, 7).x;
-          const maxX = isoPos(7, 0).x;
-          const minY = isoPos(0, 0).y;
-          const maxY = isoPos(7, 7).y;
-          const rawW = maxX - minX + TILE_SIZE;
-          const rawH = maxY - minY + TILE_SIZE;
+          const bounds = boardBounds(TILE_SIZE);
+          const rawW = bounds.width;
+          const rawH = bounds.height;
           // Reserve some space for HUD/scoreboard (top + bottom)
           const padX = 24;
           const padY = 140;
@@ -804,9 +805,9 @@ function IsoRound({
             if (elapsed > 1400) tex = bombTex3;
             else if (elapsed > 600) tex = bombTex2;
             if (bomb.warning.texture !== tex) {
-              updateBombWarningSprite(bomb.warning, tex);
+              updateBombWarningSprite(bomb.warning, tex, perspectiveScale(bomb.gy));
             }
-            const p = isoPos(bomb.gx, bomb.gy);
+            const p = gridPos(bomb.gx, bomb.gy);
             if (elapsed > 1400) {
               const k = (elapsed - 1400) / 600;
               const amp = 1 + k * 3;
@@ -820,7 +821,7 @@ function IsoRound({
           if (!bomb.boom) continue;
           bomb.explosionElapsed += dtMs;
           const k = Math.min(1, bomb.explosionElapsed / 220);
-          updateBombExplosionSprite(bomb.boom, boomTex, k);
+          updateBombExplosionSprite(bomb.boom, boomTex, k, perspectiveScale(bomb.gy));
           bomb.boom.alpha = Math.max(0, 1 - Math.max(0, bomb.explosionElapsed - 280) / 220);
           if (bomb.explosionElapsed >= 500) removeBomb(bomb);
         }
@@ -1315,12 +1316,9 @@ function IsoRound({
         activeJoystickPointerId === e.pointerId &&
         activeJoystickPointerType === e.pointerType;
 
-      const directionFromJoystickAngle = (angle: number): Direction => {
-        const deg = (angle * 180) / Math.PI;
-        if (deg >= -90 && deg < 0) return "UP";
-        if (deg >= 0 && deg < 90) return "RIGHT";
-        if (deg >= 90 && deg <= 180) return "DOWN";
-        return "LEFT";
+      const directionFromJoystickDelta = (dx: number, dy: number): Direction => {
+        if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? "RIGHT" : "LEFT";
+        return dy > 0 ? "DOWN" : "UP";
       };
 
       advanceJoystickMovement = (now = performance.now()) => {
@@ -1368,9 +1366,9 @@ function IsoRound({
         const clamped = Math.min(dist, MAX_RADIUS);
         const angle = Math.atan2(dy, dx);
         knob.x = Math.cos(angle) * clamped;
-        knob.y = (Math.sin(angle) * clamped) / 0.5;
+        knob.y = Math.sin(angle) * clamped;
 
-        joystickDirection = dist < THRESHOLD ? null : directionFromJoystickAngle(angle);
+        joystickDirection = dist < THRESHOLD ? null : directionFromJoystickDelta(dx, dy);
         advanceJoystickMovement();
       };
 
