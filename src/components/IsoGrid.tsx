@@ -306,7 +306,9 @@ function IsoRound({
     let appInitialized = false;
     let appDestroyed = false;
     let destroyed = false;
-    let keyHandler: ((e: KeyboardEvent) => void) | null = null;
+    let keyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+    let keyUpHandler: ((e: KeyboardEvent) => void) | null = null;
+    let keyBlurHandler: (() => void) | null = null;
     let resizeHandler: (() => void) | null = null;
     let visualViewport: VisualViewport | null = null;
     let viewportRefreshFrame: number | null = null;
@@ -1205,6 +1207,7 @@ function IsoRound({
       window.advanceTime = advanceTime;
 
       let advanceJoystickMovement: (now?: number) => void = () => {};
+      let advanceKeyboardMovement: () => void = () => {};
 
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
@@ -1264,8 +1267,9 @@ function IsoRound({
         world.x += (cameraTargetX - world.x) * camSmooth;
         world.y += (cameraTargetY - world.y) * camSmooth;
 
-        advanceJoystickMovement();
         if (!manualTicker && !deterministicTestMode.enabled) advanceGameplayBy(dtMs);
+        advanceJoystickMovement();
+        advanceKeyboardMovement();
       });
 
       // ---------- Joystick ----------
@@ -1392,35 +1396,105 @@ function IsoRound({
         app.stage.off("pointercancel", onUp);
       };
 
-      keyHandler = (e: KeyboardEvent) => {
-        let dir: Direction | null = null;
+      const keyboardKeysDown = new Set<string>();
+      const keyboardKeyOrder: string[] = [];
+      const directionFromKeyboardKey = (key: string): Direction | null => {
+        switch (key) {
+          case "ArrowUp":
+          case "KeyW":
+          case "w":
+          case "W":
+            return "UP";
+          case "ArrowDown":
+          case "KeyS":
+          case "s":
+          case "S":
+            return "DOWN";
+          case "ArrowLeft":
+          case "KeyA":
+          case "a":
+          case "A":
+            return "LEFT";
+          case "ArrowRight":
+          case "KeyD":
+          case "d":
+          case "D":
+            return "RIGHT";
+        }
         switch (e.key) {
           case "ArrowUp":
           case "w":
           case "W":
-            dir = "UP";
-            break;
+            return "UP";
           case "ArrowDown":
           case "s":
           case "S":
-            dir = "DOWN";
-            break;
+            return "DOWN";
           case "ArrowLeft":
           case "a":
           case "A":
-            dir = "LEFT";
-            break;
+            return "LEFT";
           case "ArrowRight":
           case "d":
           case "D":
-            dir = "RIGHT";
-            break;
+            return "RIGHT";
+          default:
+            return null;
         }
+      };
+      const directionFromKeyboardEvent = (e: KeyboardEvent): Direction | null =>
+        directionFromKeyboardKey(e.code) ?? directionFromKeyboardKey(e.key);
+      const resetKeyboardInput = () => {
+        keyboardKeysDown.clear();
+        keyboardKeyOrder.length = 0;
+      };
+      const isKeyboardBlocked = () =>
+        destroyed ||
+        gameOverRef.current ||
+        !startedRef.current ||
+        pausedRef.current ||
+        modalOpenRef.current;
+      const activeKeyboardDirection = () => {
+        for (let i = keyboardKeyOrder.length - 1; i >= 0; i--) {
+          const code = keyboardKeyOrder[i];
+          if (!keyboardKeysDown.has(code)) continue;
+          const direction = directionFromKeyboardKey(code);
+          if (direction) return direction;
+        }
+        return null;
+      };
+      advanceKeyboardMovement = () => {
+        if (isKeyboardBlocked()) {
+          resetKeyboardInput();
+          return;
+        }
+        const dir = activeKeyboardDirection();
+        if (dir) movePlayer(dir);
+      };
+      keyDownHandler = (e: KeyboardEvent) => {
+        const dir = directionFromKeyboardEvent(e);
         if (!dir) return;
         e.preventDefault();
-        movePlayer(dir);
+        const code = e.code || e.key;
+        if (!keyboardKeysDown.has(code)) {
+          keyboardKeysDown.add(code);
+          keyboardKeyOrder.push(code);
+        }
+        advanceKeyboardMovement();
       };
-      window.addEventListener("keydown", keyHandler);
+      keyUpHandler = (e: KeyboardEvent) => {
+        const dir = directionFromKeyboardEvent(e);
+        if (!dir) return;
+        e.preventDefault();
+        const code = e.code || e.key;
+        keyboardKeysDown.delete(code);
+        const index = keyboardKeyOrder.indexOf(code);
+        if (index >= 0) keyboardKeyOrder.splice(index, 1);
+      };
+      keyBlurHandler = resetKeyboardInput;
+      window.addEventListener("keydown", keyDownHandler);
+      window.addEventListener("keyup", keyUpHandler);
+      window.addEventListener("blur", keyBlurHandler);
 
       const refreshViewport = () => {
         if (destroyed) return;
@@ -1455,7 +1529,9 @@ function IsoRound({
         resetJoystickRef.current = null;
       }
       if (viewportRefreshFrame !== null) cancelAnimationFrame(viewportRefreshFrame);
-      if (keyHandler) window.removeEventListener("keydown", keyHandler);
+      if (keyDownHandler) window.removeEventListener("keydown", keyDownHandler);
+      if (keyUpHandler) window.removeEventListener("keyup", keyUpHandler);
+      if (keyBlurHandler) window.removeEventListener("blur", keyBlurHandler);
       if (resizeHandler) {
         window.removeEventListener("resize", resizeHandler);
         window.removeEventListener("orientationchange", resizeHandler);
