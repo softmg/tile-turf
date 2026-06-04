@@ -53,7 +53,12 @@ import {
 } from "@/game/level-state";
 import type { Character } from "@/game/entities";
 import type { ArrowState, Bomb } from "@/game/hazards";
-import { createJoystickView } from "@/game/joystick-view";
+import { JOYSTICK_VERTICAL_SCALE, createJoystickView } from "@/game/joystick-view";
+import {
+  JOYSTICK_MOVE_COOLDOWN_MS,
+  createKeyboardMovementController,
+  joystickDragVector,
+} from "@/game/input-controls";
 import { createMinimapView, MINI_CELL } from "@/game/minimap-view";
 import {
   addBoardTilesInIsoOrder,
@@ -306,7 +311,9 @@ function IsoRound({
     let appInitialized = false;
     let appDestroyed = false;
     let destroyed = false;
-    let keyHandler: ((e: KeyboardEvent) => void) | null = null;
+    let keyDownHandler: ((e: KeyboardEvent) => void) | null = null;
+    let keyUpHandler: ((e: KeyboardEvent) => void) | null = null;
+    let keyBlurHandler: (() => void) | null = null;
     let resizeHandler: (() => void) | null = null;
     let visualViewport: VisualViewport | null = null;
     let viewportRefreshFrame: number | null = null;
@@ -981,11 +988,11 @@ function IsoRound({
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       const moveCharacter = (c: Character, direction: Direction) => {
-        if (gameOverRef.current || !startedRef.current || pausedRef.current) return;
-        if (c.anim) return;
-        if (gameNow() < c.stunnedUntil) return;
+        if (gameOverRef.current || !startedRef.current || pausedRef.current) return false;
+        if (c.anim) return false;
+        if (gameNow() < c.stunnedUntil) return false;
         const next = nextGridPosition(c.gx, c.gy, direction);
-        if (!isInsideBoard(next.gx, next.gy)) return;
+        if (!isInsideBoard(next.gx, next.gy)) return false;
         const fromX = c.gx;
         const fromY = c.gy;
         c.gx = next.gx;
@@ -1001,6 +1008,7 @@ function IsoRound({
           duration: jumpDurationFor(c),
           arrowDir,
         };
+        return true;
       };
 
       const movePlayer = (d: Direction) => moveCharacter(player, d);
@@ -1203,6 +1211,9 @@ function IsoRound({
       window.render_game_to_text = renderGameToText;
       window.advanceTime = advanceTime;
 
+      let advanceJoystickMovement: (now?: number) => void = () => {};
+      let advanceKeyboardMovement: () => void = () => {};
+
       app.ticker.add((ticker) => {
         const dtMs = ticker.deltaMS;
 
@@ -1262,6 +1273,8 @@ function IsoRound({
         world.y += (cameraTargetY - world.y) * camSmooth;
 
         if (!manualTicker && !deterministicTestMode.enabled) advanceGameplayBy(dtMs);
+        advanceJoystickMovement();
+        advanceKeyboardMovement();
       });
 
       // ---------- Joystick ----------
@@ -1280,15 +1293,15 @@ function IsoRound({
       let activeJoystickPointerType: FederatedPointerEvent["pointerType"] | null = null;
       let baseX = 0;
       let baseY = 0;
+      let joystickDirection: Direction | null = null;
       let lastMoveTime = 0;
-      const MAX_RADIUS = 40;
-      const THRESHOLD = 30;
-      const COOLDOWN = 200;
+      const COOLDOWN = JOYSTICK_MOVE_COOLDOWN_MS;
 
       const resetJoystickDrag = () => {
         isDragging = false;
         activeJoystickPointerId = null;
         activeJoystickPointerType = null;
+        joystickDirection = null;
         joystick.visible = false;
         knob.x = 0;
         knob.y = 0;
@@ -1309,11 +1322,25 @@ function IsoRound({
         activeJoystickPointerId === e.pointerId &&
         activeJoystickPointerType === e.pointerType;
 
+      advanceJoystickMovement = (now = performance.now()) => {
+        if (!isDragging || !joystickDirection) return;
+        if (
+          isJoystickBlocked() ||
+          (activeJoystickPointerType === "touch" && touchPointersRef.current.size > 1)
+        ) {
+          resetJoystickDrag();
+          return;
+        }
+        if (now - lastMoveTime < COOLDOWN) return;
+        if (movePlayer(joystickDirection)) lastMoveTime = now;
+      };
+
       const onDown = (e: FederatedPointerEvent) => {
         if (isDragging || isJoystickBlocked()) return;
         if (e.pointerType === "touch" && touchPointersRef.current.size > 1) return;
         activeJoystickPointerId = e.pointerId;
         activeJoystickPointerType = e.pointerType;
+        joystickDirection = null;
         baseX = e.global.x;
         baseY = e.global.y;
         joystick.x = baseX;
@@ -1336,25 +1363,14 @@ function IsoRound({
         }
         const dx = e.global.x - baseX;
         const dy = e.global.y - baseY;
-        const dist = Math.hypot(dx, dy);
-        const clamped = Math.min(dist, MAX_RADIUS);
-        const angle = Math.atan2(dy, dx);
-        knob.x = Math.cos(angle) * clamped;
-        knob.y = (Math.sin(angle) * clamped) / 0.5;
+        const dragVector = joystickDragVector(dx, dy);
+        knob.x = Math.cos(dragVector.knobAngle) * dragVector.clampedDistance;
+        knob.y =
+          (Math.sin(dragVector.knobAngle) * dragVector.clampedDistance) /
+          JOYSTICK_VERTICAL_SCALE;
 
-        if (dist < THRESHOLD) return;
-        const now = performance.now();
-        if (now - lastMoveTime < COOLDOWN) return;
-
-        const deg = (angle * 180) / Math.PI;
-        let dir: Direction;
-        if (deg >= -90 && deg < 0) dir = "UP";
-        else if (deg >= 0 && deg < 90) dir = "RIGHT";
-        else if (deg >= 90 && deg <= 180) dir = "DOWN";
-        else dir = "LEFT";
-
-        movePlayer(dir);
-        lastMoveTime = now;
+        joystickDirection = dragVector.direction;
+        advanceJoystickMovement();
       };
 
       const onUp = (e: FederatedPointerEvent) => {
@@ -1375,35 +1391,23 @@ function IsoRound({
         app.stage.off("pointercancel", onUp);
       };
 
-      keyHandler = (e: KeyboardEvent) => {
-        let dir: Direction | null = null;
-        switch (e.key) {
-          case "ArrowUp":
-          case "w":
-          case "W":
-            dir = "UP";
-            break;
-          case "ArrowDown":
-          case "s":
-          case "S":
-            dir = "DOWN";
-            break;
-          case "ArrowLeft":
-          case "a":
-          case "A":
-            dir = "LEFT";
-            break;
-          case "ArrowRight":
-          case "d":
-          case "D":
-            dir = "RIGHT";
-            break;
-        }
-        if (!dir) return;
-        e.preventDefault();
-        movePlayer(dir);
-      };
-      window.addEventListener("keydown", keyHandler);
+      const isKeyboardBlocked = () =>
+        destroyed ||
+        gameOverRef.current ||
+        !startedRef.current ||
+        pausedRef.current ||
+        modalOpenRef.current;
+      const keyboardMovement = createKeyboardMovementController({
+        isBlocked: isKeyboardBlocked,
+        move: movePlayer,
+      });
+      advanceKeyboardMovement = keyboardMovement.advance;
+      keyDownHandler = keyboardMovement.handleKeyDown;
+      keyUpHandler = keyboardMovement.handleKeyUp;
+      keyBlurHandler = keyboardMovement.reset;
+      window.addEventListener("keydown", keyDownHandler);
+      window.addEventListener("keyup", keyUpHandler);
+      window.addEventListener("blur", keyBlurHandler);
 
       const refreshViewport = () => {
         if (destroyed) return;
@@ -1438,7 +1442,9 @@ function IsoRound({
         resetJoystickRef.current = null;
       }
       if (viewportRefreshFrame !== null) cancelAnimationFrame(viewportRefreshFrame);
-      if (keyHandler) window.removeEventListener("keydown", keyHandler);
+      if (keyDownHandler) window.removeEventListener("keydown", keyDownHandler);
+      if (keyUpHandler) window.removeEventListener("keyup", keyUpHandler);
+      if (keyBlurHandler) window.removeEventListener("blur", keyBlurHandler);
       if (resizeHandler) {
         window.removeEventListener("resize", resizeHandler);
         window.removeEventListener("orientationchange", resizeHandler);
