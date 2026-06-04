@@ -54,6 +54,11 @@ import {
 import type { Character } from "@/game/entities";
 import type { ArrowState, Bomb } from "@/game/hazards";
 import { createJoystickView } from "@/game/joystick-view";
+import {
+  JOYSTICK_MOVE_COOLDOWN_MS,
+  createKeyboardMovementController,
+  joystickDragVector,
+} from "@/game/input-controls";
 import { createMinimapView, MINI_CELL } from "@/game/minimap-view";
 import {
   addBoardTilesInIsoOrder,
@@ -1290,10 +1295,7 @@ function IsoRound({
       let baseY = 0;
       let joystickDirection: Direction | null = null;
       let lastMoveTime = 0;
-      const MAX_RADIUS = 40;
-      const THRESHOLD = MAX_RADIUS * 0.01;
-      const SNAP_ANGLE = Math.PI / 6;
-      const COOLDOWN = 200;
+      const COOLDOWN = JOYSTICK_MOVE_COOLDOWN_MS;
 
       const resetJoystickDrag = () => {
         isDragging = false;
@@ -1319,34 +1321,6 @@ function IsoRound({
         isDragging &&
         activeJoystickPointerId === e.pointerId &&
         activeJoystickPointerType === e.pointerType;
-
-      const directionFromJoystickAngle = (angle: number): Direction => {
-        const deg = (angle * 180) / Math.PI;
-        if (deg >= -90 && deg < 0) return "UP";
-        if (deg >= 0 && deg < 90) return "RIGHT";
-        if (deg >= 90 && deg <= 180) return "DOWN";
-        return "LEFT";
-      };
-
-      const joystickDirectionAngles: Record<Direction, number> = {
-        UP: -Math.PI / 4,
-        RIGHT: Math.PI / 4,
-        DOWN: (3 * Math.PI) / 4,
-        LEFT: (-3 * Math.PI) / 4,
-      };
-
-      const angleDistance = (a: number, b: number) => {
-        const diff = Math.abs(a - b) % (Math.PI * 2);
-        return Math.min(diff, Math.PI * 2 - diff);
-      };
-
-      const snappedJoystickDirection = (angle: number) => {
-        const direction = directionFromJoystickAngle(angle);
-        const snapAngle = joystickDirectionAngles[direction];
-        return angleDistance(angle, snapAngle) <= SNAP_ANGLE
-          ? { direction, angle: snapAngle }
-          : { direction, angle };
-      };
 
       advanceJoystickMovement = (now = performance.now()) => {
         if (!isDragging || !joystickDirection) return;
@@ -1389,15 +1363,11 @@ function IsoRound({
         }
         const dx = e.global.x - baseX;
         const dy = e.global.y - baseY;
-        const dist = Math.hypot(dx, dy);
-        const clamped = Math.min(dist, MAX_RADIUS);
-        const angle = Math.atan2(dy, dx);
-        const snapped = snappedJoystickDirection(angle);
-        const knobAngle = dist < THRESHOLD ? angle : snapped.angle;
-        knob.x = Math.cos(knobAngle) * clamped;
-        knob.y = (Math.sin(knobAngle) * clamped) / 0.5;
+        const dragVector = joystickDragVector(dx, dy);
+        knob.x = Math.cos(dragVector.knobAngle) * dragVector.clampedDistance;
+        knob.y = (Math.sin(dragVector.knobAngle) * dragVector.clampedDistance) / 0.5;
 
-        joystickDirection = dist < THRESHOLD ? null : snapped.direction;
+        joystickDirection = dragVector.direction;
         advanceJoystickMovement();
       };
 
@@ -1419,102 +1389,20 @@ function IsoRound({
         app.stage.off("pointercancel", onUp);
       };
 
-      const keyboardKeysDown = new Set<string>();
-      const keyboardKeyOrder: string[] = [];
-      const directionFromKeyboardKey = (key: string): Direction | null => {
-        switch (key) {
-          case "ArrowUp":
-          case "KeyW":
-          case "w":
-          case "W":
-            return "UP";
-          case "ArrowDown":
-          case "KeyS":
-          case "s":
-          case "S":
-            return "DOWN";
-          case "ArrowLeft":
-          case "KeyA":
-          case "a":
-          case "A":
-            return "LEFT";
-          case "ArrowRight":
-          case "KeyD":
-          case "d":
-          case "D":
-            return "RIGHT";
-        }
-        switch (e.key) {
-          case "ArrowUp":
-          case "w":
-          case "W":
-            return "UP";
-          case "ArrowDown":
-          case "s":
-          case "S":
-            return "DOWN";
-          case "ArrowLeft":
-          case "a":
-          case "A":
-            return "LEFT";
-          case "ArrowRight":
-          case "d":
-          case "D":
-            return "RIGHT";
-          default:
-            return null;
-        }
-      };
-      const directionFromKeyboardEvent = (e: KeyboardEvent): Direction | null =>
-        directionFromKeyboardKey(e.code) ?? directionFromKeyboardKey(e.key);
-      const resetKeyboardInput = () => {
-        keyboardKeysDown.clear();
-        keyboardKeyOrder.length = 0;
-      };
       const isKeyboardBlocked = () =>
         destroyed ||
         gameOverRef.current ||
         !startedRef.current ||
         pausedRef.current ||
         modalOpenRef.current;
-      const activeKeyboardDirection = () => {
-        for (let i = keyboardKeyOrder.length - 1; i >= 0; i--) {
-          const code = keyboardKeyOrder[i];
-          if (!keyboardKeysDown.has(code)) continue;
-          const direction = directionFromKeyboardKey(code);
-          if (direction) return direction;
-        }
-        return null;
-      };
-      advanceKeyboardMovement = () => {
-        if (isKeyboardBlocked()) {
-          resetKeyboardInput();
-          return;
-        }
-        const dir = activeKeyboardDirection();
-        if (dir) movePlayer(dir);
-      };
-      keyDownHandler = (e: KeyboardEvent) => {
-        const dir = directionFromKeyboardEvent(e);
-        if (!dir) return;
-        e.preventDefault();
-        const code = e.code || e.key;
-        if (!keyboardKeysDown.has(code)) {
-          keyboardKeysDown.add(code);
-          keyboardKeyOrder.push(code);
-        }
-        advanceKeyboardMovement();
-      };
-      keyUpHandler = (e: KeyboardEvent) => {
-        const dir = directionFromKeyboardEvent(e);
-        if (!dir) return;
-        e.preventDefault();
-        const code = e.code || e.key;
-        keyboardKeysDown.delete(code);
-        const index = keyboardKeyOrder.indexOf(code);
-        if (index >= 0) keyboardKeyOrder.splice(index, 1);
-      };
-      keyBlurHandler = resetKeyboardInput;
+      const keyboardMovement = createKeyboardMovementController({
+        isBlocked: isKeyboardBlocked,
+        move: movePlayer,
+      });
+      advanceKeyboardMovement = keyboardMovement.advance;
+      keyDownHandler = keyboardMovement.handleKeyDown;
+      keyUpHandler = keyboardMovement.handleKeyUp;
+      keyBlurHandler = keyboardMovement.reset;
       window.addEventListener("keydown", keyDownHandler);
       window.addEventListener("keyup", keyUpHandler);
       window.addEventListener("blur", keyBlurHandler);
