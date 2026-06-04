@@ -53,7 +53,7 @@ import {
 } from "@/game/level-state";
 import type { Character } from "@/game/entities";
 import type { ArrowState, Bomb } from "@/game/hazards";
-import { createJoystickView } from "@/game/joystick-view";
+import { JOYSTICK_VERTICAL_SCALE, createJoystickView } from "@/game/joystick-view";
 import {
   JOYSTICK_MOVE_COOLDOWN_MS,
   createKeyboardMovementController,
@@ -1365,7 +1365,9 @@ function IsoRound({
         const dy = e.global.y - baseY;
         const dragVector = joystickDragVector(dx, dy);
         knob.x = Math.cos(dragVector.knobAngle) * dragVector.clampedDistance;
-        knob.y = (Math.sin(dragVector.knobAngle) * dragVector.clampedDistance) / 0.5;
+        knob.y =
+          (Math.sin(dragVector.knobAngle) * dragVector.clampedDistance) /
+          JOYSTICK_VERTICAL_SCALE;
 
         joystickDirection = dragVector.direction;
         advanceJoystickMovement();

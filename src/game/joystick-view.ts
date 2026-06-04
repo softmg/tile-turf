@@ -6,10 +6,12 @@ export interface JoystickView {
   knob: Graphics;
 }
 
+export const JOYSTICK_VERTICAL_SCALE = 0.5;
+
 export const createJoystickView = (parent: Container): JoystickView => {
   const container = new Container({ label: "joystick" });
   container.visible = false;
-  container.scale.y = 0.5;
+  container.scale.y = JOYSTICK_VERTICAL_SCALE;
   parent.addChild(container);
 
   const base = new Graphics({ label: "joystick-base" });
