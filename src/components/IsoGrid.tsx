@@ -1291,7 +1291,8 @@ function IsoRound({
       let joystickDirection: Direction | null = null;
       let lastMoveTime = 0;
       const MAX_RADIUS = 40;
-      const THRESHOLD = 30;
+      const THRESHOLD = MAX_RADIUS * 0.01;
+      const SNAP_ANGLE = Math.PI / 6;
       const COOLDOWN = 200;
 
       const resetJoystickDrag = () => {
@@ -1325,6 +1326,26 @@ function IsoRound({
         if (deg >= 0 && deg < 90) return "RIGHT";
         if (deg >= 90 && deg <= 180) return "DOWN";
         return "LEFT";
+      };
+
+      const joystickDirectionAngles: Record<Direction, number> = {
+        UP: -Math.PI / 4,
+        RIGHT: Math.PI / 4,
+        DOWN: (3 * Math.PI) / 4,
+        LEFT: (-3 * Math.PI) / 4,
+      };
+
+      const angleDistance = (a: number, b: number) => {
+        const diff = Math.abs(a - b) % (Math.PI * 2);
+        return Math.min(diff, Math.PI * 2 - diff);
+      };
+
+      const snappedJoystickDirection = (angle: number) => {
+        const direction = directionFromJoystickAngle(angle);
+        const snapAngle = joystickDirectionAngles[direction];
+        return angleDistance(angle, snapAngle) <= SNAP_ANGLE
+          ? { direction, angle: snapAngle }
+          : { direction, angle };
       };
 
       advanceJoystickMovement = (now = performance.now()) => {
@@ -1371,10 +1392,12 @@ function IsoRound({
         const dist = Math.hypot(dx, dy);
         const clamped = Math.min(dist, MAX_RADIUS);
         const angle = Math.atan2(dy, dx);
-        knob.x = Math.cos(angle) * clamped;
-        knob.y = (Math.sin(angle) * clamped) / 0.5;
+        const snapped = snappedJoystickDirection(angle);
+        const knobAngle = dist < THRESHOLD ? angle : snapped.angle;
+        knob.x = Math.cos(knobAngle) * clamped;
+        knob.y = (Math.sin(knobAngle) * clamped) / 0.5;
 
-        joystickDirection = dist < THRESHOLD ? null : directionFromJoystickAngle(angle);
+        joystickDirection = dist < THRESHOLD ? null : snapped.direction;
         advanceJoystickMovement();
       };
 
