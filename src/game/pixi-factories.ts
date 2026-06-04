@@ -1,8 +1,8 @@
 import { Graphics, Sprite, type Texture } from "pixi.js";
 import { BOARD_SIZE, SKINS, TILE_SIZE, type SkinId } from "@/game/game-constants";
-import { gridPos, perspectiveScale } from "@/game/grid-math";
-import { hazardSpriteScale, screenRotation } from "@/game/hazards";
-import { DEPTH_OFFSETS, gridDepth } from "@/game/scene-layers";
+import { isoPos } from "@/game/grid-math";
+import { hazardSpriteScale, isoRotation } from "@/game/hazards";
+import { DEPTH_OFFSETS, isoDepth } from "@/game/scene-layers";
 
 export type SkinTextureMap = Record<SkinId, { tile: Texture; player: Texture }>;
 
@@ -24,21 +24,22 @@ export const createBoardTile = (texture: Texture, gx: number, gy: number) => {
   const tile = new Sprite(texture);
   tile.label = `board-tile-${gx}-${gy}`;
   tile.anchor.set(0.5, 0.5);
-  const perspective = perspectiveScale(gy);
-  tile.width = TILE_SIZE * perspective;
-  tile.height = TILE_SIZE * perspective;
-  const p = gridPos(gx, gy);
+  tile.width = TILE_SIZE;
+  tile.height = TILE_SIZE;
+  const p = isoPos(gx, gy);
   tile.x = p.x;
   tile.y = p.y;
   return tile;
 };
 
-export const addBoardTilesInRowOrder = (
+export const addBoardTilesInIsoOrder = (
   createTile: (gx: number, gy: number) => Sprite,
   addTile: (tile: Sprite) => void,
 ) => {
-  for (let gy = 0; gy < BOARD_SIZE; gy++) {
+  for (let depth = 0; depth <= (BOARD_SIZE - 1) * 2; depth++) {
     for (let gx = 0; gx < BOARD_SIZE; gx++) {
+      const gy = depth - gx;
+      if (gy < 0 || gy >= BOARD_SIZE) continue;
       addTile(createTile(gx, gy));
     }
   }
@@ -75,16 +76,14 @@ export const placeCharacterView = (
   jumpOffset = 0,
   shadowScale = 1,
 ) => {
-  const p = gridPos(gx, gy);
-  const perspective = perspectiveScale(gy);
+  const p = isoPos(gx, gy);
   view.sprite.x = p.x;
   view.sprite.y = p.y + jumpOffset;
-  view.sprite.scale.set((110 / Math.max(view.sprite.texture.height, 1)) * perspective);
-  view.sprite.zIndex = gridDepth(gx, gy, DEPTH_OFFSETS.CHARACTER_BODY);
+  view.sprite.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.CHARACTER_BODY);
   view.shadow.x = p.x;
   view.shadow.y = p.y;
-  view.shadow.zIndex = gridDepth(gx, gy, DEPTH_OFFSETS.CHARACTER_SHADOW);
-  view.shadow.scale.set(shadowScale * perspective, shadowScale * perspective);
+  view.shadow.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.CHARACTER_SHADOW);
+  view.shadow.scale.set(shadowScale, shadowScale);
 };
 
 export const placeBoostAura = (view: CharacterView, nowMs: number) => {
@@ -105,73 +104,62 @@ export const createChestSprite = (texture: Texture) => {
 };
 
 export const placeChestSprite = (sprite: Sprite, gx: number, gy: number) => {
-  const p = gridPos(gx, gy);
-  const perspective = perspectiveScale(gy);
-  const targetH = 80;
-  sprite.scale.set((targetH / Math.max(sprite.texture.height, 1)) * perspective);
+  const p = isoPos(gx, gy);
   sprite.x = p.x;
   sprite.y = p.y + CHEST_Y_OFFSET;
-  sprite.zIndex = gridDepth(gx, gy, DEPTH_OFFSETS.CHEST);
+  sprite.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.CHEST);
 };
 
 export const createBombWarningSprite = (texture: Texture, gx: number, gy: number) => {
-  const p = gridPos(gx, gy);
-  const perspective = perspectiveScale(gy);
+  const p = isoPos(gx, gy);
   const warning = new Sprite(texture);
   warning.label = "bomb-warning";
   warning.anchor.set(0.5, BOMB_ANCHOR_Y);
-  warning.scale.set(hazardSpriteScale(texture, BOMB_TARGET_H) * perspective);
+  warning.scale.set(hazardSpriteScale(texture, BOMB_TARGET_H));
   warning.x = p.x;
   warning.y = p.y;
-  warning.zIndex = gridDepth(gx, gy, DEPTH_OFFSETS.BOMB_WARNING);
+  warning.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.BOMB_WARNING);
   return warning;
 };
 
-export const updateBombWarningSprite = (warning: Sprite, texture: Texture, perspective = 1) => {
+export const updateBombWarningSprite = (warning: Sprite, texture: Texture) => {
   warning.texture = texture;
-  warning.scale.set(hazardSpriteScale(texture, BOMB_TARGET_H) * perspective);
+  warning.scale.set(hazardSpriteScale(texture, BOMB_TARGET_H));
 };
 
 export const createBombExplosionSprite = (texture: Texture, gx: number, gy: number) => {
-  const p = gridPos(gx, gy);
-  const perspective = perspectiveScale(gy);
+  const p = isoPos(gx, gy);
   const boom = new Sprite(texture);
   boom.label = "bomb-explosion";
   boom.anchor.set(0.5, BOMB_ANCHOR_Y);
-  boom.scale.set(hazardSpriteScale(texture, BOOM_TARGET_H) * perspective);
+  boom.scale.set(hazardSpriteScale(texture, BOOM_TARGET_H));
   boom.x = p.x;
   boom.y = p.y;
-  boom.zIndex = gridDepth(gx, gy, DEPTH_OFFSETS.BOMB_EXPLOSION);
+  boom.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.BOMB_EXPLOSION);
   return boom;
 };
 
-export const updateBombExplosionSprite = (
-  boom: Sprite,
-  texture: Texture,
-  progress: number,
-  perspective = 1,
-) => {
-  const s = hazardSpriteScale(texture, BOOM_TARGET_H) * (0.4 + 0.6 * progress) * perspective;
+export const updateBombExplosionSprite = (boom: Sprite, texture: Texture, progress: number) => {
+  const s = hazardSpriteScale(texture, BOOM_TARGET_H) * (0.4 + 0.6 * progress);
   boom.scale.set(s);
 };
 
 export const createBootsSprite = (texture: Texture, gx: number, gy: number) => {
-  const p = gridPos(gx, gy);
-  const perspective = perspectiveScale(gy);
+  const p = isoPos(gx, gy);
   const gfx = new Sprite(texture);
   gfx.label = "boots";
   gfx.anchor.set(0.5, 0.5);
   const targetH = 70;
   const s = targetH / Math.max(texture.height, 1);
-  gfx.scale.set(s * perspective);
+  gfx.scale.set(s);
   gfx.x = p.x;
   gfx.y = p.y + BOOTS_Y_OFFSET;
-  gfx.zIndex = gridDepth(gx, gy, DEPTH_OFFSETS.BOOTS);
+  gfx.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.BOOTS);
   return gfx;
 };
 
 export const createArrowGraphic = (gx: number, gy: number, dir = 0) => {
-  const p = gridPos(gx, gy);
+  const p = isoPos(gx, gy);
   const gfx = new Graphics({ label: "rotating-arrow" });
   gfx
     .poly([0, -22, 14, 0, 6, 0, 6, 22, -6, 22, -6, 0, -14, 0])
@@ -180,11 +168,11 @@ export const createArrowGraphic = (gx: number, gy: number, dir = 0) => {
   gfx.circle(0, 0, 26).stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
   gfx.x = p.x;
   gfx.y = p.y;
-  gfx.zIndex = gridDepth(gx, gy, DEPTH_OFFSETS.ARROW);
-  gfx.rotation = screenRotation(dir);
+  gfx.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.ARROW);
+  gfx.rotation = isoRotation(dir);
   return gfx;
 };
 
 export const setArrowDirection = (gfx: Graphics, dir: number) => {
-  gfx.rotation = screenRotation(dir);
+  gfx.rotation = isoRotation(dir);
 };

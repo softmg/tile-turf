@@ -1,5 +1,5 @@
-import tileUrl from "@/assets/tile-front.webp";
-import tilePaintedUrl from "@/assets/tile-front-painted.webp";
+import tileUrl from "@/assets/tile.webp";
+import tilePaintedUrl from "@/assets/tile-painted.webp";
 import playerUrl from "@/assets/player.webp";
 import backgroundUrl from "@/assets/background.webp";
 
@@ -9,8 +9,6 @@ export const BOARD_SIZE = 8;
 export const TILE_W = 110;
 export const TILE_H = 70;
 export const TILE_SIZE = 120;
-export const TILE_STEP_X = 100;
-export const TILE_STEP_Y = 82;
 
 export type SkinId = "plush" | "girl" | "alien" | "knight" | "robot";
 
