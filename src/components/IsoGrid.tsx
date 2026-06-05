@@ -75,6 +75,7 @@ import {
   setArrowDirection,
   updateBombExplosionSprite,
   updateBombWarningSprite,
+  type BoardTileView,
   type SkinTextureMap,
 } from "@/game/pixi-factories";
 import { createSceneLayers, removeAndDestroy } from "@/game/scene-layers";
@@ -411,7 +412,7 @@ function IsoRound({
 
       // Tile ownership: null = unpainted, else SkinId
       const owners: OwnerGrid = [];
-      const tiles: Sprite[][] = [];
+      const tiles: BoardTileView[][] = [];
       for (let x = 0; x < BOARD_SIZE; x++) {
         tiles[x] = [];
         owners[x] = [];
@@ -419,11 +420,11 @@ function IsoRound({
       }
       addBoardTilesInIsoOrder(
         (x, y) => {
-          const tile = createBoardTile(unpaintedTex, x, y);
+          const tile = createBoardTile(unpaintedTex, paintedTex, x, y);
           tiles[x][y] = tile;
           return tile;
         },
-        (tile) => boardLayer.addChild(tile),
+        (tile) => boardLayer.addChild(tile.container),
       );
 
       // ---------- Characters ----------
@@ -618,8 +619,7 @@ function IsoRound({
         if (owners[gx][gy] === skin.id) return;
         owners[gx][gy] = skin.id;
         const tile = tiles[gx][gy];
-        tile.texture = skinTextures[skin.id].tile;
-        tile.tint = skin.spriteTint;
+        tile.paint(skin, gameNow());
         minimapTilesDirty = true;
         statsAccum.current.paints += 1;
       };
@@ -717,8 +717,7 @@ function IsoRound({
             if (owners[x][y] === skinId) {
               owners[x][y] = null;
               const t = tiles[x][y];
-              t.texture = unpaintedTex;
-              t.tint = 0xffffff;
+              t.resetToUnpainted();
               any = true;
             }
           }
@@ -1019,6 +1018,37 @@ function IsoRound({
         SKIN_IDS.map((id) => `${id}:${values[id]}`).join(",");
       const remainingMs = (until: number) => Math.max(0, Math.ceil(until - gameNow()));
 
+      const updatePlayerJumpTargets = () => {
+        const canShowTargets =
+          startedRef.current &&
+          !pausedRef.current &&
+          !gameOverRef.current &&
+          !player.anim &&
+          gameNow() >= player.stunnedUntil;
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          for (let y = 0; y < BOARD_SIZE; y++) {
+            tiles[x][y].setJumpAvailable(false);
+          }
+        }
+        if (!canShowTargets) return;
+        for (const direction of DIRECTIONS) {
+          const next = nextGridPosition(player.gx, player.gy, direction);
+          if (isInsideBoard(next.gx, next.gy)) {
+            tiles[next.gx][next.gy].setJumpAvailable(true);
+          }
+        }
+      };
+
+      const updateBoardTiles = () => {
+        updatePlayerJumpTargets();
+        const nowMs = gameNow();
+        for (let x = 0; x < BOARD_SIZE; x++) {
+          for (let y = 0; y < BOARD_SIZE; y++) {
+            tiles[x][y].update(nowMs);
+          }
+        }
+      };
+
       const renderGameToText = () => {
         const rows: string[] = [];
         for (let y = 0; y < BOARD_SIZE; y++) {
@@ -1083,6 +1113,7 @@ function IsoRound({
         flushGameTimers();
         updateBombs(dtMs);
         updateArrow(dtMs);
+        updateBoardTiles();
 
         let landedAny = false;
         for (let ci = -1; ci < enemies.length; ci++) {
@@ -1111,6 +1142,7 @@ function IsoRound({
           recomputeScores();
           updateMinimapTiles();
         }
+        updateBoardTiles();
         updateMinimapMarkers();
 
         if (scoresDirty) {
@@ -1200,6 +1232,7 @@ function IsoRound({
           remaining -= dt;
         }
         updateMinimap();
+        updateBoardTiles();
       };
 
       const advanceTime = (ms: number) => {
@@ -1273,6 +1306,7 @@ function IsoRound({
         world.y += (cameraTargetY - world.y) * camSmooth;
 
         if (!manualTicker && !deterministicTestMode.enabled) advanceGameplayBy(dtMs);
+        updateBoardTiles();
         advanceJoystickMovement();
         advanceKeyboardMovement();
       });
