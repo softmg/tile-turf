@@ -10,6 +10,7 @@ export interface CharacterView {
   shadow: Graphics;
   aura: Graphics;
   sprite: Sprite;
+  bodyBaseScale: number;
 }
 
 export const BOMB_TARGET_H = 170;
@@ -72,10 +73,10 @@ export class BoardTileView {
   paint(skin: SkinConfig, nowMs: number, options: { immediate?: boolean } = {}) {
     if (this.visualOwner === skin.id && !this.paintAnimating) return false;
 
-    this.baseSprite.texture = this.visualOwner ? this.paintedTexture : this.unpaintedTexture;
-    this.baseSprite.tint = this.visualOwner ? SKINS[this.visualOwner].spriteTint : 0xffffff;
-    this.paintedSprite.texture = this.paintedTexture;
-    this.paintedSprite.tint = skin.spriteTint;
+    this.baseSprite.texture = this.unpaintedTexture;
+    this.baseSprite.tint = this.visualOwner ? SKINS[this.visualOwner].paintTint : 0xffffff;
+    this.paintedSprite.texture = this.unpaintedTexture;
+    this.paintedSprite.tint = skin.paintTint;
     this.paintedSprite.visible = true;
     this.visualOwner = skin.id;
     this.paintChangedFrom = options.immediate ? 1 : 0;
@@ -172,7 +173,6 @@ export const addBoardTilesInIsoOrder = (
 };
 
 export const createCharacterView = (skinId: SkinId, textures: SkinTextureMap): CharacterView => {
-  const skin = SKINS[skinId];
   const shadow = new Graphics({ label: `${skinId}-shadow` });
   shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
 
@@ -190,9 +190,9 @@ export const createCharacterView = (skinId: SkinId, textures: SkinTextureMap): C
   const targetH = 110;
   const s = targetH / Math.max(tex.height, 1);
   sprite.scale.set(s);
-  sprite.tint = skin.spriteTint;
+  sprite.tint = 0xffffff;
 
-  return { shadow, aura, sprite };
+  return { shadow, aura, sprite, bodyBaseScale: s };
 };
 
 export const placeCharacterView = (
@@ -201,11 +201,13 @@ export const placeCharacterView = (
   gy: number,
   jumpOffset = 0,
   shadowScale = 1,
+  bodyScale: { x: number; y: number } = { x: 1, y: 1 },
 ) => {
   const p = isoPos(gx, gy);
   view.sprite.x = p.x;
   view.sprite.y = p.y + jumpOffset;
   view.sprite.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.CHARACTER_BODY);
+  view.sprite.scale.set(view.bodyBaseScale * bodyScale.x, view.bodyBaseScale * bodyScale.y);
   view.shadow.x = p.x;
   view.shadow.y = p.y;
   view.shadow.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.CHARACTER_SHADOW);

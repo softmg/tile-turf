@@ -112,6 +112,9 @@ const GAME_TEXTURE_ASSETS = [
   { alias: "tile-turf:tile:unpainted", src: UNPAINTED_TILE_URL, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:tile:painted", src: PAINTED_TILE_URL, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:player", src: PLAYER_URL, data: GAME_TEXTURE_DATA },
+  { alias: "tile-turf:bot:banana", src: SKINS.banana.playerSprite, data: GAME_TEXTURE_DATA },
+  { alias: "tile-turf:bot:dragon", src: SKINS.dragon.playerSprite, data: GAME_TEXTURE_DATA },
+  { alias: "tile-turf:bot:cat", src: SKINS.cat.playerSprite, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:chest", src: chestUrl, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:bomb:1", src: bomb1Url, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:bomb:2", src: bomb2Url, data: GAME_TEXTURE_DATA },
@@ -125,6 +128,30 @@ const GAME_TEXTURE_LOAD_OPTIONS = {
   retryCount: 2,
   retryDelay: 200,
 } as const;
+
+const JUMP_APEX_STRETCH = 0.08;
+const JUMP_LANDING_SQUASH = 0.12;
+const LANDING_SQUASH_DURATION_MS = 160;
+
+const characterJumpBodyScale = (linear: number, arc: number) => {
+  const landingProgress = Math.min(1, Math.max(0, (linear - 0.7) / 0.3));
+  const landingSquash = landingProgress * landingProgress * (3 - 2 * landingProgress);
+  const stretch = arc * JUMP_APEX_STRETCH;
+  const squash = landingSquash * JUMP_LANDING_SQUASH;
+  return {
+    x: 1 - stretch * 0.5 + squash * 0.75,
+    y: 1 + stretch - squash,
+  };
+};
+
+const characterLandingBodyScale = (elapsedMs: number) => {
+  const t = Math.min(1, Math.max(0, elapsedMs / LANDING_SQUASH_DURATION_MS));
+  const squash = Math.sin(t * Math.PI) * JUMP_LANDING_SQUASH;
+  return {
+    x: 1 + squash * 0.75,
+    y: 1 - squash,
+  };
+};
 
 function IsoRound({
   level,
@@ -390,6 +417,9 @@ function IsoRound({
         unpaintedTex,
         paintedTex,
         playerTex,
+        bananaTex,
+        dragonTex,
+        catTex,
         chestTex,
         bombTex1,
         bombTex2,
@@ -402,10 +432,9 @@ function IsoRound({
       if (destroyed) return;
       const skinTextures: SkinTextureMap = {
         plush: { tile: paintedTex, player: playerTex },
-        girl: { tile: paintedTex, player: playerTex },
-        alien: { tile: paintedTex, player: playerTex },
-        knight: { tile: paintedTex, player: playerTex },
-        robot: { tile: paintedTex, player: playerTex },
+        banana: { tile: paintedTex, player: bananaTex },
+        dragon: { tile: paintedTex, player: dragonTex },
+        cat: { tile: paintedTex, player: catTex },
       };
 
       const { world, boardLayer, depthLayer, minimapLayer, joystickLayer } = createSceneLayers(app);
@@ -430,13 +459,25 @@ function IsoRound({
       // ---------- Characters ----------
       const makeCharacter = (skinId: SkinId, gx: number, gy: number): Character => {
         const skin = SKINS[skinId];
-        const { shadow, aura, sprite } = createCharacterView(skinId, skinTextures);
+        const { shadow, aura, sprite, bodyBaseScale } = createCharacterView(skinId, skinTextures);
         depthLayer.addChild(shadow, aura, sprite);
-        return { skin, sprite, shadow, gx, gy, anim: null, stunnedUntil: 0, boostUntil: 0, aura };
+        return {
+          skin,
+          sprite,
+          shadow,
+          bodyBaseScale,
+          gx,
+          gy,
+          anim: null,
+          landingSquashElapsed: null,
+          stunnedUntil: 0,
+          boostUntil: 0,
+          aura,
+        };
       };
 
       const player = makeCharacter(PLAYER_SKIN, 0, 0);
-      // Pre-create all 4 possible bot characters; activate first N based on botCount.
+      // Pre-create all possible bot characters; activate first N based on botCount.
       const allEnemies: Character[] = BOT_SKINS.map((sid, i) =>
         makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1]),
       );
@@ -630,12 +671,14 @@ function IsoRound({
         gy: number,
         jumpOffset = 0,
         shadowScale = 1,
+        bodyScale?: { x: number; y: number },
       ) => {
-        placeCharacterView(c, gx, gy, jumpOffset, shadowScale);
+        placeCharacterView(c, gx, gy, jumpOffset, shadowScale, bodyScale);
       };
 
-      const land = (c: Character) => {
+      const land = (c: Character, startSquash = false) => {
         paintAt(c.gx, c.gy, c.skin);
+        c.landingSquashElapsed = startSquash ? 0 : null;
         renderCharacterAt(c, c.gx, c.gy);
       };
 
@@ -996,6 +1039,7 @@ function IsoRound({
         const fromY = c.gy;
         c.gx = next.gx;
         c.gy = next.gy;
+        c.landingSquashElapsed = null;
         updateMinimap();
         const arrowDir = arrow && arrow.gx === next.gx && arrow.gy === next.gy ? arrow.dir : null;
         c.anim = {
@@ -1127,11 +1171,12 @@ function IsoRound({
           const arc = Math.sin(linear * Math.PI);
           const jumpOffset = arc * -55;
           const shadowScale = 1 - arc * 0.5;
-          renderCharacterAt(c, gx, gy, jumpOffset, shadowScale);
+          const bodyScale = characterJumpBodyScale(linear, arc);
+          renderCharacterAt(c, gx, gy, jumpOffset, shadowScale, bodyScale);
           if (linear >= 1) {
             const arrowDir = c.anim.arrowDir;
             c.anim = null;
-            land(c);
+            land(c, true);
             tryCollectChest(c);
             tryCollectBoots(c);
             tryTriggerArrow(c, arrowDir);
@@ -1144,6 +1189,18 @@ function IsoRound({
         }
         updateBoardTiles();
         updateMinimapMarkers();
+
+        for (let ci = -1; ci < enemies.length; ci++) {
+          const c = ci < 0 ? player : enemies[ci];
+          if (c.anim || c.landingSquashElapsed === null) continue;
+          c.landingSquashElapsed += dtMs;
+          const bodyScale = characterLandingBodyScale(c.landingSquashElapsed);
+          renderCharacterAt(c, c.gx, c.gy, 0, 1, bodyScale);
+          if (c.landingSquashElapsed >= LANDING_SQUASH_DURATION_MS) {
+            c.landingSquashElapsed = null;
+            renderCharacterAt(c, c.gx, c.gy);
+          }
+        }
 
         if (scoresDirty) {
           const nowS = gameNow();
@@ -2033,7 +2090,7 @@ export function IsoGrid() {
           </div>
 
           <div className="mt-4 text-[11px] text-white/50">
-            Bots scale: lvl 1–2 → 1, 3–4 → 2, 5–7 → 3, 8–10 → 4. Bot speed grows each level.
+            Bots scale: lvl 1-2 to 1, 3-4 to 2, 5-10 to 3. Bot speed grows each level.
           </div>
 
           <div className="mt-5 flex gap-2">
