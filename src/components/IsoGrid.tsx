@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Settings, Play } from "lucide-react";
-import { Application, Assets, Rectangle } from "pixi.js";
+import { Application, Assets, Rectangle, Text } from "pixi.js";
 import type { FederatedPointerEvent, Sprite, Texture } from "pixi.js";
 import chestUrl from "@/assets/chest.webp";
 import bomb1Url from "@/assets/bomb/bomb1.webp";
@@ -128,6 +128,10 @@ const GAME_TEXTURE_LOAD_OPTIONS = {
   retryCount: 2,
   retryDelay: 200,
 } as const;
+const DEBUG_HUD_ENABLED = false;
+const GAME_VIEW_TOP_RESERVED_PX = 178;
+const GAME_VIEW_BOTTOM_RESERVED_PX = 92;
+const PLAYER_SCORE_OFFSET_Y = -126;
 
 const JUMP_APEX_STRETCH = 0.08;
 const JUMP_LANDING_SQUASH = 0.12;
@@ -165,9 +169,9 @@ function IsoRound({
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
   const [zoomOpen, setZoomOpen] = useState(false);
-  const [debug, setDebug] = useState(false);
+  const debug = import.meta.env.DEV && DEBUG_HUD_ENABLED;
   const [renderError, setRenderError] = useState<string | null>(null);
-  const canShowDebug = import.meta.env.DEV;
+  const canShowDebug = debug;
   const debugRef = useRef(false);
   const [stats, setStats] = useState({
     fps: 0,
@@ -477,6 +481,21 @@ function IsoRound({
       };
 
       const player = makeCharacter(PLAYER_SKIN, 0, 0);
+      const playerScoreText = new Text({
+        text: "0",
+        style: {
+          fontFamily: "Arial, sans-serif",
+          fontSize: 22,
+          fontWeight: "900",
+          fill: 0xffffff,
+          stroke: { color: 0x111111, width: 5 },
+          align: "center",
+        },
+      });
+      playerScoreText.label = "player-score";
+      playerScoreText.anchor.set(0.5, 0.5);
+      playerScoreText.zIndex = player.sprite.zIndex + 0.02;
+      depthLayer.addChild(playerScoreText);
       // Pre-create all possible bot characters; activate first N based on botCount.
       const allEnemies: Character[] = BOT_SKINS.map((sid, i) =>
         makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1]),
@@ -610,13 +629,19 @@ function IsoRound({
         const gridH = (maxY - minY + TILE_SIZE) * z;
         const gridCx = (minX + maxX) / 2;
         const gridCy = (minY + maxY) / 2;
+        const reservedTop = Math.min(GAME_VIEW_TOP_RESERVED_PX, app.screen.height * 0.32);
+        const reservedBottom = Math.min(GAME_VIEW_BOTTOM_RESERVED_PX, app.screen.height * 0.22);
+        const playTop = reservedTop;
+        const playBottom = Math.max(playTop + 120, app.screen.height - reservedBottom);
+        const playCenterY = (playTop + playBottom) / 2;
+        const playHeight = playBottom - playTop;
 
-        if (gridW <= app.screen.width && gridH <= app.screen.height) {
+        if (gridW <= app.screen.width && gridH <= playHeight) {
           cameraTargetX = app.screen.width / 2 - gridCx * z;
-          cameraTargetY = app.screen.height / 2 - gridCy * z;
+          cameraTargetY = playCenterY - gridCy * z;
         } else {
           cameraTargetX = app.screen.width / 2 - p.x * z;
-          cameraTargetY = app.screen.height / 2 - p.y * z;
+          cameraTargetY = playCenterY - p.y * z;
         }
       };
 
@@ -629,9 +654,11 @@ function IsoRound({
           const maxY = isoPos(7, 7).y;
           const rawW = maxX - minX + TILE_SIZE;
           const rawH = maxY - minY + TILE_SIZE;
-          // Reserve some space for HUD/scoreboard (top + bottom)
+          // Reserve screen space occupied by HUD so panels do not cover the board.
           const padX = 24;
-          const padY = 140;
+          const padY =
+            Math.min(GAME_VIEW_TOP_RESERVED_PX, app.screen.height * 0.32) +
+            Math.min(GAME_VIEW_BOTTOM_RESERVED_PX, app.screen.height * 0.22);
           const availW = Math.max(100, app.screen.width - padX * 2);
           const availH = Math.max(100, app.screen.height - padY);
           const fit = Math.min(availW / rawW, availH / rawH);
@@ -674,6 +701,11 @@ function IsoRound({
         bodyScale?: { x: number; y: number },
       ) => {
         placeCharacterView(c, gx, gy, jumpOffset, shadowScale, bodyScale);
+        if (c === player) {
+          playerScoreText.x = c.sprite.x;
+          playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
+          playerScoreText.zIndex = c.sprite.zIndex + 0.02;
+        }
       };
 
       const land = (c: Character, startSquash = false) => {
@@ -752,6 +784,9 @@ function IsoRound({
 
       const countOwned = (skinId: SkinId) => countOwnedTiles(owners, skinId);
       let bankedScores: Record<SkinId, number> = zeroScores();
+      const updatePlayerScoreText = () => {
+        playerScoreText.text = String(bankedScores[PLAYER_SKIN]);
+      };
 
       const clearOwnedBy = (skinId: SkinId) => {
         let any = false;
@@ -773,6 +808,7 @@ function IsoRound({
         if (gained > 0) {
           bankedScores = { ...bankedScores, [c.skin.id]: bankedScores[c.skin.id] + gained };
           setBanked(bankedScores);
+          if (c === player) updatePlayerScoreText();
           clearOwnedBy(c.skin.id);
         }
         spawnChest();
@@ -1580,7 +1616,7 @@ function IsoRound({
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
           <div
             role="alert"
-            className="max-w-sm rounded-xl bg-zinc-900/95 px-6 py-5 text-center text-sm font-semibold text-white shadow-2xl ring-1 ring-white/10"
+            className="max-w-sm rounded-xl bg-zinc-900 px-6 py-5 text-center text-sm font-semibold text-white shadow-2xl ring-1 ring-white/10"
           >
             {renderError}
           </div>
@@ -1590,7 +1626,7 @@ function IsoRound({
       {/* Scoreboard */}
       <div
         {...backgroundInertProps}
-        className="fixed left-1/2 z-50 -translate-x-1/2 flex items-center gap-3 rounded-full bg-black/55 px-4 py-2 backdrop-blur-sm text-sm font-bold text-white shadow-lg"
+        className="fixed left-1/2 z-50 -translate-x-1/2 flex max-w-[calc(100vw-6rem)] items-center gap-2 overflow-x-auto rounded-full bg-zinc-950 px-3 py-2 text-sm font-bold text-white shadow-lg ring-1 ring-white/10"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
         {activeSkins.map((id, i) => {
@@ -1614,7 +1650,7 @@ function IsoRound({
       {/* Timer */}
       <div
         {...backgroundInertProps}
-        className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-black/55 px-4 py-1 backdrop-blur-sm shadow-lg"
+        className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-zinc-950 px-4 py-1 shadow-lg ring-1 ring-white/10"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 110px)" }}
       >
         <span
@@ -1634,7 +1670,7 @@ function IsoRound({
       {/* Match wins HUD (player vs bots, first to 3) */}
       <div
         {...backgroundInertProps}
-        className="fixed right-4 z-50 rounded-lg bg-black/55 px-3 py-1.5 text-[11px] font-bold text-white backdrop-blur-sm shadow-lg"
+        className="fixed right-4 z-50 rounded-lg bg-zinc-950 px-3 py-1.5 text-[11px] font-bold text-white shadow-lg ring-1 ring-white/10"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 56px)" }}
       >
         <div className="text-white/60 uppercase tracking-wider text-[9px]">
@@ -1654,7 +1690,7 @@ function IsoRound({
       {gameOver && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div
-            className="rounded-2xl bg-zinc-900/95 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]"
+            className="rounded-2xl bg-zinc-900 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]"
             role="dialog"
             aria-modal="true"
             aria-labelledby="round-over-title"
@@ -1678,7 +1714,7 @@ function IsoRound({
                 return (
                   <div
                     key={id}
-                    className="flex items-center justify-between gap-4 rounded-lg bg-white/5 px-3 py-2"
+                    className="flex items-center justify-between gap-4 rounded-lg bg-zinc-800 px-3 py-2"
                   >
                     <span className="flex items-center gap-2 min-w-0">
                       <span
@@ -1709,7 +1745,7 @@ function IsoRound({
                 </div>
                 <div className="mt-2 space-y-1.5 text-left max-h-48 overflow-y-auto pr-1">
                   {history.map((h, i) => (
-                    <div key={i} className="rounded-lg bg-white/5 px-3 py-1.5">
+                    <div key={i} className="rounded-lg bg-zinc-800 px-3 py-1.5">
                       <div className="flex items-center justify-between text-[11px] text-white/60">
                         <span className="font-bold uppercase tracking-wider">
                           L{h.level} · R{h.round}
@@ -1760,7 +1796,7 @@ function IsoRound({
           setSettingsOpen(true);
         }}
         disabled={gameOver}
-        className="fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm shadow-lg active:scale-95 disabled:opacity-40"
+        className="fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-950 text-white shadow-lg ring-1 ring-white/10 active:scale-95 disabled:opacity-40"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
         aria-label="Settings"
       >
@@ -1774,7 +1810,7 @@ function IsoRound({
           className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 backdrop-blur-sm"
         >
           <div
-            className="rounded-2xl bg-zinc-900/95 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]"
+            className="rounded-2xl bg-zinc-900 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pause-title"
@@ -1807,7 +1843,7 @@ function IsoRound({
             <button
               type="button"
               onClick={() => setTutorialOpen(true)}
-              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-white/15 active:scale-95"
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-zinc-800 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-zinc-700 active:scale-95"
             >
               How to play?
             </button>
@@ -1818,7 +1854,7 @@ function IsoRound({
 
       <div
         {...backgroundInertProps}
-        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-black/40 px-2 py-2 backdrop-blur-sm"
+        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-zinc-950 px-2 py-2 shadow-lg ring-1 ring-white/10"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
         <button
@@ -1863,24 +1899,11 @@ function IsoRound({
             </span>
           </>
         )}
-        {canShowDebug && (
-          <button
-            type="button"
-            onClick={() => setDebug((d) => !d)}
-            className={`ml-1 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider active:scale-95 ${
-              debug ? "bg-emerald-400 text-black" : "bg-white/80 text-black"
-            }`}
-            aria-label="Toggle debug"
-            aria-pressed={debug}
-          >
-            DBG
-          </button>
-        )}
       </div>
       {canShowDebug && debug && (
         <div
           {...backgroundInertProps}
-          className="fixed right-4 bottom-4 z-50 rounded-lg bg-black/75 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 backdrop-blur-sm tabular-nums shadow-lg"
+          className="fixed right-4 bottom-4 z-50 rounded-lg bg-zinc-950 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 tabular-nums shadow-lg ring-1 ring-white/10"
         >
           <div className={stats.fps < 50 ? "text-red-400" : "text-emerald-300"}>
             FPS: {stats.fps} <span className="text-white/60">({stats.frameMs.toFixed(2)}ms)</span>
@@ -2007,7 +2030,7 @@ export function IsoGrid() {
         className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
       >
         <div
-          className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10"
+          className="w-full max-w-md rounded-2xl bg-zinc-900 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10"
           role="dialog"
           aria-modal="true"
           aria-labelledby="level-menu-title"
@@ -2065,12 +2088,12 @@ export function IsoGrid() {
                   onClick={() => startLevel(lv)}
                   className={`aspect-square rounded-lg text-sm font-extrabold transition active:scale-95 ${
                     locked
-                      ? "bg-white/5 text-white/30 cursor-not-allowed"
+                      ? "bg-zinc-800 text-white/30 cursor-not-allowed"
                       : isCurrent
                         ? "bg-amber-400 text-black ring-2 ring-amber-200"
                         : lv <= unlocked
                           ? "bg-emerald-500/90 text-black hover:bg-emerald-400"
-                          : "bg-white/10 text-white"
+                          : "bg-zinc-800 text-white"
                   }`}
                   title={
                     locked
@@ -2146,7 +2169,7 @@ function TutorialModal({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
       <div
-        className="w-full max-w-md rounded-2xl bg-zinc-900/95 px-6 py-6 text-left shadow-2xl ring-1 ring-white/10 max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-md rounded-2xl bg-zinc-900 px-6 py-6 text-left shadow-2xl ring-1 ring-white/10 max-h-[90vh] overflow-y-auto"
         role="dialog"
         aria-modal="true"
         aria-labelledby="tutorial-title"
@@ -2174,7 +2197,7 @@ function TutorialModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="mt-5 space-y-2.5 text-sm text-white/85">
-          <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
+          <div className="flex items-start gap-3 rounded-lg bg-zinc-800 px-3 py-2">
             <div className="text-xl leading-none">🎁</div>
             <div>
               <div className="font-bold text-white">Chest</div>
@@ -2184,7 +2207,7 @@ function TutorialModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
+          <div className="flex items-start gap-3 rounded-lg bg-zinc-800 px-3 py-2">
             <div className="text-xl leading-none">➤</div>
             <div>
               <div className="font-bold text-white">Arrow</div>
@@ -2193,7 +2216,7 @@ function TutorialModal({ onClose }: { onClose: () => void }) {
               </div>
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-lg bg-white/5 px-3 py-2">
+          <div className="flex items-start gap-3 rounded-lg bg-zinc-800 px-3 py-2">
             <div className="text-xl leading-none">💣</div>
             <div>
               <div className="font-bold text-white">Bomb</div>
