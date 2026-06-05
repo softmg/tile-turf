@@ -1493,8 +1493,7 @@ function IsoRound({
         const dragVector = joystickDragVector(dx, dy);
         knob.x = Math.cos(dragVector.knobAngle) * dragVector.clampedDistance;
         knob.y =
-          (Math.sin(dragVector.knobAngle) * dragVector.clampedDistance) /
-          JOYSTICK_VERTICAL_SCALE;
+          (Math.sin(dragVector.knobAngle) * dragVector.clampedDistance) / JOYSTICK_VERTICAL_SCALE;
 
         joystickDirection = dragVector.direction;
         advanceJoystickMovement();
@@ -1613,10 +1612,10 @@ function IsoRound({
         ref={containerRef}
       />
       {renderError && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4">
+        <div className="tt-overlay fixed inset-0 z-[90] flex items-center justify-center p-4">
           <div
             role="alert"
-            className="max-w-sm rounded-xl bg-zinc-900 px-6 py-5 text-center text-sm font-semibold text-white shadow-2xl ring-1 ring-white/10"
+            className="tt-dialog max-w-sm px-8 py-6 text-center text-[18px] font-bold"
           >
             {renderError}
           </div>
@@ -1626,22 +1625,24 @@ function IsoRound({
       {/* Scoreboard */}
       <div
         {...backgroundInertProps}
-        className="fixed left-1/2 z-50 -translate-x-1/2 flex max-w-[calc(100vw-6rem)] items-center gap-2 overflow-x-auto rounded-full bg-zinc-950 px-3 py-2 text-sm font-bold text-white shadow-lg ring-1 ring-white/10"
+        className="tt-chip fixed left-1/2 z-50 -translate-x-1/2 flex max-w-[calc(100vw-6rem)] items-center gap-3 overflow-x-auto px-4 py-2 text-[18px] font-bold"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
       >
         {activeSkins.map((id, i) => {
           const sk = SKINS[id];
           return (
             <span key={id} className="flex items-center gap-1.5">
-              {i > 0 && <span className="text-white/40">·</span>}
+              {i > 0 && <span className="text-[var(--tt-text-secondary)]">·</span>}
               <span
-                className="inline-block h-3 w-3 rounded-full ring-2 ring-white/30"
+                className="inline-block h-4 w-4 rounded-full ring-2 ring-[rgba(255,255,255,0.8)]"
                 style={{ background: sk.uiColor }}
               />
               <span className="tabular-nums" style={{ color: sk.uiColor }}>
                 {banked[id]}
               </span>
-              <span className="text-white/60 tabular-nums text-xs">+{scores[id]}</span>
+              <span className="text-[14px] tabular-nums text-[var(--tt-text-secondary)]">
+                +{scores[id]}
+              </span>
             </span>
           );
         })}
@@ -1650,14 +1651,14 @@ function IsoRound({
       {/* Timer */}
       <div
         {...backgroundInertProps}
-        className="fixed left-1/2 z-50 -translate-x-1/2 rounded-full bg-zinc-950 px-4 py-1 shadow-lg ring-1 ring-white/10"
+        className="tt-chip fixed left-1/2 z-50 -translate-x-1/2 px-6 py-2"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 110px)" }}
       >
         <span
-          className="font-mono text-2xl font-extrabold tabular-nums tracking-wider"
+          className="text-[26px] font-extrabold tabular-nums"
           style={{
-            color: urgent ? "#ff3b3b" : "#ffffff",
-            textShadow: urgent ? "0 0 10px rgba(255,59,59,0.7)" : "none",
+            color: urgent ? "var(--tt-accent-error)" : "var(--tt-text-primary)",
+            textShadow: urgent ? "0 0 10px rgba(229,123,112,0.45)" : "none",
             animation: urgent ? "iso-pulse 0.8s ease-in-out infinite" : "none",
             display: "inline-block",
           }}
@@ -1670,42 +1671,42 @@ function IsoRound({
       {/* Match wins HUD (player vs bots, first to 3) */}
       <div
         {...backgroundInertProps}
-        className="fixed right-4 z-50 rounded-lg bg-zinc-950 px-3 py-1.5 text-[11px] font-bold text-white shadow-lg ring-1 ring-white/10"
+        className="tt-chip fixed right-4 z-50 px-4 py-2 text-[14px] font-bold"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 56px)" }}
       >
-        <div className="text-white/60 uppercase tracking-wider text-[9px]">
+        <div className="text-[12px] font-bold text-[var(--tt-text-secondary)]">
           Lvl {level} · BO{WINS_TO_PASS * 2 - 1}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
           <span style={{ color: SKINS[PLAYER_SKIN].uiColor }}>You {matchWins[PLAYER_SKIN]}</span>
-          <span className="text-white/40">vs</span>
-          <span className="text-white/90">
+          <span className="text-[var(--tt-text-secondary)]">vs</span>
+          <span className="text-[var(--tt-text-primary)]">
             Bots {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))}
           </span>
-          <span className="text-white/40">/ {WINS_TO_PASS}</span>
+          <span className="text-[var(--tt-text-secondary)]">/ {WINS_TO_PASS}</span>
         </div>
       </div>
 
       {/* Round Over overlay */}
       {gameOver && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="tt-overlay fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
-            className="rounded-2xl bg-zinc-900 px-8 py-7 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px]"
+            className="tt-dialog min-w-[280px] px-8 py-7 text-center"
             role="dialog"
             aria-modal="true"
             aria-labelledby="round-over-title"
           >
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">
+            <div className="text-[18px] font-semibold text-[var(--tt-text-secondary)]">
               End of Round · Level {level}
             </div>
-            <div id="round-over-title" className="mt-2 text-3xl font-extrabold text-white">
+            <div id="round-over-title" className="mt-2 text-[32px] font-bold">
               {isTie ? (
                 "It's a Tie!"
               ) : (
                 <span style={{ color: SKINS[winner].uiColor }}>{SKINS[winner].name} wins!</span>
               )}
             </div>
-            <div className="mt-4 text-[11px] font-bold uppercase tracking-widest text-white/50 text-left">
+            <div className="mt-6 text-left text-[18px] font-bold text-[var(--tt-text-secondary)]">
               Match score (first to {WINS_TO_PASS})
             </div>
             <div className="mt-2 space-y-2 text-left">
@@ -1714,7 +1715,7 @@ function IsoRound({
                 return (
                   <div
                     key={id}
-                    className="flex items-center justify-between gap-4 rounded-lg bg-zinc-800 px-3 py-2"
+                    className="tt-panel flex items-center justify-between gap-4 px-4 py-3"
                   >
                     <span className="flex items-center gap-2 min-w-0">
                       <span
@@ -1726,12 +1727,14 @@ function IsoRound({
                       </span>
                     </span>
                     <span className="flex items-center gap-3">
-                      <span className="font-mono text-xs text-white/60 tabular-nums">
+                      <span className="text-[14px] font-semibold tabular-nums text-[var(--tt-text-secondary)]">
                         {banked[id]} pts
                       </span>
-                      <span className="font-mono text-lg font-extrabold text-white tabular-nums">
+                      <span className="text-[22px] font-extrabold tabular-nums text-[var(--tt-text-primary)]">
                         {projectedWins}
-                        <span className="text-white/40 text-xs font-bold">/{WINS_TO_PASS}</span>
+                        <span className="text-[14px] font-bold text-[var(--tt-text-secondary)]">
+                          /{WINS_TO_PASS}
+                        </span>
                       </span>
                     </span>
                   </div>
@@ -1740,14 +1743,14 @@ function IsoRound({
             </div>
             {history.length > 0 && (
               <>
-                <div className="mt-5 text-[11px] font-bold uppercase tracking-widest text-white/50 text-left">
+                <div className="mt-6 text-left text-[18px] font-bold text-[var(--tt-text-secondary)]">
                   Previous rounds
                 </div>
                 <div className="mt-2 space-y-1.5 text-left max-h-48 overflow-y-auto pr-1">
                   {history.map((h, i) => (
-                    <div key={i} className="rounded-lg bg-zinc-800 px-3 py-1.5">
-                      <div className="flex items-center justify-between text-[11px] text-white/60">
-                        <span className="font-bold uppercase tracking-wider">
+                    <div key={i} className="tt-panel px-4 py-2">
+                      <div className="flex items-center justify-between text-[14px] text-[var(--tt-text-secondary)]">
+                        <span className="font-bold">
                           L{h.level} · R{h.round}
                         </span>
                         <span
@@ -1767,7 +1770,9 @@ function IsoRound({
                               className="inline-block h-2 w-2 rounded-full"
                               style={{ background: SKINS[id].uiColor }}
                             />
-                            <span className="text-white/80">{h.scores[id] ?? 0}</span>
+                            <span className="text-[var(--tt-text-primary)]">
+                              {h.scores[id] ?? 0}
+                            </span>
                           </span>
                         ))}
                       </div>
@@ -1779,7 +1784,7 @@ function IsoRound({
             <button
               type="button"
               onClick={() => onRoundEnd(isTie ? null : winner, banked)}
-              className="mt-6 w-full rounded-full bg-emerald-400 px-4 py-2 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+              className="tt-button tt-button-success mt-6 w-full"
             >
               Continue
             </button>
@@ -1796,7 +1801,7 @@ function IsoRound({
           setSettingsOpen(true);
         }}
         disabled={gameOver}
-        className="fixed right-4 z-50 flex h-10 w-10 items-center justify-center rounded-full bg-zinc-950 text-white shadow-lg ring-1 ring-white/10 active:scale-95 disabled:opacity-40"
+        className="tt-chip fixed right-4 z-50 flex h-12 w-12 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
         aria-label="Settings"
       >
@@ -1807,25 +1812,26 @@ function IsoRound({
       {settingsOpen && !gameOver && (
         <div
           {...settingsInertProps}
-          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          className="tt-overlay fixed inset-0 z-[95] flex items-center justify-center p-4"
         >
           <div
-            className="rounded-2xl bg-zinc-900 px-7 py-6 text-center shadow-2xl ring-1 ring-white/10 min-w-[280px] max-w-[90vw]"
+            className="tt-dialog min-w-[280px] max-w-[90vw] px-8 py-7 text-center"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pause-title"
           >
-            <div className="text-xs font-bold uppercase tracking-widest text-white/50">Paused</div>
-            <div id="pause-title" className="mt-1 text-2xl font-extrabold text-white">
+            <div className="text-[18px] font-semibold text-[var(--tt-text-secondary)]">Paused</div>
+            <div id="pause-title" className="mt-1 text-[32px] font-bold">
               Level {level}
             </div>
-            <div className="mt-3 text-sm text-white/70">
-              Bots: <span className="font-bold text-white">{botCount}</span> · Speed{" "}
-              <span className="font-bold text-white">
+            <div className="mt-4 text-[18px] text-[var(--tt-text-secondary)]">
+              Bots: <span className="font-bold text-[var(--tt-text-primary)]">{botCount}</span> ·
+              Speed{" "}
+              <span className="font-bold text-[var(--tt-text-primary)]">
                 ×{(700 / enemyIntervalForLevel(level)).toFixed(2)}
               </span>
             </div>
-            <div className="mt-3 text-xs text-white/60">
+            <div className="mt-3 text-[18px] text-[var(--tt-text-secondary)]">
               Match: You {matchWins[PLAYER_SKIN]} — Bots{" "}
               {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))} / {WINS_TO_PASS}
             </div>
@@ -1836,14 +1842,14 @@ function IsoRound({
                 setSettingsOpen(false);
                 setPaused(false);
               }}
-              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+              className="tt-button tt-button-success mt-6 w-full gap-2"
             >
               <Play size={16} fill="currentColor" /> Resume
             </button>
             <button
               type="button"
               onClick={() => setTutorialOpen(true)}
-              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-zinc-800 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-zinc-700 active:scale-95"
+              className="tt-button tt-button-secondary mt-3 w-full gap-2"
             >
               How to play?
             </button>
@@ -1854,13 +1860,13 @@ function IsoRound({
 
       <div
         {...backgroundInertProps}
-        className="fixed left-4 z-50 flex items-center gap-2 rounded-full bg-zinc-950 px-2 py-2 shadow-lg ring-1 ring-white/10"
+        className="tt-chip fixed left-4 z-50 flex items-center gap-2 px-2 py-2"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
         <button
           type="button"
           onClick={() => setZoomOpen((o) => !o)}
-          className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-sm font-bold text-black active:scale-95"
+          className="tt-button tt-button-secondary h-12 w-12 p-0 text-[18px]"
           aria-label={zoomOpen ? "Collapse zoom" : "Expand zoom"}
           aria-expanded={zoomOpen}
         >
@@ -1871,7 +1877,7 @@ function IsoRound({
             <button
               type="button"
               onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+              className="tt-button tt-button-secondary h-12 w-12 p-0 text-[20px]"
               aria-label="Zoom out"
             >
               −
@@ -1883,18 +1889,18 @@ function IsoRound({
               step={0.05}
               value={zoom}
               onChange={(e) => setZoom(parseFloat(e.target.value))}
-              className="w-28 accent-white"
+              className="w-28 accent-[var(--tt-accent-primary)]"
               aria-label="Zoom"
             />
             <button
               type="button"
               onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-base font-bold text-black active:scale-95"
+              className="tt-button tt-button-secondary h-12 w-12 p-0 text-[20px]"
               aria-label="Zoom in"
             >
               +
             </button>
-            <span className="min-w-[2.5rem] text-right text-xs font-medium text-white/90 tabular-nums">
+            <span className="min-w-[2.5rem] text-right text-[14px] font-bold text-[var(--tt-text-primary)] tabular-nums">
               {Math.round(zoom * 100)}%
             </span>
           </>
@@ -1903,22 +1909,33 @@ function IsoRound({
       {canShowDebug && debug && (
         <div
           {...backgroundInertProps}
-          className="fixed right-4 bottom-4 z-50 rounded-lg bg-zinc-950 px-3 py-2 font-mono text-[11px] leading-tight text-emerald-300 tabular-nums shadow-lg ring-1 ring-white/10"
+          className="tt-panel fixed right-4 bottom-4 z-50 px-3 py-2 text-[11px] leading-tight tabular-nums"
         >
-          <div className={stats.fps < 50 ? "text-red-400" : "text-emerald-300"}>
-            FPS: {stats.fps} <span className="text-white/60">({stats.frameMs.toFixed(2)}ms)</span>
+          <div
+            className={
+              stats.fps < 50 ? "text-[var(--tt-accent-error)]" : "text-[var(--tt-text-primary)]"
+            }
+          >
+            FPS: {stats.fps}{" "}
+            <span className="text-[var(--tt-text-secondary)]">({stats.frameMs.toFixed(2)}ms)</span>
           </div>
-          <div className={stats.maxMs > 33 ? "text-amber-300" : "text-white/60"}>
+          <div
+            className={
+              stats.maxMs > 33
+                ? "text-[var(--tt-accent-warning)]"
+                : "text-[var(--tt-text-secondary)]"
+            }
+          >
             peak: {stats.maxMs.toFixed(2)} ms
           </div>
-          <div className="mt-1 text-cyan-300">paints/s: {stats.paints}</div>
-          <div className="text-cyan-300">
+          <div className="mt-1 text-[var(--tt-accent-primary)]">paints/s: {stats.paints}</div>
+          <div className="text-[var(--tt-accent-primary)]">
             mini: {stats.miniPasses}/s · {stats.miniCells} cells/s
           </div>
-          <div className="text-fuchsia-300">
+          <div className="text-[var(--tt-accent-reward)]">
             anims: {stats.anims} · bombs: {stats.bombs} · bots: {stats.enemies}
           </div>
-          <div className="mt-1 text-white/50">
+          <div className="mt-1 text-[var(--tt-text-secondary)]">
             DPR: {Math.min(window.devicePixelRatio || 1, 3)} · zoom: {Math.round(zoom * 100)}%
           </div>
         </div>
@@ -2027,23 +2044,23 @@ export function IsoGrid() {
     <>
       <div
         {...managerInertProps}
-        className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+        className="tt-overlay fixed inset-0 z-[80] flex items-center justify-center p-4"
       >
         <div
-          className="w-full max-w-md rounded-2xl bg-zinc-900 px-6 py-7 text-center shadow-2xl ring-1 ring-white/10"
+          className="tt-window w-full max-w-md px-8 py-8 text-center"
           role="dialog"
           aria-modal="true"
           aria-labelledby="level-menu-title"
         >
           {phase === "passed" && (
             <>
-              <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">
+              <div className="text-[18px] font-bold text-[var(--tt-accent-success)]">
                 Level Passed
               </div>
-              <div id="level-menu-title" className="mt-1 text-3xl font-extrabold text-white">
+              <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
                 Level {level} ✓
               </div>
-              <p className="mt-2 text-sm text-white/70">
+              <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
                 You won {matchWins[PLAYER_SKIN]}–
                 {Math.max(0, ...BOT_SKINS.slice(0, botsForLevel(level)).map((b) => matchWins[b]))}.
               </p>
@@ -2051,32 +2068,32 @@ export function IsoGrid() {
           )}
           {phase === "failed" && (
             <>
-              <div className="text-xs font-bold uppercase tracking-widest text-rose-400">
+              <div className="text-[18px] font-bold text-[var(--tt-accent-error)]">
                 Level Failed
               </div>
-              <div id="level-menu-title" className="mt-1 text-3xl font-extrabold text-white">
+              <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
                 Level {level} ✗
               </div>
-              <p className="mt-2 text-sm text-white/70">
+              <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
                 A bot reached {WINS_TO_PASS} wins first. Try again!
               </p>
             </>
           )}
           {phase === "menu" && (
             <>
-              <div className="text-xs font-bold uppercase tracking-widest text-white/50">
+              <div className="text-[18px] font-bold text-[var(--tt-text-secondary)]">
                 Paint the Grid
               </div>
-              <div id="level-menu-title" className="mt-1 text-3xl font-extrabold text-white">
+              <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
                 Select Level
               </div>
-              <p className="mt-2 text-xs text-white/60">
+              <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
                 First to {WINS_TO_PASS} round wins clears the level.
               </p>
             </>
           )}
 
-          <div className="mt-5 grid grid-cols-5 gap-2">
+          <div className="mt-6 grid grid-cols-5 gap-2">
             {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map((lv) => {
               const locked = lv > unlocked;
               const isCurrent = lv === level && phase !== "menu";
@@ -2086,14 +2103,14 @@ export function IsoGrid() {
                   type="button"
                   disabled={locked}
                   onClick={() => startLevel(lv)}
-                  className={`aspect-square rounded-lg text-sm font-extrabold transition active:scale-95 ${
+                  className={`tt-level-button ${
                     locked
-                      ? "bg-zinc-800 text-white/30 cursor-not-allowed"
+                      ? "tt-level-button-locked"
                       : isCurrent
-                        ? "bg-amber-400 text-black ring-2 ring-amber-200"
+                        ? "tt-level-button-current"
                         : lv <= unlocked
-                          ? "bg-emerald-500/90 text-black hover:bg-emerald-400"
-                          : "bg-zinc-800 text-white"
+                          ? "tt-level-button-unlocked"
+                          : "tt-level-button-locked"
                   }`}
                   title={
                     locked
@@ -2112,30 +2129,28 @@ export function IsoGrid() {
             })}
           </div>
 
-          <div className="mt-4 text-[11px] text-white/50">
+          <div className="mt-6 text-[18px] text-[var(--tt-text-secondary)]">
             Bots scale: lvl 1-2 to 1, 3-4 to 2, 5-10 to 3. Bot speed grows each level.
           </div>
 
-          <div className="mt-5 flex gap-2">
+          <div className="mt-6 flex gap-3">
             {phase === "passed" && level < MAX_LEVEL && (
               <button
                 type="button"
                 onClick={() => startLevel(level + 1)}
-                className="flex-1 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+                className="tt-button tt-button-success flex-1"
               >
                 Next Level
               </button>
             )}
             {phase === "passed" && level >= MAX_LEVEL && (
-              <div className="flex-1 rounded-full bg-amber-400 px-4 py-3 text-sm font-extrabold uppercase tracking-wider text-black">
-                🏆 All Levels Cleared!
-              </div>
+              <div className="tt-button tt-button-warning flex-1">🏆 All Levels Cleared!</div>
             )}
             {phase === "failed" && (
               <button
                 type="button"
                 onClick={() => startLevel(level)}
-                className="flex-1 rounded-full bg-rose-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+                className="tt-button tt-button-error flex-1"
               >
                 Retry Level {level}
               </button>
@@ -2144,7 +2159,7 @@ export function IsoGrid() {
               <button
                 type="button"
                 onClick={() => startLevel(unlocked)}
-                className="flex-1 rounded-full bg-emerald-400 px-4 py-3 text-sm font-bold uppercase tracking-wider text-black active:scale-95"
+                className="tt-button tt-button-success flex-1"
               >
                 Play Level {unlocked}
               </button>
@@ -2154,7 +2169,7 @@ export function IsoGrid() {
           <button
             type="button"
             onClick={() => setTutorialOpen(true)}
-            className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-white/60 hover:text-white underline-offset-2 hover:underline"
+            className="mt-4 min-h-12 px-4 text-[18px] font-bold text-[var(--tt-text-secondary)] underline-offset-4 hover:text-[var(--tt-text-primary)] hover:underline"
           >
             How to play?
           </button>
@@ -2167,60 +2182,64 @@ export function IsoGrid() {
 
 function TutorialModal({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+    <div className="tt-overlay fixed inset-0 z-[120] flex items-center justify-center p-4">
       <div
-        className="w-full max-w-md rounded-2xl bg-zinc-900 px-6 py-6 text-left shadow-2xl ring-1 ring-white/10 max-h-[90vh] overflow-y-auto"
+        className="tt-dialog max-h-[90vh] w-full max-w-md overflow-y-auto px-8 py-8 text-left"
         role="dialog"
         aria-modal="true"
         aria-labelledby="tutorial-title"
       >
-        <div className="text-xs font-bold uppercase tracking-widest text-amber-400">Tutorial</div>
-        <div id="tutorial-title" className="mt-1 text-2xl font-extrabold text-white">
+        <div className="text-[18px] font-bold text-[var(--tt-accent-warning)]">Tutorial</div>
+        <div id="tutorial-title" className="mt-1 text-[32px] font-bold">
           How to play
         </div>
 
-        <div className="mt-4 space-y-3 text-sm text-white/80 leading-relaxed">
+        <div className="mt-6 space-y-4 text-[18px] leading-relaxed text-[var(--tt-text-secondary)]">
           <p>
-            <span className="font-bold text-white">Goal:</span> move across the grid to paint tiles
-            in your color, then collect chests to bank those painted tiles as round points.
+            <span className="font-bold text-[var(--tt-text-primary)]">Goal:</span> move across the
+            grid to paint tiles in your color, then collect chests to bank those painted tiles as
+            round points.
           </p>
           <p>
-            <span className="font-bold text-white">Scoring:</span> the HUD shows banked points first
-            and your current painted tiles as a smaller + value. Chests add the current + value to
-            your bank and clear your active paint.
+            <span className="font-bold text-[var(--tt-text-primary)]">Scoring:</span> the HUD shows
+            banked points first and your current painted tiles as a smaller + value. Chests add the
+            current + value to your bank and clear your active paint.
           </p>
           <p>
-            <span className="font-bold text-white">Match:</span> each level is first to{" "}
-            <span className="text-emerald-400 font-bold">{WINS_TO_PASS} round wins</span>. If a bot
-            reaches {WINS_TO_PASS} wins first, retry the level.
+            <span className="font-bold text-[var(--tt-text-primary)]">Match:</span> each level is
+            first to{" "}
+            <span className="font-bold text-[var(--tt-accent-success)]">
+              {WINS_TO_PASS} round wins
+            </span>
+            . If a bot reaches {WINS_TO_PASS} wins first, retry the level.
           </p>
         </div>
 
-        <div className="mt-5 space-y-2.5 text-sm text-white/85">
-          <div className="flex items-start gap-3 rounded-lg bg-zinc-800 px-3 py-2">
+        <div className="mt-6 space-y-3 text-[18px] text-[var(--tt-text-primary)]">
+          <div className="tt-panel flex items-start gap-3 px-4 py-3">
             <div className="text-xl leading-none">🎁</div>
             <div>
-              <div className="font-bold text-white">Chest</div>
-              <div className="text-xs text-white/70">
+              <div className="font-bold">Chest</div>
+              <div className="text-[14px] text-[var(--tt-text-secondary)]">
                 Banks your current painted tiles as points, clears those tiles, then respawns
                 elsewhere.
               </div>
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-lg bg-zinc-800 px-3 py-2">
+          <div className="tt-panel flex items-start gap-3 px-4 py-3">
             <div className="text-xl leading-none">➤</div>
             <div>
-              <div className="font-bold text-white">Arrow</div>
-              <div className="text-xs text-white/70">
+              <div className="font-bold">Arrow</div>
+              <div className="text-[14px] text-[var(--tt-text-secondary)]">
                 Paints a full line from the arrow tile in its current direction.
               </div>
             </div>
           </div>
-          <div className="flex items-start gap-3 rounded-lg bg-zinc-800 px-3 py-2">
+          <div className="tt-panel flex items-start gap-3 px-4 py-3">
             <div className="text-xl leading-none">💣</div>
             <div>
-              <div className="font-bold text-white">Bomb</div>
-              <div className="text-xs text-white/70">
+              <div className="font-bold">Bomb</div>
+              <div className="text-[14px] text-[var(--tt-text-secondary)]">
                 Explodes on its exact tile. A hit stuns that player and clears every tile they
                 currently own.
               </div>
@@ -2228,11 +2247,7 @@ function TutorialModal({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-6 w-full rounded-full bg-amber-400 px-4 py-3 text-sm font-extrabold uppercase tracking-wider text-black active:scale-95"
-        >
+        <button type="button" onClick={onClose} className="tt-button tt-button-warning mt-6 w-full">
           Got it
         </button>
       </div>
