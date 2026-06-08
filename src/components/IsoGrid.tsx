@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings, Play, ZoomIn } from "lucide-react";
 import { Application, Assets, Rectangle, Text } from "pixi.js";
-import type { FederatedPointerEvent, Sprite, Texture } from "pixi.js";
+import type { Container, FederatedPointerEvent, Sprite, Texture } from "pixi.js";
 import chestUrl from "@/assets/chest.webp";
 import bomb1Url from "@/assets/bomb/bomb1.webp";
 import bomb2Url from "@/assets/bomb/bomb2.webp";
@@ -46,9 +46,9 @@ import {
 } from "@/game/scoring";
 import { createSeededRng, seedFromParts } from "@/game/rng";
 import {
-  markTutorialSeen,
+  markGameplayTutorialStepSeen,
+  readGameplayTutorialSeenSteps,
   readUnlockedLevel,
-  shouldShowTutorial,
   writeUnlockedLevel,
 } from "@/game/level-state";
 import type { Character } from "@/game/entities";
@@ -82,9 +82,68 @@ import { createSceneLayers, removeAndDestroy } from "@/game/scene-layers";
 import { getDeterministicTestMode } from "@/game/test-mode";
 
 type InertProps = { "aria-hidden"?: true; inert?: boolean };
+type GameplayTutorialStep = "paint" | "chest" | "boots" | "bomb" | "arrow";
+type GameplayTutorialTarget = { x: number; y: number; radius: number } | null;
 
 const inertBackgroundProps = (isInert: boolean): InertProps =>
   isInert ? { "aria-hidden": true, inert: true } : {};
+
+const GAMEPLAY_TUTORIAL_COPY: Record<GameplayTutorialStep, { title: string; body: string }> = {
+  paint: {
+    title: "Закрашивай клетки",
+    body: "Прыгай по соседним клеткам. Твой цвет приносит очки.",
+  },
+  chest: {
+    title: "Бери сундук",
+    body: "Он превращает закрашенные клетки в очки раунда.",
+  },
+  boots: {
+    title: "Бери ботинки",
+    body: "Они ненадолго ускоряют прыжки.",
+  },
+  bomb: {
+    title: "Остерегайся бомб",
+    body: "Взрыв оглушает и сбрасывает твой цвет.",
+  },
+  arrow: {
+    title: "Лови стрелку",
+    body: "Она закрашивает целый ряд клеток.",
+  },
+};
+
+const PAINT_TUTORIAL_STEP_MS = 520;
+const GAMEPLAY_TUTORIAL_STEPS: GameplayTutorialStep[] = [
+  "paint",
+  "chest",
+  "boots",
+  "bomb",
+  "arrow",
+];
+
+const createGameplayTutorialSeenState = (seenSteps: Set<string>) =>
+  GAMEPLAY_TUTORIAL_STEPS.reduce(
+    (seen, step) => {
+      seen[step] = seenSteps.has(step);
+      return seen;
+    },
+    {
+      paint: false,
+      chest: false,
+      boots: false,
+      bomb: false,
+      arrow: false,
+    } as Record<GameplayTutorialStep, boolean>,
+  );
+
+const readInitialGameplayTutorialSeen = () => {
+  if (typeof window === "undefined") return createGameplayTutorialSeenState(new Set());
+  try {
+    return createGameplayTutorialSeenState(readGameplayTutorialSeenSteps(window.localStorage));
+  } catch (err) {
+    console.warn("[IsoGrid] gameplay tutorial persistence read failed", err);
+    return createGameplayTutorialSeenState(new Set());
+  }
+};
 
 declare global {
   interface Window {
@@ -100,7 +159,6 @@ interface IsoRoundProps {
   matchWins: Record<SkinId, number>;
   history: RoundHistoryEntry[];
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
-  parentModalOpen?: boolean;
 }
 
 const GAME_TEXTURE_DATA = {
@@ -163,7 +221,6 @@ function IsoRound({
   matchWins,
   history,
   onRoundEnd,
-  parentModalOpen = false,
 }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
@@ -204,19 +261,76 @@ function IsoRound({
   const gameOverRef = useRef(false);
   const [started, setStarted] = useState(true);
   const startedRef = useRef(true);
-  const [paused, setPaused] = useState(false);
-  const pausedRef = useRef(false);
+  const [initialGameplayTutorialSeen] = useState(() => readInitialGameplayTutorialSeen());
+  const initialGameplayTutorialStep: GameplayTutorialStep | null = initialGameplayTutorialSeen.paint
+    ? null
+    : "paint";
+  const [paused, setPaused] = useState(initialGameplayTutorialStep !== null);
+  const pausedRef = useRef(initialGameplayTutorialStep !== null);
   const kickoffRef = useRef<(() => void) | null>(null);
   const botCount = botsForLevel(level);
   const botCountRef = useRef(botCount);
   const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [tutorialOpen, setTutorialOpen] = useState(false);
-  const modalOpen = gameOver || settingsOpen || tutorialOpen || parentModalOpen;
+  const [gameplayTutorialStep, setGameplayTutorialStep] =
+    useState<GameplayTutorialStep | null>(initialGameplayTutorialStep);
+  const [gameplayTutorialTarget, setGameplayTutorialTarget] =
+    useState<GameplayTutorialTarget>(null);
+  const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(initialGameplayTutorialStep);
+  const modalOpen = gameOver || settingsOpen || gameplayTutorialStep !== null;
   const modalOpenRef = useRef(modalOpen);
+  const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>({
+    ...initialGameplayTutorialSeen,
+    paint: initialGameplayTutorialSeen.paint || initialGameplayTutorialStep === "paint",
+  });
+  const pickupTutorialReadyRef = useRef(false);
+  const pendingGameplayTutorialRef = useRef<
+    Array<{
+      step: GameplayTutorialStep;
+      target: GameplayTutorialTarget;
+    }>
+  >([]);
+  const getGameplayTutorialTargetRef = useRef<
+    ((step: GameplayTutorialStep) => GameplayTutorialTarget) | null
+  >(null);
   const touchPointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchActiveRef = useRef(false);
   const resetJoystickRef = useRef<(() => void) | null>(null);
+  const activateGameplayTutorial = useCallback(
+    (step: GameplayTutorialStep, target?: GameplayTutorialTarget) => {
+      const shownGameplayTutorial = shownGameplayTutorialRef.current;
+      if (shownGameplayTutorial[step]) return;
+      shownGameplayTutorial[step] = true;
+      gameplayTutorialStepRef.current = step;
+      setGameplayTutorialStep(step);
+      setGameplayTutorialTarget(getGameplayTutorialTargetRef.current?.(step) ?? target ?? null);
+      setPaused(true);
+    },
+    [],
+  );
+
+  const closeGameplayTutorial = () => {
+    const completedStep = gameplayTutorialStepRef.current;
+    if (completedStep) {
+      try {
+        markGameplayTutorialStepSeen(window.localStorage, completedStep);
+      } catch (err) {
+        console.warn("[IsoGrid] gameplay tutorial persistence write failed", err);
+      }
+    }
+    if (pickupTutorialReadyRef.current) {
+      const pending = pendingGameplayTutorialRef.current.shift();
+      if (pending) {
+        activateGameplayTutorial(pending.step, pending.target);
+        return;
+      }
+    }
+    gameplayTutorialStepRef.current = null;
+    setGameplayTutorialStep(null);
+    setGameplayTutorialTarget(null);
+    if (!settingsOpen && !gameOverRef.current) setPaused(false);
+  };
+
   useEffect(() => {
     botCountRef.current = botCount;
     levelRef.current = level;
@@ -229,6 +343,27 @@ function IsoRound({
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+  useEffect(() => {
+    gameplayTutorialStepRef.current = gameplayTutorialStep;
+  }, [gameplayTutorialStep]);
+  useEffect(() => {
+    pickupTutorialReadyRef.current = false;
+    pendingGameplayTutorialRef.current = [];
+    setGameplayTutorialTarget({
+      x: Math.round(window.innerWidth / 2),
+      y: Math.round(window.innerHeight / 2),
+      radius: 96,
+    });
+    const timer = window.setTimeout(() => {
+      pickupTutorialReadyRef.current = true;
+      const pending = pendingGameplayTutorialRef.current[0];
+      if (pending && gameplayTutorialStepRef.current === null) {
+        pendingGameplayTutorialRef.current.shift();
+        activateGameplayTutorial(pending.step, pending.target);
+      }
+    }, 2600);
+    return () => window.clearTimeout(timer);
+  }, [activateGameplayTutorial]);
   useEffect(() => {
     if (started) kickoffRef.current?.();
   }, [started]);
@@ -441,6 +576,86 @@ function IsoRound({
       };
 
       const { world, boardLayer, depthLayer, minimapLayer, joystickLayer } = createSceneLayers(app);
+      const spriteTutorialTarget = (
+        sprite: Container,
+        radius: number,
+        offsetY = 0,
+      ): GameplayTutorialTarget => {
+        const p = sprite.getGlobalPosition();
+        return { x: Math.round(p.x), y: Math.round(p.y + offsetY), radius };
+      };
+      const requestGameplayTutorial = (
+        step: GameplayTutorialStep,
+        target: GameplayTutorialTarget,
+      ) => {
+        if (
+          step !== "paint" &&
+          (!pickupTutorialReadyRef.current || gameplayTutorialStepRef.current !== null)
+        ) {
+          if (pendingGameplayTutorialRef.current.some((pending) => pending.step === step)) return;
+          pendingGameplayTutorialRef.current.push({ step, target });
+          return;
+        }
+        activateGameplayTutorial(step, target);
+      };
+      const characterTutorialTarget = (c: Character): GameplayTutorialTarget => {
+        const p = c.sprite.getGlobalPosition();
+        return { x: Math.round(p.x), y: Math.round(p.y + 34), radius: 170 };
+      };
+      const syncPaintTutorialTarget = () => {
+        if (gameplayTutorialStepRef.current === "paint") {
+          setGameplayTutorialTarget(characterTutorialTarget(player));
+        }
+      };
+      let paintTutorialCells: Array<{ gx: number; gy: number }> = [];
+      let paintTutorialLastIndex = -1;
+      let paintTutorialWasActive = false;
+      const paintTutorialCellSet = () => {
+        return [
+          { gx: player.gx, gy: player.gy },
+          ...DIRECTIONS.map((direction) => nextGridPosition(player.gx, player.gy, direction)).filter(
+            (cell) => isInsideBoard(cell.gx, cell.gy),
+          ),
+        ];
+      };
+      const restoreTutorialPaintTiles = () => {
+        for (const cell of paintTutorialCells) {
+          const owner = owners[cell.gx][cell.gy];
+          if (owner) {
+            tiles[cell.gx][cell.gy].paint(SKINS[owner], performance.now(), { immediate: true });
+          }
+          else tiles[cell.gx][cell.gy].resetToUnpainted();
+        }
+        paintTutorialCells = [];
+        paintTutorialLastIndex = -1;
+      };
+      const updatePaintTutorialTiles = (nowMs: number) => {
+        if (gameplayTutorialStepRef.current !== "paint") {
+          if (paintTutorialWasActive) restoreTutorialPaintTiles();
+          paintTutorialWasActive = false;
+          return;
+        }
+        if (!paintTutorialWasActive) {
+          paintTutorialCells = paintTutorialCellSet();
+          paintTutorialLastIndex = -1;
+          paintTutorialWasActive = true;
+        }
+        const nextIndex =
+          Math.floor(
+            (nowMs % (paintTutorialCells.length * PAINT_TUTORIAL_STEP_MS)) /
+              PAINT_TUTORIAL_STEP_MS,
+          ) % paintTutorialCells.length;
+        if (nextIndex === paintTutorialLastIndex) {
+          for (const cell of paintTutorialCells) tiles[cell.gx][cell.gy].update(nowMs);
+          return;
+        }
+        restoreTutorialPaintTiles();
+        paintTutorialCells = paintTutorialCellSet();
+        const cell = paintTutorialCells[nextIndex];
+        tiles[cell.gx][cell.gy].resetToUnpainted();
+        tiles[cell.gx][cell.gy].paint(SKINS[PLAYER_SKIN], nowMs);
+        paintTutorialLastIndex = nextIndex;
+      };
 
       // Tile ownership: null = unpainted, else SkinId
       const owners: OwnerGrid = [];
@@ -763,6 +978,7 @@ function IsoRound({
         chest.gx = gx;
         chest.gy = gy;
         placeChestSprite(chestSprite, gx, gy);
+        requestGameplayTutorial("chest", spriteTutorialTarget(chestSprite, 78, -40));
       };
 
       const spawnChest = () => {
@@ -864,6 +1080,7 @@ function IsoRound({
           explosionElapsed: 0,
         };
         bombs.push(bomb);
+        requestGameplayTutorial("bomb", spriteTutorialTarget(warning, 92, 10));
 
         scheduleGame(() => explodeBomb(bomb), 2000);
         if (scheduleNext) scheduleGame(spawnBomb, rng.range(5000, 8000));
@@ -917,6 +1134,7 @@ function IsoRound({
         const gfx = createBootsSprite(bootsTex, gx, gy);
         depthLayer.addChild(gfx);
         boots = { gx, gy, gfx };
+        requestGameplayTutorial("boots", spriteTutorialTarget(gfx, 74));
       };
       const spawnBoots = () => {
         if (gameOverRef.current || destroyed || !startedRef.current || boots) return;
@@ -937,6 +1155,18 @@ function IsoRound({
       // dir: 0=UP, 1=RIGHT, 2=DOWN, 3=LEFT
       let arrow: ArrowState | null = null;
 
+      getGameplayTutorialTargetRef.current = (step) => {
+        if (step === "paint") return characterTutorialTarget(player);
+        if (step === "chest") return spriteTutorialTarget(chestSprite, 78, -40);
+        if (step === "boots" && boots) return spriteTutorialTarget(boots.gfx, 74);
+        if (step === "bomb") {
+          const bomb = bombs.find((b) => b.warning);
+          if (bomb?.warning) return spriteTutorialTarget(bomb.warning, 92, 10);
+        }
+        if (step === "arrow" && arrow) return spriteTutorialTarget(arrow.gfx, 70);
+        return null;
+      };
+
       const removeArrow = () => {
         if (!arrow) return;
         removeAndDestroy(arrow.gfx);
@@ -950,6 +1180,7 @@ function IsoRound({
         depthLayer.addChild(gfx);
 
         arrow = { gx, gy, dir, gfx, rotateElapsed: 0, lifeElapsed: 0 };
+        requestGameplayTutorial("arrow", spriteTutorialTarget(gfx, 70));
         if (scheduleNext) scheduleGame(spawnArrow, 20000);
       };
 
@@ -990,6 +1221,7 @@ function IsoRound({
 
       // Initial paint (player only; bots activated on kickoff)
       land(player);
+      syncPaintTutorialTarget();
       positionMinimap();
       updateMinimap();
       recomputeScores();
@@ -1396,6 +1628,7 @@ function IsoRound({
 
         if (!manualTicker && !deterministicTestMode.enabled) advanceGameplayBy(dtMs);
         updateBoardTiles();
+        updatePaintTutorialTiles(performance.now());
         advanceJoystickMovement();
         advanceKeyboardMovement();
       });
@@ -1537,6 +1770,7 @@ function IsoRound({
         updateHitArea();
         positionMinimap();
         centerCamera();
+        syncPaintTutorialTarget();
       };
       resizeHandler = () => {
         if (viewportRefreshFrame !== null) cancelAnimationFrame(viewportRefreshFrame);
@@ -1550,6 +1784,7 @@ function IsoRound({
       visualViewport = window.visualViewport ?? null;
       visualViewport?.addEventListener("resize", resizeHandler);
       centerCamera();
+      syncPaintTutorialTarget();
       if (manualTicker) renderManualFrame();
     })().catch((err) => {
       if (destroyed) return;
@@ -1567,6 +1802,7 @@ function IsoRound({
       if (keyDownHandler) window.removeEventListener("keydown", keyDownHandler);
       if (keyUpHandler) window.removeEventListener("keyup", keyUpHandler);
       if (keyBlurHandler) window.removeEventListener("blur", keyBlurHandler);
+      getGameplayTutorialTargetRef.current = null;
       if (resizeHandler) {
         window.removeEventListener("resize", resizeHandler);
         window.removeEventListener("orientationchange", resizeHandler);
@@ -1577,7 +1813,7 @@ function IsoRound({
       if (window.advanceTime) delete window.advanceTime;
       destroyPixiApp();
     };
-  }, [level, roundIndex, roundDuration]);
+  }, [activateGameplayTutorial, level, roundIndex, roundDuration]);
 
   const playerSkin = SKINS[PLAYER_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
@@ -1591,7 +1827,6 @@ function IsoRound({
   const isTie = activeSkins.filter((id) => banked[id] === topScore).length > 1;
 
   const backgroundInertProps = inertBackgroundProps(modalOpen);
-  const settingsInertProps = inertBackgroundProps(tutorialOpen);
 
   return (
     <>
@@ -1811,10 +2046,17 @@ function IsoRound({
         <Settings size={24} />
       </button>
 
+      {gameplayTutorialStep && (
+        <GameplayTutorial
+          step={gameplayTutorialStep}
+          target={gameplayTutorialTarget}
+          onConfirm={closeGameplayTutorial}
+        />
+      )}
+
       {/* Pause overlay */}
       {settingsOpen && !gameOver && (
         <div
-          {...settingsInertProps}
           className="tt-overlay fixed inset-0 z-[95] flex items-center justify-center p-4"
         >
           <div
@@ -1849,17 +2091,9 @@ function IsoRound({
             >
               <Play size={16} fill="currentColor" /> Resume
             </button>
-            <button
-              type="button"
-              onClick={() => setTutorialOpen(true)}
-              className="tt-button tt-button-secondary mt-3 w-full gap-2"
-            >
-              How to play?
-            </button>
           </div>
         </div>
       )}
-      {tutorialOpen && <TutorialModal onClose={() => setTutorialOpen(false)} />}
 
       <div
         {...backgroundInertProps}
@@ -1926,25 +2160,14 @@ export function IsoGrid() {
   const [roundIdx, setRoundIdx] = useState(0);
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
   const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
-  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   useEffect(() => {
     try {
       setUnlocked(readUnlockedLevel(window.localStorage));
-      setTutorialOpen(shouldShowTutorial(window.localStorage));
     } catch (err) {
       console.warn("[IsoGrid] localStorage read failed", err);
     }
   }, []);
-
-  const closeTutorial = () => {
-    setTutorialOpen(false);
-    try {
-      markTutorialSeen(window.localStorage);
-    } catch (err) {
-      console.warn("[IsoGrid] tutorial persistence failed", err);
-    }
-  };
 
   const persistUnlocked = (lv: number) => {
     setUnlocked(lv);
@@ -1991,31 +2214,22 @@ export function IsoGrid() {
     setPhase("playing");
   };
 
-  const managerInertProps = inertBackgroundProps(tutorialOpen);
-
   if (phase === "playing") {
     return (
-      <>
-        <div {...managerInertProps}>
-          <IsoRound
-            key={`lvl-${level}-r-${roundIdx}`}
-            level={level}
-            roundIndex={roundIdx}
-            matchWins={matchWins}
-            history={history}
-            onRoundEnd={handleRoundEnd}
-            parentModalOpen={tutorialOpen}
-          />
-        </div>
-        {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
-      </>
+      <IsoRound
+        key={`lvl-${level}-r-${roundIdx}`}
+        level={level}
+        roundIndex={roundIdx}
+        matchWins={matchWins}
+        history={history}
+        onRoundEnd={handleRoundEnd}
+      />
     );
   }
 
   return (
     <>
       <div
-        {...managerInertProps}
         className="tt-overlay fixed inset-0 z-[80] flex items-center justify-center p-4"
       >
         <div
@@ -2137,90 +2351,79 @@ export function IsoGrid() {
               </button>
             )}
           </div>
-
-          <button
-            type="button"
-            onClick={() => setTutorialOpen(true)}
-            className="mt-4 min-h-12 px-4 text-[18px] font-bold text-[var(--tt-text-secondary)] underline-offset-4 hover:text-[var(--tt-text-primary)] hover:underline"
-          >
-            How to play?
-          </button>
         </div>
       </div>
-      {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
     </>
   );
 }
 
-function TutorialModal({ onClose }: { onClose: () => void }) {
+function GameplayTutorial({
+  step,
+  target,
+  onConfirm,
+}: {
+  step: GameplayTutorialStep;
+  target: GameplayTutorialTarget;
+  onConfirm: () => void;
+}) {
+  const copy = GAMEPLAY_TUTORIAL_COPY[step];
+  const viewportW = typeof window === "undefined" ? 1024 : window.innerWidth;
+  const viewportH = typeof window === "undefined" ? 768 : window.innerHeight;
+  const modalW = Math.min(340, Math.max(280, viewportW - 32));
+  const modalH = 190;
+  const gap = 22;
+  const targetX = target?.x ?? viewportW / 2;
+  const targetY = target?.y ?? viewportH / 2;
+  const radius = target?.radius ?? 96;
+  const modalLeft =
+    targetX + radius + modalW + gap < viewportW
+      ? targetX + radius + gap
+      : targetX - radius - modalW - gap > 0
+        ? targetX - radius - modalW - gap
+        : (viewportW - modalW) / 2;
+  const modalTop = Math.min(
+    viewportH - modalH - 16,
+    Math.max(16, targetY - Math.round(modalH / 2)),
+  );
+
   return (
-    <div className="tt-overlay fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div className="tt-no-select fixed inset-0 z-[92]" style={{ touchAction: "none" }}>
       <div
-        className="tt-dialog max-h-[90vh] w-full max-w-md overflow-y-auto px-8 py-8 text-left"
+        aria-hidden="true"
+        className="pointer-events-none fixed rounded-full"
+        style={{
+          left: targetX - radius,
+          top: targetY - radius,
+          width: radius * 2,
+          height: radius * 2,
+          boxShadow: "0 0 0 9999px rgba(22, 18, 12, 0.68), 0 0 0 7px rgba(255, 240, 166, 0.95)",
+        }}
+      />
+      <div
+        className="tt-dialog fixed px-6 py-5 text-left"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="tutorial-title"
+        aria-labelledby="gameplay-tutorial-title"
+        style={{
+          left: modalLeft,
+          top: modalTop,
+          width: modalW,
+          boxShadow: "0 16px 36px rgba(0,0,0,0.34)",
+        }}
       >
-        <div className="text-[18px] font-bold text-[var(--tt-accent-warning)]">Tutorial</div>
-        <div id="tutorial-title" className="mt-1 text-[32px] font-bold">
-          How to play
+        <div
+          id="gameplay-tutorial-title"
+          className="text-[28px] font-extrabold leading-tight text-[var(--tt-text-primary)]"
+        >
+          {copy.title}
         </div>
 
-        <div className="mt-6 space-y-4 text-[18px] leading-relaxed text-[var(--tt-text-secondary)]">
-          <p>
-            <span className="font-bold text-[var(--tt-text-primary)]">Goal:</span> move across the
-            grid to paint tiles in your color, then collect chests to bank those painted tiles as
-            round points.
-          </p>
-          <p>
-            <span className="font-bold text-[var(--tt-text-primary)]">Scoring:</span> the HUD shows
-            banked points first and your current painted tiles as a smaller + value. Chests add the
-            current + value to your bank and clear your active paint.
-          </p>
-          <p>
-            <span className="font-bold text-[var(--tt-text-primary)]">Match:</span> each level is
-            first to{" "}
-            <span className="font-bold text-[var(--tt-accent-success)]">
-              {WINS_TO_PASS} round wins
-            </span>
-            . If a bot reaches {WINS_TO_PASS} wins first, retry the level.
-          </p>
+        <div className="mt-2 text-[22px] font-bold leading-tight text-[var(--tt-text-secondary)]">
+          {copy.body}
         </div>
 
-        <div className="mt-6 space-y-3 text-[18px] text-[var(--tt-text-primary)]">
-          <div className="tt-panel flex items-start gap-3 px-4 py-3">
-            <div className="text-xl leading-none">🎁</div>
-            <div>
-              <div className="font-bold">Chest</div>
-              <div className="text-[14px] text-[var(--tt-text-secondary)]">
-                Banks your current painted tiles as points, clears those tiles, then respawns
-                elsewhere.
-              </div>
-            </div>
-          </div>
-          <div className="tt-panel flex items-start gap-3 px-4 py-3">
-            <div className="text-xl leading-none">➤</div>
-            <div>
-              <div className="font-bold">Arrow</div>
-              <div className="text-[14px] text-[var(--tt-text-secondary)]">
-                Paints a full line from the arrow tile in its current direction.
-              </div>
-            </div>
-          </div>
-          <div className="tt-panel flex items-start gap-3 px-4 py-3">
-            <div className="text-xl leading-none">💣</div>
-            <div>
-              <div className="font-bold">Bomb</div>
-              <div className="text-[14px] text-[var(--tt-text-secondary)]">
-                Explodes on its exact tile. A hit stuns that player and clears every tile they
-                currently own.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <button type="button" onClick={onClose} className="tt-button tt-button-warning mt-6 w-full">
-          Got it
+        <button type="button" onClick={onConfirm} className="tt-button tt-button-warning mt-5 w-full">
+          ОК
         </button>
       </div>
     </div>

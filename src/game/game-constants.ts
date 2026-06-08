@@ -102,7 +102,7 @@ export const BOOST_DURATION = 12000;
 export const DIRECTIONS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
 
 export const LS_UNLOCKED = "iso_unlocked_level";
-export const LS_TUTORIAL_SEEN = "isogrid:tutorial:v1";
+export const LS_GAMEPLAY_TUTORIAL_SEEN = "isogrid:gameplay-tutorial:v1";
 
 export interface RoundHistoryEntry {
   level: number;
