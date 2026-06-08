@@ -62,21 +62,22 @@
 }
 
 :root {
+  /* Game UI tokens are intentionally light-only to keep the canvas HUD readable over game art. */
   --tt-font-family: ui-rounded, system-ui, sans-serif;
-  --tt-background-primary: #f4f0e4;
-  --tt-background-secondary: #faf8f1;
-  --tt-background-tertiary: #e8dfc7;
-  --tt-text-primary: #5f584b;
-  --tt-text-secondary: #a29684;
-  --tt-text-inverse: #ffffff;
-  --tt-accent-primary: #63b7f5;
-  --tt-accent-success: #a9d9a0;
-  --tt-accent-reward: #c9d95a;
-  --tt-accent-warning: #e7a15a;
-  --tt-accent-error: #e57b70;
-  --tt-overlay-dark: rgba(35, 25, 15, 0.82);
-  --tt-shadow-soft: 0 18px 40px rgba(94, 78, 48, 0.18);
-  --tt-shadow-lifted: 0 24px 60px rgba(70, 55, 32, 0.22);
+  --tt-background-primary: oklch(0.955 0.016 91.55);
+  --tt-background-secondary: oklch(0.979 0.009 93.57);
+  --tt-background-tertiary: oklch(0.904 0.033 89.86);
+  --tt-text-primary: oklch(0.463 0.022 83);
+  --tt-text-secondary: oklch(0.678 0.029 78.09);
+  --tt-text-inverse: oklch(1 0 0);
+  --tt-accent-primary: oklch(0.752 0.122 242.67);
+  --tt-accent-success: oklch(0.837 0.093 140.62);
+  --tt-accent-reward: oklch(0.848 0.152 115.75);
+  --tt-accent-warning: oklch(0.763 0.121 64.63);
+  --tt-accent-error: oklch(0.699 0.133 27.16);
+  --tt-overlay-dark: oklch(0.223 0.024 66.06 / 82%);
+  --tt-shadow-soft: 0 18px 40px oklch(0.432 0.05 82.45 / 18%);
+  --tt-shadow-lifted: 0 24px 60px oklch(0.347 0.042 77.38 / 22%);
 
   --radius: 1.25rem;
   --background: oklch(0.958 0.027 92.34);
@@ -175,10 +176,14 @@
   }
 
   input[type="range"],
-  input[type="range"]:focus,
-  input[type="range"]:focus-visible {
+  input[type="range"]:focus {
     outline: none;
     box-shadow: none;
+  }
+
+  input[type="range"]:focus-visible {
+    outline: 3px solid var(--tt-accent-primary);
+    outline-offset: 4px;
   }
 }
 
