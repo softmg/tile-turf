@@ -41,7 +41,7 @@ export const SKINS: Record<SkinId, SkinConfig> = {
     playerSprite: bananaUrl,
     tileSprite: tilePaintedUrl,
     minimapColor: 0xffff00,
-    uiColor: "#ffff00",
+    uiColor: "#d1b422",
     paintTint: 0xffff00,
   },
   dragon: {

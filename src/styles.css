@@ -151,6 +151,18 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  ::selection {
+    background: transparent;
+  }
+
+  html {
+    overscroll-behavior: none;
   }
 
   body {
@@ -159,6 +171,7 @@
     font-family: "Nunito", ui-rounded, system-ui, sans-serif;
     font-weight: 500;
     letter-spacing: 0;
+    overscroll-behavior: none;
   }
 
   button,
@@ -166,6 +179,13 @@
   textarea,
   select {
     font: inherit;
+  }
+
+  input[type="range"],
+  input[type="range"]:focus,
+  input[type="range"]:focus-visible {
+    outline: none;
+    box-shadow: none;
   }
 }
 
@@ -209,7 +229,7 @@
   .tt-chip {
     background: rgba(250, 248, 241, 0.92);
     border: 2px solid rgba(255, 255, 255, 0.7);
-    border-radius: 999px;
+    border-radius: 20px;
     box-shadow: var(--tt-shadow-soft);
     color: var(--tt-text-primary);
   }

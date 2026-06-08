@@ -240,6 +240,14 @@ interface CurrencyBadge {
 }
 ```
 
+Style:
+
+```json
+{
+  "radius": 20
+}
+```
+
 ---
 
 ## RewardCard

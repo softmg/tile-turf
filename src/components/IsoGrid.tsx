@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Settings, Play } from "lucide-react";
+import { Settings, Play, ZoomIn } from "lucide-react";
 import { Application, Assets, Rectangle, Text } from "pixi.js";
 import type { FederatedPointerEvent, Sprite, Texture } from "pixi.js";
 import chestUrl from "@/assets/chest.webp";
@@ -168,7 +168,6 @@ function IsoRound({
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
-  const [zoomOpen, setZoomOpen] = useState(false);
   const debug = import.meta.env.DEV && DEBUG_HUD_ENABLED;
   const [renderError, setRenderError] = useState<string | null>(null);
   const canShowDebug = debug;
@@ -1625,14 +1624,17 @@ function IsoRound({
       {/* Scoreboard */}
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed left-1/2 z-50 -translate-x-1/2 flex max-w-[calc(100vw-6rem)] items-center gap-3 overflow-x-auto px-4 py-2 text-[18px] font-bold"
-        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+        className="tt-chip fixed z-50 flex -translate-y-1/2 flex-col items-stretch gap-2 px-3 py-3 text-[18px] font-bold"
+        style={{
+          touchAction: "none",
+          left: "calc(env(safe-area-inset-left, 0px) + 16px)",
+          top: "50%",
+        }}
       >
-        {activeSkins.map((id, i) => {
+        {activeSkins.map((id) => {
           const sk = SKINS[id];
           return (
-            <span key={id} className="flex items-center gap-1.5">
-              {i > 0 && <span className="text-[var(--tt-text-secondary)]">·</span>}
+            <span key={id} className="flex min-w-20 items-center gap-2">
               <span
                 className="inline-block h-4 w-4 rounded-full ring-2 ring-[rgba(255,255,255,0.8)]"
                 style={{ background: sk.uiColor }}
@@ -1652,7 +1654,7 @@ function IsoRound({
       <div
         {...backgroundInertProps}
         className="tt-chip fixed left-1/2 z-50 -translate-x-1/2 px-6 py-2"
-        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 110px)" }}
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
       >
         <span
           className="text-[26px] font-extrabold tabular-nums"
@@ -1671,8 +1673,12 @@ function IsoRound({
       {/* Match wins HUD (player vs bots, first to 3) */}
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed right-4 z-50 px-4 py-2 text-[14px] font-bold"
-        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 56px)" }}
+        className="tt-chip fixed z-50 px-4 py-2 text-[14px] font-bold"
+        style={{
+          touchAction: "none",
+          left: "calc(env(safe-area-inset-left, 0px) + 16px)",
+          top: "calc(env(safe-area-inset-top, 0px) + 16px)",
+        }}
       >
         <div className="text-[12px] font-bold text-[var(--tt-text-secondary)]">
           Lvl {level} · BO{WINS_TO_PASS * 2 - 1}
@@ -1801,11 +1807,11 @@ function IsoRound({
           setSettingsOpen(true);
         }}
         disabled={gameOver}
-        className="tt-chip fixed right-4 z-50 flex h-12 w-12 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
-        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 8px)" }}
+        className="tt-chip fixed right-4 z-50 flex h-14 w-14 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
+        style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
         aria-label="Settings"
       >
-        <Settings size={20} />
+        <Settings size={24} />
       </button>
 
       {/* Pause overlay */}
@@ -1860,51 +1866,20 @@ function IsoRound({
 
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed left-4 z-50 flex items-center gap-2 px-2 py-2"
+        className="tt-chip fixed left-4 z-50 flex items-center gap-3 px-3 py-2"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
-        <button
-          type="button"
-          onClick={() => setZoomOpen((o) => !o)}
-          className="tt-button tt-button-secondary h-12 w-12 p-0 text-[18px]"
-          aria-label={zoomOpen ? "Collapse zoom" : "Expand zoom"}
-          aria-expanded={zoomOpen}
-        >
-          {zoomOpen ? "×" : "⌕"}
-        </button>
-        {zoomOpen && (
-          <>
-            <button
-              type="button"
-              onClick={() => setZoom((z) => Math.max(0.4, +(z - 0.1).toFixed(2)))}
-              className="tt-button tt-button-secondary h-12 w-12 p-0 text-[20px]"
-              aria-label="Zoom out"
-            >
-              −
-            </button>
-            <input
-              type="range"
-              min={0.4}
-              max={2}
-              step={0.05}
-              value={zoom}
-              onChange={(e) => setZoom(parseFloat(e.target.value))}
-              className="w-28 accent-[var(--tt-accent-primary)]"
-              aria-label="Zoom"
-            />
-            <button
-              type="button"
-              onClick={() => setZoom((z) => Math.min(2, +(z + 0.1).toFixed(2)))}
-              className="tt-button tt-button-secondary h-12 w-12 p-0 text-[20px]"
-              aria-label="Zoom in"
-            >
-              +
-            </button>
-            <span className="min-w-[2.5rem] text-right text-[14px] font-bold text-[var(--tt-text-primary)] tabular-nums">
-              {Math.round(zoom * 100)}%
-            </span>
-          </>
-        )}
+        <ZoomIn size={24} aria-hidden="true" className="text-[var(--tt-text-primary)]" />
+        <input
+          type="range"
+          min={0.4}
+          max={2}
+          step={0.05}
+          value={zoom}
+          onChange={(e) => setZoom(parseFloat(e.target.value))}
+          className="w-32 accent-[var(--tt-accent-primary)]"
+          aria-label="Zoom"
+        />
       </div>
       {canShowDebug && debug && (
         <div
