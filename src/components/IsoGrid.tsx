@@ -483,7 +483,7 @@ function IsoRound({
       const playerScoreText = new Text({
         text: "0",
         style: {
-          fontFamily: "Arial, sans-serif",
+          fontFamily: "ui-rounded, system-ui, sans-serif",
           fontSize: 22,
           fontWeight: "900",
           fill: 0xffffff,
@@ -679,6 +679,7 @@ function IsoRound({
         world.scale.set(zoomRef.current);
         world.x = cameraTargetX;
         world.y = cameraTargetY;
+        updateBoardTiles();
         app.render();
       };
 
@@ -1192,8 +1193,6 @@ function IsoRound({
         flushGameTimers();
         updateBombs(dtMs);
         updateArrow(dtMs);
-        updateBoardTiles();
-
         let landedAny = false;
         for (let ci = -1; ci < enemies.length; ci++) {
           const c = ci < 0 ? player : enemies[ci];
@@ -1222,7 +1221,6 @@ function IsoRound({
           recomputeScores();
           updateMinimapTiles();
         }
-        updateBoardTiles();
         updateMinimapMarkers();
 
         for (let ci = -1; ci < enemies.length; ci++) {
@@ -1324,7 +1322,6 @@ function IsoRound({
           remaining -= dt;
         }
         updateMinimap();
-        updateBoardTiles();
       };
 
       const advanceTime = (ms: number) => {
@@ -1600,7 +1597,7 @@ function IsoRound({
     <>
       <div
         {...backgroundInertProps}
-        className="fixed inset-0"
+        className="tt-no-select fixed inset-0"
         style={{
           touchAction: "none",
           userSelect: "none",
@@ -1624,7 +1621,7 @@ function IsoRound({
       {/* Scoreboard */}
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed z-50 flex -translate-y-1/2 flex-col items-stretch gap-2 px-3 py-3 text-[18px] font-bold"
+        className="tt-no-select tt-chip fixed z-50 flex -translate-y-1/2 flex-col items-stretch gap-2 px-3 py-3 text-[18px] font-bold"
         style={{
           touchAction: "none",
           left: "calc(env(safe-area-inset-left, 0px) + 16px)",

@@ -1,7 +1,6 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
-@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap");
 
 @custom-variant dark (&:is(.dark *));
 
@@ -63,6 +62,7 @@
 }
 
 :root {
+  --tt-font-family: ui-rounded, system-ui, sans-serif;
   --tt-background-primary: #f4f0e4;
   --tt-background-secondary: #faf8f1;
   --tt-background-tertiary: #e8dfc7;
@@ -152,13 +152,6 @@
   * {
     border-color: var(--color-border);
     -webkit-tap-highlight-color: transparent;
-    -webkit-touch-callout: none;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-
-  ::selection {
-    background: transparent;
   }
 
   html {
@@ -168,7 +161,7 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
-    font-family: "Nunito", ui-rounded, system-ui, sans-serif;
+    font-family: var(--tt-font-family);
     font-weight: 500;
     letter-spacing: 0;
     overscroll-behavior: none;
@@ -186,6 +179,15 @@
   input[type="range"]:focus-visible {
     outline: none;
     box-shadow: none;
+  }
+}
+
+@layer utilities {
+  .tt-no-select,
+  .tt-no-select * {
+    -webkit-touch-callout: none;
+    user-select: none;
+    -webkit-user-select: none;
   }
 }
 

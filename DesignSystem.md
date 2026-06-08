@@ -88,7 +88,7 @@ Avoid:
 
 ```json
 {
-  "font.family": "Nunito",
+  "font.family": "ui-rounded, system-ui, sans-serif",
 
   "font.h1.size": 40,
   "font.h1.weight": 700,
