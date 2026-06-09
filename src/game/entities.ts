@@ -15,9 +15,11 @@ export interface Character {
   skin: SkinConfig;
   sprite: Sprite;
   shadow: Graphics;
+  bodyBaseScale: number;
   gx: number;
   gy: number;
   anim: CharacterAnimation | null;
+  landingSquashElapsed: number | null;
   stunnedUntil: number;
   boostUntil: number;
   aura: Graphics;

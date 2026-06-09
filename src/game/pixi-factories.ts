@@ -1,5 +1,5 @@
-import { Graphics, Sprite, type Texture } from "pixi.js";
-import { BOARD_SIZE, SKINS, TILE_SIZE, type SkinId } from "@/game/game-constants";
+import { ColorMatrixFilter, Container, Graphics, Sprite, type Texture } from "pixi.js";
+import { BOARD_SIZE, SKINS, TILE_H, TILE_SIZE, TILE_W, type SkinConfig, type SkinId } from "@/game/game-constants";
 import { isoPos } from "@/game/grid-math";
 import { hazardSpriteScale, isoRotation } from "@/game/hazards";
 import { DEPTH_OFFSETS, isoDepth } from "@/game/scene-layers";
@@ -10,6 +10,7 @@ export interface CharacterView {
   shadow: Graphics;
   aura: Graphics;
   sprite: Sprite;
+  bodyBaseScale: number;
 }
 
 export const BOMB_TARGET_H = 170;
@@ -19,22 +20,148 @@ const CHEST_Y_OFFSET = 14;
 const BOOTS_Y_OFFSET = -14;
 const BOOST_AURA_Y_OFFSET = -30;
 const BOOST_AURA_DEPTH_OFFSET = -0.01;
+const TILE_PAINT_REVEAL_MS = 300;
+const TILE_JUMP_LIFT_PX = 5;
+const TILE_JUMP_LIFT_EASE = 0.16;
+const TILE_JUMP_WOBBLE_AMPLITUDE_PX = 1.6;
+const TILE_JUMP_WOBBLE_FREQUENCY = 0.006;
+const TILE_JUMP_BRIGHTNESS_BOOST = 0.16;
 
-export const createBoardTile = (texture: Texture, gx: number, gy: number) => {
-  const tile = new Sprite(texture);
-  tile.label = `board-tile-${gx}-${gy}`;
-  tile.anchor.set(0.5, 0.5);
-  tile.width = TILE_SIZE;
-  tile.height = TILE_SIZE;
-  const p = isoPos(gx, gy);
-  tile.x = p.x;
-  tile.y = p.y;
-  return tile;
+const easeInOutSine = (t: number) => -(Math.cos(Math.PI * t) - 1) / 2;
+
+export class BoardTileView {
+  readonly container: Container;
+  private visual: Container;
+  private baseSprite: Sprite;
+  private paintedSprite: Sprite;
+  private paintMask: Graphics;
+  private brightnessFilter: ColorMatrixFilter;
+  private paintProgress = 0;
+  private paintChangedAt = 0;
+  private paintChangedFrom = 0;
+  private paintAnimating = false;
+  private jumpAvailable = false;
+  private jumpLift = 0;
+  private visualOwner: SkinId | null = null;
+
+  constructor(
+    private unpaintedTexture: Texture,
+    private paintedTexture: Texture,
+    gx: number,
+    gy: number,
+  ) {
+    this.container = new Container({ label: `board-tile-${gx}-${gy}` });
+    this.visual = new Container({ label: `board-tile-visual-${gx}-${gy}` });
+    this.baseSprite = this.createTileSprite(unpaintedTexture);
+    this.paintedSprite = this.createTileSprite(paintedTexture);
+    this.paintedSprite.visible = false;
+
+    this.paintMask = new Graphics({ label: `board-tile-mask-${gx}-${gy}` });
+    this.paintedSprite.mask = this.paintMask;
+
+    this.brightnessFilter = new ColorMatrixFilter();
+    this.visual.filters = [this.brightnessFilter];
+
+    const p = isoPos(gx, gy);
+    this.container.x = p.x;
+    this.container.y = p.y;
+    this.container.addChild(this.visual);
+    this.visual.addChild(this.baseSprite, this.paintedSprite, this.paintMask);
+    this.drawPaintMask(0);
+  }
+
+  paint(skin: SkinConfig, nowMs: number, options: { immediate?: boolean } = {}) {
+    if (this.visualOwner === skin.id && !this.paintAnimating) return false;
+
+    this.baseSprite.texture = this.unpaintedTexture;
+    this.baseSprite.tint = this.visualOwner ? SKINS[this.visualOwner].paintTint : 0xffffff;
+    this.paintedSprite.texture = this.unpaintedTexture;
+    this.paintedSprite.tint = skin.paintTint;
+    this.paintedSprite.visible = true;
+    this.visualOwner = skin.id;
+    this.paintChangedFrom = options.immediate ? 1 : 0;
+    this.paintChangedAt = nowMs;
+    this.paintAnimating = !options.immediate;
+    this.paintProgress = options.immediate ? 1 : 0;
+    this.drawPaintMask(this.paintProgress);
+    return true;
+  }
+
+  resetToUnpainted() {
+    this.visualOwner = null;
+    this.baseSprite.texture = this.unpaintedTexture;
+    this.baseSprite.tint = 0xffffff;
+    this.paintedSprite.visible = false;
+    this.paintedSprite.tint = 0xffffff;
+    this.paintAnimating = false;
+    this.paintProgress = 0;
+    this.drawPaintMask(0);
+  }
+
+  setJumpAvailable(on: boolean) {
+    this.jumpAvailable = on;
+  }
+
+  update(nowMs: number) {
+    this.updatePaint(nowMs);
+    this.updateJumpMotion(nowMs);
+  }
+
+  private createTileSprite(texture: Texture) {
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5, 0.5);
+    sprite.width = TILE_SIZE;
+    sprite.height = TILE_SIZE;
+    return sprite;
+  }
+
+  private drawPaintMask(progress: number) {
+    const hw = TILE_W / 2;
+    const hh = TILE_H / 2;
+    const maxRadius = Math.sqrt(hw * hw + hh * hh);
+    this.paintMask.clear();
+    if (progress <= 0) return;
+    this.paintMask.circle(0, 0, maxRadius * progress).fill(0xffffff);
+  }
+
+  private updatePaint(nowMs: number) {
+    if (!this.paintAnimating) return;
+    const raw = (nowMs - this.paintChangedAt) / TILE_PAINT_REVEAL_MS;
+    const t = Math.min(1, Math.max(0, raw));
+    const eased = easeInOutSine(t);
+    this.paintProgress = this.paintChangedFrom + (1 - this.paintChangedFrom) * eased;
+    this.drawPaintMask(this.paintProgress);
+    if (t >= 1) {
+      this.paintProgress = 1;
+      this.paintAnimating = false;
+      this.drawPaintMask(1);
+    }
+  }
+
+  private updateJumpMotion(nowMs: number) {
+    const targetLift = this.jumpAvailable ? TILE_JUMP_LIFT_PX : 0;
+    this.jumpLift += (targetLift - this.jumpLift) * TILE_JUMP_LIFT_EASE;
+    const wobble = this.jumpAvailable
+      ? Math.sin(nowMs * TILE_JUMP_WOBBLE_FREQUENCY) * TILE_JUMP_WOBBLE_AMPLITUDE_PX
+      : 0;
+    this.visual.y = -this.jumpLift + wobble;
+    const liftedHeight = Math.max(0, -this.visual.y);
+    const brightnessProgress = Math.min(1, liftedHeight / (TILE_JUMP_LIFT_PX + TILE_JUMP_WOBBLE_AMPLITUDE_PX));
+    this.brightnessFilter.brightness(1 + TILE_JUMP_BRIGHTNESS_BOOST * brightnessProgress, false);
+    if (!this.jumpAvailable && Math.abs(this.visual.y) < 0.05) {
+      this.visual.y = 0;
+      this.brightnessFilter.brightness(1, false);
+    }
+  }
+}
+
+export const createBoardTile = (unpaintedTexture: Texture, paintedTexture: Texture, gx: number, gy: number) => {
+  return new BoardTileView(unpaintedTexture, paintedTexture, gx, gy);
 };
 
 export const addBoardTilesInIsoOrder = (
-  createTile: (gx: number, gy: number) => Sprite,
-  addTile: (tile: Sprite) => void,
+  createTile: (gx: number, gy: number) => BoardTileView,
+  addTile: (tile: BoardTileView) => void,
 ) => {
   for (let depth = 0; depth <= (BOARD_SIZE - 1) * 2; depth++) {
     for (let gx = 0; gx < BOARD_SIZE; gx++) {
@@ -46,7 +173,6 @@ export const addBoardTilesInIsoOrder = (
 };
 
 export const createCharacterView = (skinId: SkinId, textures: SkinTextureMap): CharacterView => {
-  const skin = SKINS[skinId];
   const shadow = new Graphics({ label: `${skinId}-shadow` });
   shadow.ellipse(0, 0, 28, 12).fill({ color: 0x000000, alpha: 0.35 });
 
@@ -64,9 +190,9 @@ export const createCharacterView = (skinId: SkinId, textures: SkinTextureMap): C
   const targetH = 110;
   const s = targetH / Math.max(tex.height, 1);
   sprite.scale.set(s);
-  sprite.tint = skin.spriteTint;
+  sprite.tint = 0xffffff;
 
-  return { shadow, aura, sprite };
+  return { shadow, aura, sprite, bodyBaseScale: s };
 };
 
 export const placeCharacterView = (
@@ -75,11 +201,13 @@ export const placeCharacterView = (
   gy: number,
   jumpOffset = 0,
   shadowScale = 1,
+  bodyScale: { x: number; y: number } = { x: 1, y: 1 },
 ) => {
   const p = isoPos(gx, gy);
   view.sprite.x = p.x;
   view.sprite.y = p.y + jumpOffset;
   view.sprite.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.CHARACTER_BODY);
+  view.sprite.scale.set(view.bodyBaseScale * bodyScale.x, view.bodyBaseScale * bodyScale.y);
   view.shadow.x = p.x;
   view.shadow.y = p.y;
   view.shadow.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.CHARACTER_SHADOW);

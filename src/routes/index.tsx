@@ -7,10 +7,10 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6 p-8">
+    <div className="tt-page min-h-screen flex flex-col items-center justify-center gap-6 p-8">
       <div className="text-center">
-        <h1 className="text-3xl font-bold text-foreground">Isometric 8×8 Grid</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-[40px] font-bold text-[var(--tt-text-primary)]">Tile Turf</h1>
+        <p className="mt-2 text-[22px] font-medium text-[var(--tt-text-secondary)]">
           Move across tiles, paint turf, and bank points with chests.
         </p>
       </div>
