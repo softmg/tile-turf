@@ -9,8 +9,11 @@ import {
   BACKGROUND_URL,
   BASE_JUMP_DURATION,
   BOARD_SIZE,
+  ARROW_UNLOCK_LEVEL,
   BOOST_DURATION,
   BOOST_JUMP_DURATION,
+  BOOTS_UNLOCK_LEVEL,
+  BOMB_UNLOCK_LEVEL,
   BOT_SKINS,
   DIRECTIONS,
   ENEMY_SPAWN_POSITIONS,
@@ -1318,7 +1321,7 @@ function IsoRound({
         removeAndDestroy(boots.gfx);
         boots = null;
         c.boostUntil = gameNow() + BOOST_DURATION;
-        scheduleGame(spawnBoots, rng.range(10000, 15000));
+        if (level >= BOOTS_UNLOCK_LEVEL) scheduleGame(spawnBoots, rng.range(10000, 15000));
       };
 
       // ---------- Rotating Arrow ----------
@@ -1419,12 +1422,28 @@ function IsoRound({
       updateMinimap();
       recomputeScores();
 
+      const startLevelMechanics = () => {
+        spawnChest();
+
+        if (level >= BOMB_UNLOCK_LEVEL) {
+          const { gx, gy } = randomUnoccupiedCell();
+          spawnBombAt(gx, gy, true);
+        }
+
+        if (level >= BOOTS_UNLOCK_LEVEL) {
+          const { gx, gy } = randomUnoccupiedCell();
+          placeBoots(gx, gy);
+        }
+
+        if (level >= ARROW_UNLOCK_LEVEL) {
+          const { gx, gy } = randomUnoccupiedCell();
+          spawnArrowAt(gx, gy, 0, true);
+        }
+      };
+
       const applyDeterministicScenarioFixture = () => {
         if (!deterministicScenario) {
-          spawnChest();
-          scheduleGame(spawnBomb, rng.range(5000, 8000));
-          scheduleGame(spawnBoots, rng.range(8000, 12000));
-          scheduleGame(spawnArrow, 15000);
+          startLevelMechanics();
           return;
         }
 
@@ -1480,12 +1499,7 @@ function IsoRound({
         }
         updateMinimap();
         if (deterministicTestMode.enabled) applyDeterministicScenarioFixture();
-        else {
-          spawnChest();
-          scheduleGame(spawnBomb, rng.range(5000, 8000));
-          scheduleGame(spawnBoots, rng.range(8000, 12000));
-          scheduleGame(spawnArrow, 15000);
-        }
+        else startLevelMechanics();
       };
       if (startedRef.current) kickoffRef.current();
 

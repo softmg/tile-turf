@@ -83,6 +83,9 @@ export const zeroScores = (): Record<SkinId, number> => ({
 
 export const MAX_LEVEL = 10;
 export const WINS_TO_PASS = 3;
+export const BOMB_UNLOCK_LEVEL = 2;
+export const BOOTS_UNLOCK_LEVEL = 3;
+export const ARROW_UNLOCK_LEVEL = 4;
 export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : 3);
 export const enemyIntervalForLevel = (lv: number) => Math.max(220, 750 - (lv - 1) * 60);
 export const roundDurationForLevel = (lv: number) =>
