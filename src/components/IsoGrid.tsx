@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings, Play, ZoomIn } from "lucide-react";
-import { Application, Assets, Rectangle, Text } from "pixi.js";
-import type { Container, FederatedPointerEvent, Sprite, Texture } from "pixi.js";
+import { Application, Assets, Container, Graphics, Rectangle, Text, Texture } from "pixi.js";
+import type { FederatedPointerEvent, Sprite } from "pixi.js";
 import chestUrl from "@/assets/chest.webp";
-import bomb1Url from "@/assets/bomb/bomb1.webp";
-import bomb2Url from "@/assets/bomb/bomb2.webp";
-import bomb3Url from "@/assets/bomb/bomb3.webp";
-import bomb4Url from "@/assets/bomb/bomb4.webp";
+import bombAnimUrl from "@/assets/bomb/bomb-anim.png";
 import bootsUrl from "@/assets/boots.webp";
 import {
   BACKGROUND_URL,
@@ -64,7 +61,6 @@ import {
   addBoardTilesInIsoOrder,
   createArrowGraphic,
   createBoardTile,
-  createBombExplosionSprite,
   createBombWarningSprite,
   createBootsSprite,
   createCharacterView,
@@ -73,7 +69,6 @@ import {
   placeCharacterView,
   placeChestSprite,
   setArrowDirection,
-  updateBombExplosionSprite,
   updateBombWarningSprite,
   type BoardTileView,
   type SkinTextureMap,
@@ -174,10 +169,7 @@ const GAME_TEXTURE_ASSETS = [
   { alias: "tile-turf:bot:dragon", src: SKINS.dragon.playerSprite, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:bot:cat", src: SKINS.cat.playerSprite, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:chest", src: chestUrl, data: GAME_TEXTURE_DATA },
-  { alias: "tile-turf:bomb:1", src: bomb1Url, data: GAME_TEXTURE_DATA },
-  { alias: "tile-turf:bomb:2", src: bomb2Url, data: GAME_TEXTURE_DATA },
-  { alias: "tile-turf:bomb:3", src: bomb3Url, data: GAME_TEXTURE_DATA },
-  { alias: "tile-turf:bomb:4", src: bomb4Url, data: GAME_TEXTURE_DATA },
+  { alias: "tile-turf:bomb:anim", src: bombAnimUrl, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:boots", src: bootsUrl, data: GAME_TEXTURE_DATA },
 ] as const;
 
@@ -194,6 +186,26 @@ const PLAYER_SCORE_OFFSET_Y = -126;
 const JUMP_APEX_STRETCH = 0.08;
 const JUMP_LANDING_SQUASH = 0.12;
 const LANDING_SQUASH_DURATION_MS = 160;
+const STUN_BODY_ORBIT_RADIUS_PX = 0.32;
+const STUN_STARS_Y_OFFSET = -118;
+const BOMB_DANGER_MARKER_Y_OFFSET = -18;
+const BOMB_WARNING_DURATION_MS = 2000;
+const BOMB_ANIM_FRAME_W = 512;
+const BOMB_ANIM_FRAME_H = 576;
+const BOMB_ANIM_COLS = 5;
+const BOMB_ANIM_ROWS = 5;
+const BOMB_ANIM_FRAME_COUNT = BOMB_ANIM_COLS * BOMB_ANIM_ROWS;
+const BOMB_EXPLOSION_START_FRAME = 16;
+const BOMB_DETONATION_MS = (BOMB_WARNING_DURATION_MS * BOMB_EXPLOSION_START_FRAME) / BOMB_ANIM_FRAME_COUNT;
+const BOMB_ANIM_FRAME_ANCHOR = { x: 0.4971, y: 0.7691 } as const;
+const BOMB_ANIM_SOURCE_PAD = 10;
+const BOMB_ANIM_SHEET_W = BOMB_ANIM_FRAME_W * BOMB_ANIM_COLS;
+const BOMB_ANIM_SHEET_H = BOMB_ANIM_FRAME_H * BOMB_ANIM_ROWS;
+
+type BombWarningFrame = {
+  texture: Texture;
+  anchor: { x: number; y: number };
+};
 
 const characterJumpBodyScale = (linear: number, arc: number) => {
   const landingProgress = Math.min(1, Math.max(0, (linear - 0.7) / 0.3));
@@ -213,6 +225,77 @@ const characterLandingBodyScale = (elapsedMs: number) => {
     x: 1 + squash * 0.75,
     y: 1 - squash,
   };
+};
+
+const createStunStarsView = () => {
+  const container = new Container({ label: "stun-stars" });
+  container.visible = false;
+  for (let i = 0; i < 4; i++) {
+    const star = new Graphics({ label: `stun-star-${i}` });
+    const points: number[] = [];
+    for (let p = 0; p < 10; p++) {
+      const angle = -Math.PI / 2 + (p * Math.PI) / 5;
+      const radius = p % 2 === 0 ? 7 : 3.2;
+      points.push(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    star.poly(points).fill(0xfff36a).stroke({ width: 1.5, color: 0x6f3b00 });
+    star.rotation = i * 0.5;
+    container.addChild(star);
+  }
+  return container;
+};
+
+const createBombDangerMarker = (gx: number, gy: number) => {
+  const p = isoPos(gx, gy);
+  const marker = new Graphics({ label: "bomb-danger-marker" });
+  marker.rect(-2.2, -15, 4.4, 11).fill(0xff2222).stroke({ width: 1, color: 0x5a0000 });
+  marker.circle(0, 0, 3.2).fill(0xff2222).stroke({ width: 1, color: 0x5a0000 });
+  marker.x = p.x;
+  marker.y = p.y + BOMB_DANGER_MARKER_Y_OFFSET;
+  marker.zIndex = gx + gy + 0.09;
+  return marker;
+};
+
+const createBombWarningFrames = (sheet: Texture) => {
+  const frames: BombWarningFrame[] = [];
+  const origWidth = BOMB_ANIM_FRAME_W + BOMB_ANIM_SOURCE_PAD * 2;
+  const origHeight = BOMB_ANIM_FRAME_H + BOMB_ANIM_SOURCE_PAD;
+  const anchor = {
+    x: (BOMB_ANIM_SOURCE_PAD + BOMB_ANIM_FRAME_ANCHOR.x * BOMB_ANIM_FRAME_W) / origWidth,
+    y: (BOMB_ANIM_SOURCE_PAD + BOMB_ANIM_FRAME_ANCHOR.y * BOMB_ANIM_FRAME_H) / origHeight,
+  };
+  for (let row = 0; row < BOMB_ANIM_ROWS; row++) {
+    for (let col = 0; col < BOMB_ANIM_COLS; col++) {
+      const cellX = col * BOMB_ANIM_FRAME_W;
+      const cellY = row * BOMB_ANIM_FRAME_H;
+      const desiredX = cellX - BOMB_ANIM_SOURCE_PAD;
+      const desiredY = cellY - BOMB_ANIM_SOURCE_PAD;
+      const sourceX = Math.max(0, desiredX);
+      const sourceY = Math.max(0, desiredY);
+      const sourceRight = Math.min(BOMB_ANIM_SHEET_W, cellX + BOMB_ANIM_FRAME_W + BOMB_ANIM_SOURCE_PAD);
+      const sourceBottom = Math.min(BOMB_ANIM_SHEET_H, cellY + BOMB_ANIM_FRAME_H);
+      const sourceW = sourceRight - sourceX;
+      const sourceH = sourceBottom - sourceY;
+      frames.push(
+        {
+          texture: new Texture({
+            source: sheet.source,
+            orig: new Rectangle(0, 0, origWidth, origHeight),
+            frame: new Rectangle(sourceX, sourceY, sourceW, sourceH),
+            trim: new Rectangle(sourceX - desiredX, sourceY - desiredY, sourceW, sourceH),
+          }),
+          anchor,
+        },
+      );
+    }
+  }
+  return frames;
+};
+
+const bombWarningFrameForElapsed = (frames: BombWarningFrame[], elapsedMs: number) => {
+  const frameDuration = BOMB_WARNING_DURATION_MS / frames.length;
+  const index = Math.min(frames.length - 1, Math.floor(elapsedMs / frameDuration));
+  return frames[index];
 };
 
 function IsoRound({
@@ -559,15 +642,13 @@ function IsoRound({
         dragonTex,
         catTex,
         chestTex,
-        bombTex1,
-        bombTex2,
-        bombTex3,
-        boomTex,
+        bombAnimTex,
         bootsTex,
       ] = await Promise.all(
         GAME_TEXTURE_ASSETS.map((asset) => Assets.load<Texture>(asset, GAME_TEXTURE_LOAD_OPTIONS)),
       );
       if (destroyed) return;
+      const bombWarningFrames = createBombWarningFrames(bombAnimTex);
       const skinTextures: SkinTextureMap = {
         plush: { tile: paintedTex, player: playerTex },
         banana: { tile: paintedTex, player: bananaTex },
@@ -678,7 +759,8 @@ function IsoRound({
       const makeCharacter = (skinId: SkinId, gx: number, gy: number): Character => {
         const skin = SKINS[skinId];
         const { shadow, aura, sprite, bodyBaseScale } = createCharacterView(skinId, skinTextures);
-        depthLayer.addChild(shadow, aura, sprite);
+        const stunStars = createStunStarsView();
+        depthLayer.addChild(shadow, aura, sprite, stunStars);
         return {
           skin,
           sprite,
@@ -689,6 +771,7 @@ function IsoRound({
           anim: null,
           landingSquashElapsed: null,
           stunnedUntil: 0,
+          stunStars,
           boostUntil: 0,
           aura,
         };
@@ -719,6 +802,7 @@ function IsoRound({
       for (const e of allEnemies) {
         e.sprite.visible = false;
         e.shadow.visible = false;
+        e.stunStars.visible = false;
       }
 
       let gameTimeMs = 0;
@@ -923,6 +1007,40 @@ function IsoRound({
         }
       };
 
+      const updateCharacterStunView = (c: Character, nowMs: number) => {
+        if (nowMs >= c.stunnedUntil) {
+          if (c.stunStars.visible) {
+            c.stunStars.visible = false;
+            c.sprite.rotation = 0;
+            renderCharacterAt(c, c.gx, c.gy);
+          }
+          return;
+        }
+
+        const phase = nowMs / 95 + c.gx * 0.7 + c.gy * 0.4;
+        c.sprite.x += Math.cos(phase) * STUN_BODY_ORBIT_RADIUS_PX;
+        c.sprite.y += Math.sin(phase) * STUN_BODY_ORBIT_RADIUS_PX * 0.75;
+        c.sprite.rotation = Math.sin(phase) * 0.08;
+
+        const stars = c.stunStars;
+        stars.visible = true;
+        stars.x = c.sprite.x;
+        stars.y = c.sprite.y + STUN_STARS_Y_OFFSET;
+        stars.zIndex = c.sprite.zIndex + 0.04;
+        stars.rotation = -phase * 0.7;
+        stars.alpha = 0.85 + Math.sin(nowMs / 110) * 0.15;
+        const starRadiusX = 25;
+        const starRadiusY = 10;
+        for (let i = 0; i < stars.children.length; i++) {
+          const star = stars.children[i] as Graphics;
+          const a = phase + (i / stars.children.length) * Math.PI * 2;
+          star.x = Math.cos(a) * starRadiusX;
+          star.y = Math.sin(a) * starRadiusY;
+          star.rotation = a + nowMs / 140;
+          star.scale.set(0.85 + 0.2 * Math.sin(a + nowMs / 160));
+        }
+      };
+
       const land = (c: Character, startSquash = false) => {
         paintAt(c.gx, c.gy, c.skin);
         c.landingSquashElapsed = startSquash ? 0 : null;
@@ -1014,8 +1132,35 @@ function IsoRound({
               t.resetToUnpainted();
               any = true;
             }
-          }
+        }
         if (any) minimapTilesDirty = true;
+      };
+
+      const bombAffectedCells = (gx: number, gy: number) => {
+        const cells: Array<{ gx: number; gy: number }> = [];
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const x = gx + dx;
+            const y = gy + dy;
+            if (isInsideBoard(x, y)) cells.push({ gx: x, gy: y });
+          }
+        }
+        return cells;
+      };
+
+      const isInBombArea = (targetGx: number, targetGy: number, bombGx: number, bombGy: number) =>
+        Math.abs(targetGx - bombGx) <= 1 && Math.abs(targetGy - bombGy) <= 1;
+
+      const clearBombAreaPaint = (gx: number, gy: number) => {
+        let any = false;
+        for (const cell of bombAffectedCells(gx, gy)) {
+          if (owners[cell.gx][cell.gy] === null) continue;
+          owners[cell.gx][cell.gy] = null;
+          tiles[cell.gx][cell.gy].resetToUnpainted();
+          any = true;
+        }
+        if (any) minimapTilesDirty = true;
+        return any;
       };
 
       const tryCollectChest = (c: Character) => {
@@ -1038,51 +1183,60 @@ function IsoRound({
 
       const removeBomb = (bomb: Bomb) => {
         removeAndDestroy(bomb.warning);
+        for (const marker of bomb.dangerMarkers) removeAndDestroy(marker);
         removeAndDestroy(bomb.boom);
         bomb.warning = null;
+        bomb.dangerMarkers = [];
         bomb.boom = null;
         const i = bombs.indexOf(bomb);
         if (i >= 0) bombs.splice(i, 1);
       };
 
       const explodeBomb = (bomb: Bomb) => {
-        if (gameOverRef.current || destroyed || bomb.phase !== "warning") return;
-        removeAndDestroy(bomb.warning);
-        bomb.warning = null;
+        if (gameOverRef.current || destroyed || bomb.detonated) return;
+        for (const marker of bomb.dangerMarkers) removeAndDestroy(marker);
+        bomb.dangerMarkers = [];
         bomb.phase = "explosion";
+        bomb.detonated = true;
         bomb.explosionElapsed = 0;
 
-        const boom = createBombExplosionSprite(boomTex, bomb.gx, bomb.gy);
-        depthLayer.addChild(boom);
-        bomb.boom = boom;
-
+        const removedPaint = clearBombAreaPaint(bomb.gx, bomb.gy);
+        const stunnedUntil = gameNow() + STUN_DURATION;
         for (const c of [player, ...enemies]) {
-          if (c.gx === bomb.gx && c.gy === bomb.gy && !c.anim) {
-            c.stunnedUntil = gameNow() + STUN_DURATION;
-            clearOwnedBy(c.skin.id);
-            recomputeScores();
-            updateMinimap();
+          if (isInBombArea(c.gx, c.gy, bomb.gx, bomb.gy)) {
+            c.anim = null;
+            c.landingSquashElapsed = null;
+            c.stunnedUntil = Math.max(c.stunnedUntil, stunnedUntil);
+            renderCharacterAt(c, c.gx, c.gy);
           }
         }
+        if (removedPaint) recomputeScores();
+        updateMinimap();
       };
 
       const spawnBombAt = (gx: number, gy: number, scheduleNext: boolean) => {
         if (gameOverRef.current || destroyed || !startedRef.current) return;
-        const warning = createBombWarningSprite(bombTex1, gx, gy);
+        const firstFrame = bombWarningFrames[0];
+        const warning = createBombWarningSprite(firstFrame.texture, gx, gy, firstFrame.anchor);
         depthLayer.addChild(warning);
+        const dangerMarkers = bombAffectedCells(gx, gy)
+          .filter((cell) => cell.gx !== gx || cell.gy !== gy)
+          .map((cell) => createBombDangerMarker(cell.gx, cell.gy));
+        for (const marker of dangerMarkers) depthLayer.addChild(marker);
         const bomb: Bomb = {
           gx,
           gy,
           warning,
+          dangerMarkers,
           boom: null,
           phase: "warning",
+          detonated: false,
           warningElapsed: 0,
           explosionElapsed: 0,
         };
         bombs.push(bomb);
         requestGameplayTutorial("bomb", spriteTutorialTarget(warning, 92, 10));
 
-        scheduleGame(() => explodeBomb(bomb), 2000);
         if (scheduleNext) scheduleGame(spawnBomb, rng.range(5000, 8000));
       };
 
@@ -1095,36 +1249,37 @@ function IsoRound({
       const updateBombs = (dtMs: number) => {
         for (let i = bombs.length - 1; i >= 0; i--) {
           const bomb = bombs[i];
-          if (bomb.phase === "warning") {
-            if (!bomb.warning) {
-              removeBomb(bomb);
-              continue;
-            }
-            bomb.warningElapsed += dtMs;
-            const elapsed = bomb.warningElapsed;
-            let tex = bombTex1;
-            if (elapsed > 1400) tex = bombTex3;
-            else if (elapsed > 600) tex = bombTex2;
-            if (bomb.warning.texture !== tex) {
-              updateBombWarningSprite(bomb.warning, tex);
-            }
-            const p = isoPos(bomb.gx, bomb.gy);
-            if (elapsed > 1400) {
-              const k = (elapsed - 1400) / 600;
-              const amp = 1 + k * 3;
-              bomb.warning.x = p.x + Math.sin((elapsed + bomb.gx * 17 + bomb.gy * 31) / 28) * amp;
-            } else {
-              bomb.warning.x = p.x;
-            }
+          if (!bomb.warning) {
+            removeBomb(bomb);
             continue;
           }
 
-          if (!bomb.boom) continue;
-          bomb.explosionElapsed += dtMs;
-          const k = Math.min(1, bomb.explosionElapsed / 220);
-          updateBombExplosionSprite(bomb.boom, boomTex, k);
-          bomb.boom.alpha = Math.max(0, 1 - Math.max(0, bomb.explosionElapsed - 280) / 220);
-          if (bomb.explosionElapsed >= 500) removeBomb(bomb);
+          bomb.warningElapsed += dtMs;
+          const elapsed = bomb.warningElapsed;
+          const frame = bombWarningFrameForElapsed(bombWarningFrames, elapsed);
+          if (bomb.warning.texture !== frame.texture) {
+            updateBombWarningSprite(bomb.warning, frame.texture, frame.anchor);
+          }
+
+          if (!bomb.detonated && elapsed >= BOMB_DETONATION_MS) {
+            explodeBomb(bomb);
+          }
+
+          if (!bomb.detonated) {
+            const blink = 0.45 + 0.55 * Math.abs(Math.sin(elapsed / 120));
+            const pulse = 0.85 + 0.15 * Math.abs(Math.sin(elapsed / 160));
+            for (const marker of bomb.dangerMarkers) {
+              marker.alpha = blink;
+              marker.scale.set(pulse);
+            }
+          }
+
+          const p = isoPos(bomb.gx, bomb.gy);
+          bomb.warning.x = p.x;
+          bomb.warning.y = p.y;
+
+          if (bomb.detonated) bomb.explosionElapsed += dtMs;
+          if (elapsed >= BOMB_WARNING_DURATION_MS) removeBomb(bomb);
         }
       };
 
@@ -1277,6 +1432,7 @@ function IsoRound({
           const active = i < n;
           allEnemies[i].sprite.visible = active;
           allEnemies[i].shadow.visible = active;
+          allEnemies[i].stunStars.visible = false;
           allMiniEnemies[i].visible = active;
           if (active) {
             enemies.push(allEnemies[i]);
@@ -1484,9 +1640,7 @@ function IsoRound({
           if (active) {
             placeBoostAura(c, nowMs);
           }
-          if (nowMs < c.stunnedUntil) {
-            c.sprite.x += Math.sin(nowMs / 30) * 2;
-          }
+          updateCharacterStunView(c, nowMs);
         }
 
         enemyTimer += dtMs;

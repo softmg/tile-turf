@@ -97,7 +97,7 @@ export const ENEMY_SPAWN_POSITIONS: Array<[number, number]> = [
 
 export const BASE_JUMP_DURATION = 380;
 export const BOOST_JUMP_DURATION = 150;
-export const STUN_DURATION = 2000;
+export const STUN_DURATION = 3000;
 export const BOOST_DURATION = 12000;
 export const DIRECTIONS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
 
