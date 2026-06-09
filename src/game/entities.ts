@@ -8,7 +8,6 @@ export interface CharacterAnimation {
   toY: number;
   elapsed: number;
   duration: number;
-  arrowDir: number | null;
 }
 
 export interface Character {

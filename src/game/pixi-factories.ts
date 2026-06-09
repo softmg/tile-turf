@@ -17,7 +17,9 @@ export const BOMB_TARGET_H = 102;
 const BOMB_WARNING_ANCHOR_X = 255.5 / 512;
 const BOMB_WARNING_ANCHOR_Y = 453 / 480;
 const CHEST_Y_OFFSET = 14;
-const BOOTS_Y_OFFSET = -14;
+const TILE_TOP_CENTER_Y_OFFSET = -18;
+const BOOTS_Y_OFFSET = TILE_TOP_CENTER_Y_OFFSET;
+const ARROW_Y_OFFSET = TILE_TOP_CENTER_Y_OFFSET;
 const BOOST_AURA_Y_OFFSET = -30;
 const BOOST_AURA_DEPTH_OFFSET = -0.01;
 const TILE_PAINT_REVEAL_MS = 300;
@@ -266,32 +268,42 @@ export const updateBombWarningSprite = (
 };
 
 export const createBootsSprite = (texture: Texture, gx: number, gy: number) => {
-  const p = isoPos(gx, gy);
   const gfx = new Sprite(texture);
   gfx.label = "boots";
   gfx.anchor.set(0.5, 0.5);
   const targetH = 70;
   const s = targetH / Math.max(texture.height, 1);
   gfx.scale.set(s);
-  gfx.x = p.x;
-  gfx.y = p.y + BOOTS_Y_OFFSET;
-  gfx.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.BOOTS);
+  placeBootsSprite(gfx, gx, gy);
   return gfx;
 };
 
-export const createArrowGraphic = (gx: number, gy: number, dir = 0) => {
+export const placeBootsSprite = (sprite: Sprite, gx: number, gy: number) => {
   const p = isoPos(gx, gy);
+  sprite.x = p.x;
+  sprite.y = p.y + BOOTS_Y_OFFSET;
+  sprite.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.BOOTS);
+};
+
+export const createArrowGraphic = (gx: number, gy: number, dir = 0) => {
   const gfx = new Graphics({ label: "rotating-arrow" });
+  // Graphics has no anchor. Keep all arrow geometry centered on local (0, 0),
+  // then place that origin at the exact tile center.
+  gfx.circle(0, 0, 26).stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
   gfx
     .poly([0, -22, 14, 0, 6, 0, 6, 22, -6, 22, -6, 0, -14, 0])
     .fill(0xffffff)
     .stroke({ width: 2, color: 0x222222 });
-  gfx.circle(0, 0, 26).stroke({ width: 2, color: 0xffffff, alpha: 0.7 });
-  gfx.x = p.x;
-  gfx.y = p.y;
-  gfx.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.ARROW);
-  gfx.rotation = isoRotation(dir);
+  setArrowDirection(gfx, dir);
+  placeArrowGraphic(gfx, gx, gy);
   return gfx;
+};
+
+export const placeArrowGraphic = (gfx: Graphics, gx: number, gy: number) => {
+  const p = isoPos(gx, gy);
+  gfx.x = p.x;
+  gfx.y = p.y + ARROW_Y_OFFSET;
+  gfx.zIndex = isoDepth(gx, gy, DEPTH_OFFSETS.ARROW);
 };
 
 export const setArrowDirection = (gfx: Graphics, dir: number) => {

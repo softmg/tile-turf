@@ -66,6 +66,8 @@ import {
   createCharacterView,
   createChestSprite,
   placeBoostAura,
+  placeArrowGraphic,
+  placeBootsSprite,
   placeCharacterView,
   placeChestSprite,
   setArrowDirection,
@@ -201,6 +203,11 @@ const BOMB_ANIM_FRAME_ANCHOR = { x: 0.4971, y: 0.7691 } as const;
 const BOMB_ANIM_SOURCE_PAD = 10;
 const BOMB_ANIM_SHEET_W = BOMB_ANIM_FRAME_W * BOMB_ANIM_COLS;
 const BOMB_ANIM_SHEET_H = BOMB_ANIM_FRAME_H * BOMB_ANIM_ROWS;
+const CHEST_BOB_AMPLITUDE_PX = 3;
+const CHEST_PULSE_SCALE = 0.035;
+const BOOTS_BOB_AMPLITUDE_PX = 4;
+const BOOTS_TILT_RADIANS = 0.12;
+const ARROW_PULSE_SCALE = 0.08;
 
 type BombWarningFrame = {
   texture: Texture;
@@ -254,6 +261,13 @@ const createBombDangerMarker = (gx: number, gy: number) => {
   marker.y = p.y + BOMB_DANGER_MARKER_Y_OFFSET;
   marker.zIndex = gx + gy + 0.09;
   return marker;
+};
+
+const arrowPaintStep = (dir: number) => {
+  if (dir === 0) return { dx: -1, dy: 0 };
+  if (dir === 1) return { dx: 0, dy: -1 };
+  if (dir === 2) return { dx: 1, dy: 0 };
+  return { dx: 0, dy: 1 };
 };
 
 const createBombWarningFrames = (sheet: Texture) => {
@@ -883,12 +897,12 @@ function IsoRound({
           const ay = arrow.gy * MINI_CELL + MINI_CELL / 2;
           const tri =
             arrow.dir === 0
-              ? [0, -4, 3, 2, -3, 2]
+              ? [-4, 0, 2, -3, 2, 3]
               : arrow.dir === 1
-                ? [4, 0, -2, 3, -2, -3]
+                ? [0, -4, 3, 2, -3, 2]
                 : arrow.dir === 2
-                  ? [0, 4, -3, -2, 3, -2]
-                  : [-4, 0, 2, -3, 2, 3];
+                  ? [4, 0, -2, 3, -2, -3]
+                  : [0, 4, -3, -2, 3, -2];
           miniArrow
             .poly(tri.map((v, i) => v + (i % 2 === 0 ? ax : ay)))
             .fill(0xffffff)
@@ -1090,6 +1104,7 @@ function IsoRound({
       // ---------- Chest ----------
       const chestSprite = createChestSprite(chestTex);
       depthLayer.addChild(chestSprite);
+      const chestBaseScale = chestSprite.scale.x;
       const chest = { gx: 0, gy: 0, gfx: chestSprite };
 
       const placeChest = (gx: number, gy: number) => {
@@ -1283,12 +1298,12 @@ function IsoRound({
         }
       };
 
-      let boots: { gx: number; gy: number; gfx: Sprite } | null = null;
+      let boots: { gx: number; gy: number; gfx: Sprite; baseScale: number } | null = null;
       const placeBoots = (gx: number, gy: number) => {
         if (boots) removeAndDestroy(boots.gfx);
         const gfx = createBootsSprite(bootsTex, gx, gy);
         depthLayer.addChild(gfx);
-        boots = { gx, gy, gfx };
+        boots = { gx, gy, gfx, baseScale: gfx.scale.x };
         requestGameplayTutorial("boots", spriteTutorialTarget(gfx, 74));
       };
       const spawnBoots = () => {
@@ -1307,7 +1322,7 @@ function IsoRound({
       };
 
       // ---------- Rotating Arrow ----------
-      // dir: 0=UP, 1=RIGHT, 2=DOWN, 3=LEFT
+      // dir follows the isometric arrow graphic: 0=grid left, 1=grid up, 2=grid right, 3=grid down.
       let arrow: ArrowState | null = null;
 
       getGameplayTutorialTargetRef.current = (step) => {
@@ -1357,12 +1372,35 @@ function IsoRound({
         if (arrow && arrow.lifeElapsed >= 15000) removeArrow();
       };
 
-      const tryTriggerArrow = (c: Character, snapshotDir: number | null) => {
+      const updatePickupAnimations = () => {
+        const nowMs = gameNow();
+
+        placeChestSprite(chestSprite, chest.gx, chest.gy);
+        chestSprite.y += Math.sin(nowMs / 420) * CHEST_BOB_AMPLITUDE_PX;
+        chestSprite.scale.set(chestBaseScale * (1 + Math.sin(nowMs / 520) * CHEST_PULSE_SCALE));
+
+        if (boots) {
+          placeBootsSprite(boots.gfx, boots.gx, boots.gy);
+          boots.gfx.y += Math.sin(nowMs / 300 + 0.8) * BOOTS_BOB_AMPLITUDE_PX;
+          boots.gfx.rotation = Math.sin(nowMs / 260) * BOOTS_TILT_RADIANS;
+          boots.gfx.scale.set(
+            boots.baseScale * (1 + Math.sin(nowMs / 360) * 0.035),
+            boots.baseScale * (1 - Math.sin(nowMs / 360) * 0.02),
+          );
+        }
+
+        if (arrow) {
+          placeArrowGraphic(arrow.gfx, arrow.gx, arrow.gy);
+          const pulse = 1 + Math.sin(nowMs / 260) * ARROW_PULSE_SCALE;
+          arrow.gfx.scale.set(pulse);
+          arrow.gfx.alpha = 0.86 + 0.14 * Math.sin(nowMs / 180);
+        }
+      };
+
+      const tryTriggerArrow = (c: Character) => {
         if (!arrow) return;
         if (c.gx !== arrow.gx || c.gy !== arrow.gy) return;
-        const dir = snapshotDir ?? arrow.dir;
-        const dx = dir === 1 ? 1 : dir === 3 ? -1 : 0;
-        const dy = dir === 0 ? -1 : dir === 2 ? 1 : 0;
+        const { dx, dy } = arrowPaintStep(arrow.dir);
         paintAt(c.gx, c.gy, c.skin);
         let x = c.gx + dx;
         let y = c.gy + dy;
@@ -1465,7 +1503,6 @@ function IsoRound({
         c.gy = next.gy;
         c.landingSquashElapsed = null;
         updateMinimap();
-        const arrowDir = arrow && arrow.gx === next.gx && arrow.gy === next.gy ? arrow.dir : null;
         c.anim = {
           fromX,
           fromY,
@@ -1473,7 +1510,6 @@ function IsoRound({
           toY: next.gy,
           elapsed: 0,
           duration: jumpDurationFor(c),
-          arrowDir,
         };
         return true;
       };
@@ -1581,6 +1617,7 @@ function IsoRound({
         flushGameTimers();
         updateBombs(dtMs);
         updateArrow(dtMs);
+        updatePickupAnimations();
         let landedAny = false;
         for (let ci = -1; ci < enemies.length; ci++) {
           const c = ci < 0 ? player : enemies[ci];
@@ -1596,12 +1633,11 @@ function IsoRound({
           const bodyScale = characterJumpBodyScale(linear, arc);
           renderCharacterAt(c, gx, gy, jumpOffset, shadowScale, bodyScale);
           if (linear >= 1) {
-            const arrowDir = c.anim.arrowDir;
             c.anim = null;
             land(c, true);
             tryCollectChest(c);
             tryCollectBoots(c);
-            tryTriggerArrow(c, arrowDir);
+            tryTriggerArrow(c);
             landedAny = true;
           }
         }
