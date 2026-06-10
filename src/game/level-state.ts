@@ -12,6 +12,10 @@ export const writeUnlockedLevel = (storage: Storage, level: number) => {
   storage.setItem(LS_UNLOCKED, String(clampUnlockedLevel(level)));
 };
 
+/**
+ * Reads the completed gameplay tutorial steps from client storage.
+ * Unknown step names are preserved so future versions do not drop data.
+ */
 export const readGameplayTutorialSeenSteps = (storage: Storage) =>
   new Set(
     (storage.getItem(LS_GAMEPLAY_TUTORIAL_SEEN) || "")
@@ -20,6 +24,10 @@ export const readGameplayTutorialSeenSteps = (storage: Storage) =>
       .filter(Boolean),
   );
 
+/**
+ * Marks one gameplay tutorial step as seen while keeping previously stored
+ * steps intact.
+ */
 export const markGameplayTutorialStepSeen = (storage: Storage, step: string) => {
   const steps = readGameplayTutorialSeenSteps(storage);
   steps.add(step);

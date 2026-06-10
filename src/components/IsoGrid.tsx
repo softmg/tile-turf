@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings, Play, ZoomIn } from "lucide-react";
-import { Application, Assets, Container, Graphics, Rectangle, Text, Texture } from "pixi.js";
-import type { FederatedPointerEvent, Sprite } from "pixi.js";
+import { Application, Assets, Container, Graphics, Rectangle, Text } from "pixi.js";
+import type { FederatedPointerEvent, Sprite, Texture } from "pixi.js";
 import chestUrl from "@/assets/chest.webp";
 import bombAnimUrl from "@/assets/bomb/bomb-anim.png";
 import bootsUrl from "@/assets/boots.webp";
@@ -60,6 +60,12 @@ import {
   joystickDragVector,
 } from "@/game/input-controls";
 import { createMinimapView, MINI_CELL } from "@/game/minimap-view";
+import {
+  BOMB_DETONATION_MS,
+  BOMB_WARNING_DURATION_MS,
+  bombWarningFrameForElapsed,
+  createBombWarningFrames,
+} from "@/game/bomb-warning";
 import {
   addBoardTilesInIsoOrder,
   createArrowGraphic,
@@ -194,28 +200,11 @@ const LANDING_SQUASH_DURATION_MS = 160;
 const STUN_BODY_ORBIT_RADIUS_PX = 0.32;
 const STUN_STARS_Y_OFFSET = -118;
 const BOMB_DANGER_MARKER_Y_OFFSET = -18;
-const BOMB_WARNING_DURATION_MS = 2000;
-const BOMB_ANIM_FRAME_W = 512;
-const BOMB_ANIM_FRAME_H = 576;
-const BOMB_ANIM_COLS = 5;
-const BOMB_ANIM_ROWS = 5;
-const BOMB_ANIM_FRAME_COUNT = BOMB_ANIM_COLS * BOMB_ANIM_ROWS;
-const BOMB_EXPLOSION_START_FRAME = 16;
-const BOMB_DETONATION_MS = (BOMB_WARNING_DURATION_MS * BOMB_EXPLOSION_START_FRAME) / BOMB_ANIM_FRAME_COUNT;
-const BOMB_ANIM_FRAME_ANCHOR = { x: 0.4971, y: 0.7691 } as const;
-const BOMB_ANIM_SOURCE_PAD = 10;
-const BOMB_ANIM_SHEET_W = BOMB_ANIM_FRAME_W * BOMB_ANIM_COLS;
-const BOMB_ANIM_SHEET_H = BOMB_ANIM_FRAME_H * BOMB_ANIM_ROWS;
 const CHEST_BOB_AMPLITUDE_PX = 3;
 const CHEST_PULSE_SCALE = 0.035;
 const BOOTS_BOB_AMPLITUDE_PX = 4;
 const BOOTS_TILT_RADIANS = 0.12;
 const ARROW_PULSE_SCALE = 0.08;
-
-type BombWarningFrame = {
-  texture: Texture;
-  anchor: { x: number; y: number };
-};
 
 const characterJumpBodyScale = (linear: number, arc: number) => {
   const landingProgress = Math.min(1, Math.max(0, (linear - 0.7) / 0.3));
@@ -273,48 +262,6 @@ const arrowPaintStep = (dir: number) => {
   return { dx: 0, dy: 1 };
 };
 
-const createBombWarningFrames = (sheet: Texture) => {
-  const frames: BombWarningFrame[] = [];
-  const origWidth = BOMB_ANIM_FRAME_W + BOMB_ANIM_SOURCE_PAD * 2;
-  const origHeight = BOMB_ANIM_FRAME_H + BOMB_ANIM_SOURCE_PAD;
-  const anchor = {
-    x: (BOMB_ANIM_SOURCE_PAD + BOMB_ANIM_FRAME_ANCHOR.x * BOMB_ANIM_FRAME_W) / origWidth,
-    y: (BOMB_ANIM_SOURCE_PAD + BOMB_ANIM_FRAME_ANCHOR.y * BOMB_ANIM_FRAME_H) / origHeight,
-  };
-  for (let row = 0; row < BOMB_ANIM_ROWS; row++) {
-    for (let col = 0; col < BOMB_ANIM_COLS; col++) {
-      const cellX = col * BOMB_ANIM_FRAME_W;
-      const cellY = row * BOMB_ANIM_FRAME_H;
-      const desiredX = cellX - BOMB_ANIM_SOURCE_PAD;
-      const desiredY = cellY - BOMB_ANIM_SOURCE_PAD;
-      const sourceX = Math.max(0, desiredX);
-      const sourceY = Math.max(0, desiredY);
-      const sourceRight = Math.min(BOMB_ANIM_SHEET_W, cellX + BOMB_ANIM_FRAME_W + BOMB_ANIM_SOURCE_PAD);
-      const sourceBottom = Math.min(BOMB_ANIM_SHEET_H, cellY + BOMB_ANIM_FRAME_H);
-      const sourceW = sourceRight - sourceX;
-      const sourceH = sourceBottom - sourceY;
-      frames.push(
-        {
-          texture: new Texture({
-            source: sheet.source,
-            orig: new Rectangle(0, 0, origWidth, origHeight),
-            frame: new Rectangle(sourceX, sourceY, sourceW, sourceH),
-            trim: new Rectangle(sourceX - desiredX, sourceY - desiredY, sourceW, sourceH),
-          }),
-          anchor,
-        },
-      );
-    }
-  }
-  return frames;
-};
-
-const bombWarningFrameForElapsed = (frames: BombWarningFrame[], elapsedMs: number) => {
-  const frameDuration = BOMB_WARNING_DURATION_MS / frames.length;
-  const index = Math.min(frames.length - 1, Math.floor(elapsedMs / frameDuration));
-  return frames[index];
-};
-
 function IsoRound({
   level,
   roundIndex,
@@ -361,28 +308,22 @@ function IsoRound({
   const gameOverRef = useRef(false);
   const [started, setStarted] = useState(true);
   const startedRef = useRef(true);
-  const [initialGameplayTutorialSeen] = useState(() => readInitialGameplayTutorialSeen());
-  const initialGameplayTutorialStep: GameplayTutorialStep | null = initialGameplayTutorialSeen.paint
-    ? null
-    : "paint";
-  const [paused, setPaused] = useState(initialGameplayTutorialStep !== null);
-  const pausedRef = useRef(initialGameplayTutorialStep !== null);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
   const botCount = botsForLevel(level);
   const botCountRef = useRef(botCount);
   const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [gameplayTutorialStep, setGameplayTutorialStep] =
-    useState<GameplayTutorialStep | null>(initialGameplayTutorialStep);
+  const [gameplayTutorialStep, setGameplayTutorialStep] = useState<GameplayTutorialStep | null>(null);
   const [gameplayTutorialTarget, setGameplayTutorialTarget] =
     useState<GameplayTutorialTarget>(null);
-  const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(initialGameplayTutorialStep);
+  const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(null);
   const modalOpen = gameOver || settingsOpen || gameplayTutorialStep !== null;
   const modalOpenRef = useRef(modalOpen);
-  const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>({
-    ...initialGameplayTutorialSeen,
-    paint: initialGameplayTutorialSeen.paint || initialGameplayTutorialStep === "paint",
-  });
+  const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>(
+    createGameplayTutorialSeenState(new Set()),
+  );
   const pickupTutorialReadyRef = useRef(false);
   const pendingGameplayTutorialRef = useRef<
     Array<{
@@ -446,6 +387,17 @@ function IsoRound({
   useEffect(() => {
     gameplayTutorialStepRef.current = gameplayTutorialStep;
   }, [gameplayTutorialStep]);
+  useEffect(() => {
+    const seen = readInitialGameplayTutorialSeen();
+    shownGameplayTutorialRef.current = seen;
+    if (!seen.paint) {
+      activateGameplayTutorial("paint", {
+        x: Math.round(window.innerWidth / 2),
+        y: Math.round(window.innerHeight / 2),
+        radius: 96,
+      });
+    }
+  }, [activateGameplayTutorial]);
   useEffect(() => {
     pickupTutorialReadyRef.current = false;
     pendingGameplayTutorialRef.current = [];
@@ -1034,10 +986,18 @@ function IsoRound({
           return;
         }
 
+        if (!c.anim && c.landingSquashElapsed === null) {
+          renderCharacterAt(c, c.gx, c.gy);
+        }
         const phase = nowMs / 95 + c.gx * 0.7 + c.gy * 0.4;
         c.sprite.x += Math.cos(phase) * STUN_BODY_ORBIT_RADIUS_PX;
         c.sprite.y += Math.sin(phase) * STUN_BODY_ORBIT_RADIUS_PX * 0.75;
         c.sprite.rotation = Math.sin(phase) * 0.08;
+        if (c === player) {
+          playerScoreText.x = c.sprite.x;
+          playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
+          playerScoreText.zIndex = c.sprite.zIndex + 0.02;
+        }
 
         const stars = c.stunStars;
         stars.visible = true;
@@ -2627,7 +2587,7 @@ function GameplayTutorial({
         </div>
 
         <button type="button" onClick={onConfirm} className="tt-button tt-button-warning mt-5 w-full">
-          ОК
+          Продолжить обучение
         </button>
       </div>
     </div>
