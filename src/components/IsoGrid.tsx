@@ -1787,8 +1787,7 @@ function IsoRound({
         }
         const now = gameNow();
         if (now - lastAutoMoveTime < AUTO_MOVE_COOLDOWN_MS) return;
-        lastAutoMoveTime = now;
-        movePlayer(selectedDirectionRef.current);
+        if (movePlayer(selectedDirectionRef.current)) lastAutoMoveTime = now;
       };
 
       app.ticker.add((ticker) => {
@@ -1861,9 +1860,16 @@ function IsoRound({
       app.stage.eventMode = "static";
       updateHitArea();
 
+      const isKeyboardEventFromControl = (target: EventTarget | null) => {
+        if (!(target instanceof HTMLElement)) return false;
+        if (target.isContentEditable) return true;
+        return ["BUTTON", "INPUT", "SELECT", "TEXTAREA"].includes(target.tagName);
+      };
+
       keyDownHandler = (e: KeyboardEvent) => {
         const direction = directionFromKeyboardEvent(e);
         if (!direction) return;
+        if (modalOpenRef.current || isKeyboardEventFromControl(e.target)) return;
         e.preventDefault();
         selectDirection(direction);
       };
