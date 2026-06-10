@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Settings, Play, ZoomIn } from "lucide-react";
-import { Application, Assets, Rectangle, Text } from "pixi.js";
+import { Application, Assets, Container, Graphics, Rectangle, Text } from "pixi.js";
 import type { FederatedPointerEvent, Sprite, Texture } from "pixi.js";
 import chestUrl from "@/assets/chest.webp";
-import bomb1Url from "@/assets/bomb/bomb1.webp";
-import bomb2Url from "@/assets/bomb/bomb2.webp";
-import bomb3Url from "@/assets/bomb/bomb3.webp";
-import bomb4Url from "@/assets/bomb/bomb4.webp";
+import bombAnimUrl from "@/assets/bomb/bomb-anim.png";
 import bootsUrl from "@/assets/boots.webp";
 import {
   BACKGROUND_URL,
   BASE_JUMP_DURATION,
   BOARD_SIZE,
+  ARROW_UNLOCK_LEVEL,
   BOOST_DURATION,
   BOOST_JUMP_DURATION,
+  BOOTS_UNLOCK_LEVEL,
+  BOMB_UNLOCK_LEVEL,
   BOT_SKINS,
   DIRECTIONS,
   ENEMY_SPAWN_POSITIONS,
@@ -46,9 +46,9 @@ import {
 } from "@/game/scoring";
 import { createSeededRng, seedFromParts } from "@/game/rng";
 import {
-  markTutorialSeen,
+  markGameplayTutorialStepSeen,
+  readGameplayTutorialSeenSteps,
   readUnlockedLevel,
-  shouldShowTutorial,
   writeUnlockedLevel,
 } from "@/game/level-state";
 import type { Character } from "@/game/entities";
@@ -61,19 +61,25 @@ import {
 } from "@/game/input-controls";
 import { createMinimapView, MINI_CELL } from "@/game/minimap-view";
 import {
+  BOMB_DETONATION_MS,
+  BOMB_WARNING_DURATION_MS,
+  bombWarningFrameForElapsed,
+  createBombWarningFrames,
+} from "@/game/bomb-warning";
+import {
   addBoardTilesInIsoOrder,
   createArrowGraphic,
   createBoardTile,
-  createBombExplosionSprite,
   createBombWarningSprite,
   createBootsSprite,
   createCharacterView,
   createChestSprite,
   placeBoostAura,
+  placeArrowGraphic,
+  placeBootsSprite,
   placeCharacterView,
   placeChestSprite,
   setArrowDirection,
-  updateBombExplosionSprite,
   updateBombWarningSprite,
   type BoardTileView,
   type SkinTextureMap,
@@ -82,9 +88,68 @@ import { createSceneLayers, removeAndDestroy } from "@/game/scene-layers";
 import { getDeterministicTestMode } from "@/game/test-mode";
 
 type InertProps = { "aria-hidden"?: true; inert?: boolean };
+type GameplayTutorialStep = "paint" | "chest" | "boots" | "bomb" | "arrow";
+type GameplayTutorialTarget = { x: number; y: number; radius: number } | null;
 
 const inertBackgroundProps = (isInert: boolean): InertProps =>
   isInert ? { "aria-hidden": true, inert: true } : {};
+
+const GAMEPLAY_TUTORIAL_COPY: Record<GameplayTutorialStep, { title: string; body: string }> = {
+  paint: {
+    title: "Закрашивай клетки",
+    body: "Прыгай по соседним клеткам. Твой цвет приносит очки.",
+  },
+  chest: {
+    title: "Бери сундук",
+    body: "Он превращает закрашенные клетки в очки раунда.",
+  },
+  boots: {
+    title: "Бери ботинки",
+    body: "Они ненадолго ускоряют прыжки.",
+  },
+  bomb: {
+    title: "Остерегайся бомб",
+    body: "Взрыв оглушает и сбрасывает твой цвет.",
+  },
+  arrow: {
+    title: "Лови стрелку",
+    body: "Она закрашивает целый ряд клеток.",
+  },
+};
+
+const PAINT_TUTORIAL_STEP_MS = 520;
+const GAMEPLAY_TUTORIAL_STEPS: GameplayTutorialStep[] = [
+  "paint",
+  "chest",
+  "boots",
+  "bomb",
+  "arrow",
+];
+
+const createGameplayTutorialSeenState = (seenSteps: Set<string>) =>
+  GAMEPLAY_TUTORIAL_STEPS.reduce(
+    (seen, step) => {
+      seen[step] = seenSteps.has(step);
+      return seen;
+    },
+    {
+      paint: false,
+      chest: false,
+      boots: false,
+      bomb: false,
+      arrow: false,
+    } as Record<GameplayTutorialStep, boolean>,
+  );
+
+const readInitialGameplayTutorialSeen = () => {
+  if (typeof window === "undefined") return createGameplayTutorialSeenState(new Set());
+  try {
+    return createGameplayTutorialSeenState(readGameplayTutorialSeenSteps(window.localStorage));
+  } catch (err) {
+    console.warn("[IsoGrid] gameplay tutorial persistence read failed", err);
+    return createGameplayTutorialSeenState(new Set());
+  }
+};
 
 declare global {
   interface Window {
@@ -100,7 +165,6 @@ interface IsoRoundProps {
   matchWins: Record<SkinId, number>;
   history: RoundHistoryEntry[];
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
-  parentModalOpen?: boolean;
 }
 
 const GAME_TEXTURE_DATA = {
@@ -116,10 +180,7 @@ const GAME_TEXTURE_ASSETS = [
   { alias: "tile-turf:bot:dragon", src: SKINS.dragon.playerSprite, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:bot:cat", src: SKINS.cat.playerSprite, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:chest", src: chestUrl, data: GAME_TEXTURE_DATA },
-  { alias: "tile-turf:bomb:1", src: bomb1Url, data: GAME_TEXTURE_DATA },
-  { alias: "tile-turf:bomb:2", src: bomb2Url, data: GAME_TEXTURE_DATA },
-  { alias: "tile-turf:bomb:3", src: bomb3Url, data: GAME_TEXTURE_DATA },
-  { alias: "tile-turf:bomb:4", src: bomb4Url, data: GAME_TEXTURE_DATA },
+  { alias: "tile-turf:bomb:anim", src: bombAnimUrl, data: GAME_TEXTURE_DATA },
   { alias: "tile-turf:boots", src: bootsUrl, data: GAME_TEXTURE_DATA },
 ] as const;
 
@@ -136,6 +197,14 @@ const PLAYER_SCORE_OFFSET_Y = -126;
 const JUMP_APEX_STRETCH = 0.08;
 const JUMP_LANDING_SQUASH = 0.12;
 const LANDING_SQUASH_DURATION_MS = 160;
+const STUN_BODY_ORBIT_RADIUS_PX = 0.32;
+const STUN_STARS_Y_OFFSET = -118;
+const BOMB_DANGER_MARKER_Y_OFFSET = -18;
+const CHEST_BOB_AMPLITUDE_PX = 3;
+const CHEST_PULSE_SCALE = 0.035;
+const BOOTS_BOB_AMPLITUDE_PX = 4;
+const BOOTS_TILT_RADIANS = 0.12;
+const ARROW_PULSE_SCALE = 0.08;
 
 const characterJumpBodyScale = (linear: number, arc: number) => {
   const landingProgress = Math.min(1, Math.max(0, (linear - 0.7) / 0.3));
@@ -157,13 +226,48 @@ const characterLandingBodyScale = (elapsedMs: number) => {
   };
 };
 
+const createStunStarsView = () => {
+  const container = new Container({ label: "stun-stars" });
+  container.visible = false;
+  for (let i = 0; i < 4; i++) {
+    const star = new Graphics({ label: `stun-star-${i}` });
+    const points: number[] = [];
+    for (let p = 0; p < 10; p++) {
+      const angle = -Math.PI / 2 + (p * Math.PI) / 5;
+      const radius = p % 2 === 0 ? 7 : 3.2;
+      points.push(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+    star.poly(points).fill(0xfff36a).stroke({ width: 1.5, color: 0x6f3b00 });
+    star.rotation = i * 0.5;
+    container.addChild(star);
+  }
+  return container;
+};
+
+const createBombDangerMarker = (gx: number, gy: number) => {
+  const p = isoPos(gx, gy);
+  const marker = new Graphics({ label: "bomb-danger-marker" });
+  marker.rect(-2.2, -15, 4.4, 11).fill(0xff2222).stroke({ width: 1, color: 0x5a0000 });
+  marker.circle(0, 0, 3.2).fill(0xff2222).stroke({ width: 1, color: 0x5a0000 });
+  marker.x = p.x;
+  marker.y = p.y + BOMB_DANGER_MARKER_Y_OFFSET;
+  marker.zIndex = gx + gy + 0.09;
+  return marker;
+};
+
+const arrowPaintStep = (dir: number) => {
+  if (dir === 0) return { dx: -1, dy: 0 };
+  if (dir === 1) return { dx: 0, dy: -1 };
+  if (dir === 2) return { dx: 1, dy: 0 };
+  return { dx: 0, dy: 1 };
+};
+
 function IsoRound({
   level,
   roundIndex,
   matchWins,
   history,
   onRoundEnd,
-  parentModalOpen = false,
 }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
@@ -211,12 +315,63 @@ function IsoRound({
   const botCountRef = useRef(botCount);
   const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [tutorialOpen, setTutorialOpen] = useState(false);
-  const modalOpen = gameOver || settingsOpen || tutorialOpen || parentModalOpen;
+  const [gameplayTutorialStep, setGameplayTutorialStep] = useState<GameplayTutorialStep | null>(null);
+  const [gameplayTutorialTarget, setGameplayTutorialTarget] =
+    useState<GameplayTutorialTarget>(null);
+  const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(null);
+  const modalOpen = gameOver || settingsOpen || gameplayTutorialStep !== null;
   const modalOpenRef = useRef(modalOpen);
+  const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>(
+    createGameplayTutorialSeenState(new Set()),
+  );
+  const pickupTutorialReadyRef = useRef(false);
+  const pendingGameplayTutorialRef = useRef<
+    Array<{
+      step: GameplayTutorialStep;
+      target: GameplayTutorialTarget;
+    }>
+  >([]);
+  const getGameplayTutorialTargetRef = useRef<
+    ((step: GameplayTutorialStep) => GameplayTutorialTarget) | null
+  >(null);
   const touchPointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchActiveRef = useRef(false);
   const resetJoystickRef = useRef<(() => void) | null>(null);
+  const activateGameplayTutorial = useCallback(
+    (step: GameplayTutorialStep, target?: GameplayTutorialTarget) => {
+      const shownGameplayTutorial = shownGameplayTutorialRef.current;
+      if (shownGameplayTutorial[step]) return;
+      shownGameplayTutorial[step] = true;
+      gameplayTutorialStepRef.current = step;
+      setGameplayTutorialStep(step);
+      setGameplayTutorialTarget(getGameplayTutorialTargetRef.current?.(step) ?? target ?? null);
+      setPaused(true);
+    },
+    [],
+  );
+
+  const closeGameplayTutorial = () => {
+    const completedStep = gameplayTutorialStepRef.current;
+    if (completedStep) {
+      try {
+        markGameplayTutorialStepSeen(window.localStorage, completedStep);
+      } catch (err) {
+        console.warn("[IsoGrid] gameplay tutorial persistence write failed", err);
+      }
+    }
+    if (pickupTutorialReadyRef.current) {
+      const pending = pendingGameplayTutorialRef.current.shift();
+      if (pending) {
+        activateGameplayTutorial(pending.step, pending.target);
+        return;
+      }
+    }
+    gameplayTutorialStepRef.current = null;
+    setGameplayTutorialStep(null);
+    setGameplayTutorialTarget(null);
+    if (!settingsOpen && !gameOverRef.current) setPaused(false);
+  };
+
   useEffect(() => {
     botCountRef.current = botCount;
     levelRef.current = level;
@@ -229,6 +384,38 @@ function IsoRound({
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+  useEffect(() => {
+    gameplayTutorialStepRef.current = gameplayTutorialStep;
+  }, [gameplayTutorialStep]);
+  useEffect(() => {
+    const seen = readInitialGameplayTutorialSeen();
+    shownGameplayTutorialRef.current = seen;
+    if (!seen.paint) {
+      activateGameplayTutorial("paint", {
+        x: Math.round(window.innerWidth / 2),
+        y: Math.round(window.innerHeight / 2),
+        radius: 96,
+      });
+    }
+  }, [activateGameplayTutorial]);
+  useEffect(() => {
+    pickupTutorialReadyRef.current = false;
+    pendingGameplayTutorialRef.current = [];
+    setGameplayTutorialTarget({
+      x: Math.round(window.innerWidth / 2),
+      y: Math.round(window.innerHeight / 2),
+      radius: 96,
+    });
+    const timer = window.setTimeout(() => {
+      pickupTutorialReadyRef.current = true;
+      const pending = pendingGameplayTutorialRef.current[0];
+      if (pending && gameplayTutorialStepRef.current === null) {
+        pendingGameplayTutorialRef.current.shift();
+        activateGameplayTutorial(pending.step, pending.target);
+      }
+    }, 2600);
+    return () => window.clearTimeout(timer);
+  }, [activateGameplayTutorial]);
   useEffect(() => {
     if (started) kickoffRef.current?.();
   }, [started]);
@@ -424,15 +611,13 @@ function IsoRound({
         dragonTex,
         catTex,
         chestTex,
-        bombTex1,
-        bombTex2,
-        bombTex3,
-        boomTex,
+        bombAnimTex,
         bootsTex,
       ] = await Promise.all(
         GAME_TEXTURE_ASSETS.map((asset) => Assets.load<Texture>(asset, GAME_TEXTURE_LOAD_OPTIONS)),
       );
       if (destroyed) return;
+      const bombWarningFrames = createBombWarningFrames(bombAnimTex);
       const skinTextures: SkinTextureMap = {
         plush: { tile: paintedTex, player: playerTex },
         banana: { tile: paintedTex, player: bananaTex },
@@ -441,6 +626,92 @@ function IsoRound({
       };
 
       const { world, boardLayer, depthLayer, minimapLayer, joystickLayer } = createSceneLayers(app);
+      const spriteTutorialTarget = (
+        sprite: Container,
+        radius: number,
+        offsetY = 0,
+      ): GameplayTutorialTarget => {
+        const p = sprite.getGlobalPosition();
+        return { x: Math.round(p.x), y: Math.round(p.y + offsetY), radius };
+      };
+      const requestGameplayTutorial = (
+        step: GameplayTutorialStep,
+        target: GameplayTutorialTarget,
+      ) => {
+        if (shownGameplayTutorialRef.current[step]) return;
+        if (
+          step !== "paint" &&
+          (!pickupTutorialReadyRef.current || gameplayTutorialStepRef.current !== null)
+        ) {
+          if (pendingGameplayTutorialRef.current.some((pending) => pending.step === step)) return;
+          pendingGameplayTutorialRef.current.push({ step, target });
+          return;
+        }
+        activateGameplayTutorial(step, target);
+      };
+      const characterTutorialTarget = (c: Character): GameplayTutorialTarget => {
+        const p = c.sprite.getGlobalPosition();
+        return { x: Math.round(p.x), y: Math.round(p.y + 34), radius: 170 };
+      };
+      const syncPaintTutorialTarget = () => {
+        if (gameplayTutorialStepRef.current === "paint") {
+          setGameplayTutorialTarget(characterTutorialTarget(player));
+        }
+      };
+      const syncActiveGameplayTutorialTarget = () => {
+        const step = gameplayTutorialStepRef.current;
+        if (!step) return;
+        setGameplayTutorialTarget(getGameplayTutorialTargetRef.current?.(step) ?? null);
+      };
+      let paintTutorialCells: Array<{ gx: number; gy: number }> = [];
+      let paintTutorialLastIndex = -1;
+      let paintTutorialWasActive = false;
+      const paintTutorialCellSet = () => {
+        return [
+          { gx: player.gx, gy: player.gy },
+          ...DIRECTIONS.map((direction) => nextGridPosition(player.gx, player.gy, direction)).filter(
+            (cell) => isInsideBoard(cell.gx, cell.gy),
+          ),
+        ];
+      };
+      const restoreTutorialPaintTiles = () => {
+        for (const cell of paintTutorialCells) {
+          const owner = owners[cell.gx][cell.gy];
+          if (owner) {
+            tiles[cell.gx][cell.gy].paint(SKINS[owner], performance.now(), { immediate: true });
+          }
+          else tiles[cell.gx][cell.gy].resetToUnpainted();
+        }
+        paintTutorialCells = [];
+        paintTutorialLastIndex = -1;
+      };
+      const updatePaintTutorialTiles = (nowMs: number) => {
+        if (gameplayTutorialStepRef.current !== "paint") {
+          if (paintTutorialWasActive) restoreTutorialPaintTiles();
+          paintTutorialWasActive = false;
+          return;
+        }
+        if (!paintTutorialWasActive) {
+          paintTutorialCells = paintTutorialCellSet();
+          paintTutorialLastIndex = -1;
+          paintTutorialWasActive = true;
+        }
+        const nextIndex =
+          Math.floor(
+            (nowMs % (paintTutorialCells.length * PAINT_TUTORIAL_STEP_MS)) /
+              PAINT_TUTORIAL_STEP_MS,
+          ) % paintTutorialCells.length;
+        if (nextIndex === paintTutorialLastIndex) {
+          for (const cell of paintTutorialCells) tiles[cell.gx][cell.gy].update(nowMs);
+          return;
+        }
+        restoreTutorialPaintTiles();
+        paintTutorialCells = paintTutorialCellSet();
+        const cell = paintTutorialCells[nextIndex];
+        tiles[cell.gx][cell.gy].resetToUnpainted();
+        tiles[cell.gx][cell.gy].paint(SKINS[PLAYER_SKIN], nowMs);
+        paintTutorialLastIndex = nextIndex;
+      };
 
       // Tile ownership: null = unpainted, else SkinId
       const owners: OwnerGrid = [];
@@ -463,7 +734,8 @@ function IsoRound({
       const makeCharacter = (skinId: SkinId, gx: number, gy: number): Character => {
         const skin = SKINS[skinId];
         const { shadow, aura, sprite, bodyBaseScale } = createCharacterView(skinId, skinTextures);
-        depthLayer.addChild(shadow, aura, sprite);
+        const stunStars = createStunStarsView();
+        depthLayer.addChild(shadow, aura, sprite, stunStars);
         return {
           skin,
           sprite,
@@ -474,6 +746,7 @@ function IsoRound({
           anim: null,
           landingSquashElapsed: null,
           stunnedUntil: 0,
+          stunStars,
           boostUntil: 0,
           aura,
         };
@@ -504,6 +777,7 @@ function IsoRound({
       for (const e of allEnemies) {
         e.sprite.visible = false;
         e.shadow.visible = false;
+        e.stunStars.visible = false;
       }
 
       let gameTimeMs = 0;
@@ -584,12 +858,12 @@ function IsoRound({
           const ay = arrow.gy * MINI_CELL + MINI_CELL / 2;
           const tri =
             arrow.dir === 0
-              ? [0, -4, 3, 2, -3, 2]
+              ? [-4, 0, 2, -3, 2, 3]
               : arrow.dir === 1
-                ? [4, 0, -2, 3, -2, -3]
+                ? [0, -4, 3, 2, -3, 2]
                 : arrow.dir === 2
-                  ? [0, 4, -3, -2, 3, -2]
-                  : [-4, 0, 2, -3, 2, 3];
+                  ? [4, 0, -2, 3, -2, -3]
+                  : [0, 4, -3, -2, 3, -2];
           miniArrow
             .poly(tri.map((v, i) => v + (i % 2 === 0 ? ax : ay)))
             .fill(0xffffff)
@@ -708,6 +982,48 @@ function IsoRound({
         }
       };
 
+      const updateCharacterStunView = (c: Character, nowMs: number) => {
+        if (nowMs >= c.stunnedUntil) {
+          if (c.stunStars.visible) {
+            c.stunStars.visible = false;
+            c.sprite.rotation = 0;
+            renderCharacterAt(c, c.gx, c.gy);
+          }
+          return;
+        }
+
+        if (!c.anim && c.landingSquashElapsed === null) {
+          renderCharacterAt(c, c.gx, c.gy);
+        }
+        const phase = nowMs / 95 + c.gx * 0.7 + c.gy * 0.4;
+        c.sprite.x += Math.cos(phase) * STUN_BODY_ORBIT_RADIUS_PX;
+        c.sprite.y += Math.sin(phase) * STUN_BODY_ORBIT_RADIUS_PX * 0.75;
+        c.sprite.rotation = Math.sin(phase) * 0.08;
+        if (c === player) {
+          playerScoreText.x = c.sprite.x;
+          playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
+          playerScoreText.zIndex = c.sprite.zIndex + 0.02;
+        }
+
+        const stars = c.stunStars;
+        stars.visible = true;
+        stars.x = c.sprite.x;
+        stars.y = c.sprite.y + STUN_STARS_Y_OFFSET;
+        stars.zIndex = c.sprite.zIndex + 0.04;
+        stars.rotation = -phase * 0.7;
+        stars.alpha = 0.85 + Math.sin(nowMs / 110) * 0.15;
+        const starRadiusX = 25;
+        const starRadiusY = 10;
+        for (let i = 0; i < stars.children.length; i++) {
+          const star = stars.children[i] as Graphics;
+          const a = phase + (i / stars.children.length) * Math.PI * 2;
+          star.x = Math.cos(a) * starRadiusX;
+          star.y = Math.sin(a) * starRadiusY;
+          star.rotation = a + nowMs / 140;
+          star.scale.set(0.85 + 0.2 * Math.sin(a + nowMs / 160));
+        }
+      };
+
       const land = (c: Character, startSquash = false) => {
         paintAt(c.gx, c.gy, c.skin);
         c.landingSquashElapsed = startSquash ? 0 : null;
@@ -757,12 +1073,14 @@ function IsoRound({
       // ---------- Chest ----------
       const chestSprite = createChestSprite(chestTex);
       depthLayer.addChild(chestSprite);
+      const chestBaseScale = chestSprite.scale.x;
       const chest = { gx: 0, gy: 0, gfx: chestSprite };
 
       const placeChest = (gx: number, gy: number) => {
         chest.gx = gx;
         chest.gy = gy;
         placeChestSprite(chestSprite, gx, gy);
+        requestGameplayTutorial("chest", spriteTutorialTarget(chestSprite, 78, -40));
       };
 
       const spawnChest = () => {
@@ -798,8 +1116,35 @@ function IsoRound({
               t.resetToUnpainted();
               any = true;
             }
-          }
+        }
         if (any) minimapTilesDirty = true;
+      };
+
+      const bombAffectedCells = (gx: number, gy: number) => {
+        const cells: Array<{ gx: number; gy: number }> = [];
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dy = -1; dy <= 1; dy++) {
+            const x = gx + dx;
+            const y = gy + dy;
+            if (isInsideBoard(x, y)) cells.push({ gx: x, gy: y });
+          }
+        }
+        return cells;
+      };
+
+      const isInBombArea = (targetGx: number, targetGy: number, bombGx: number, bombGy: number) =>
+        Math.abs(targetGx - bombGx) <= 1 && Math.abs(targetGy - bombGy) <= 1;
+
+      const clearBombAreaPaint = (gx: number, gy: number) => {
+        let any = false;
+        for (const cell of bombAffectedCells(gx, gy)) {
+          if (owners[cell.gx][cell.gy] === null) continue;
+          owners[cell.gx][cell.gy] = null;
+          tiles[cell.gx][cell.gy].resetToUnpainted();
+          any = true;
+        }
+        if (any) minimapTilesDirty = true;
+        return any;
       };
 
       const tryCollectChest = (c: Character) => {
@@ -822,50 +1167,60 @@ function IsoRound({
 
       const removeBomb = (bomb: Bomb) => {
         removeAndDestroy(bomb.warning);
+        for (const marker of bomb.dangerMarkers) removeAndDestroy(marker);
         removeAndDestroy(bomb.boom);
         bomb.warning = null;
+        bomb.dangerMarkers = [];
         bomb.boom = null;
         const i = bombs.indexOf(bomb);
         if (i >= 0) bombs.splice(i, 1);
       };
 
       const explodeBomb = (bomb: Bomb) => {
-        if (gameOverRef.current || destroyed || bomb.phase !== "warning") return;
-        removeAndDestroy(bomb.warning);
-        bomb.warning = null;
+        if (gameOverRef.current || destroyed || bomb.detonated) return;
+        for (const marker of bomb.dangerMarkers) removeAndDestroy(marker);
+        bomb.dangerMarkers = [];
         bomb.phase = "explosion";
+        bomb.detonated = true;
         bomb.explosionElapsed = 0;
 
-        const boom = createBombExplosionSprite(boomTex, bomb.gx, bomb.gy);
-        depthLayer.addChild(boom);
-        bomb.boom = boom;
-
+        const removedPaint = clearBombAreaPaint(bomb.gx, bomb.gy);
+        const stunnedUntil = gameNow() + STUN_DURATION;
         for (const c of [player, ...enemies]) {
-          if (c.gx === bomb.gx && c.gy === bomb.gy && !c.anim) {
-            c.stunnedUntil = gameNow() + STUN_DURATION;
-            clearOwnedBy(c.skin.id);
-            recomputeScores();
-            updateMinimap();
+          if (isInBombArea(c.gx, c.gy, bomb.gx, bomb.gy)) {
+            c.anim = null;
+            c.landingSquashElapsed = null;
+            c.stunnedUntil = Math.max(c.stunnedUntil, stunnedUntil);
+            renderCharacterAt(c, c.gx, c.gy);
           }
         }
+        if (removedPaint) recomputeScores();
+        updateMinimap();
       };
 
       const spawnBombAt = (gx: number, gy: number, scheduleNext: boolean) => {
         if (gameOverRef.current || destroyed || !startedRef.current) return;
-        const warning = createBombWarningSprite(bombTex1, gx, gy);
+        const firstFrame = bombWarningFrames[0];
+        const warning = createBombWarningSprite(firstFrame.texture, gx, gy, firstFrame.anchor);
         depthLayer.addChild(warning);
+        const dangerMarkers = bombAffectedCells(gx, gy)
+          .filter((cell) => cell.gx !== gx || cell.gy !== gy)
+          .map((cell) => createBombDangerMarker(cell.gx, cell.gy));
+        for (const marker of dangerMarkers) depthLayer.addChild(marker);
         const bomb: Bomb = {
           gx,
           gy,
           warning,
+          dangerMarkers,
           boom: null,
           phase: "warning",
+          detonated: false,
           warningElapsed: 0,
           explosionElapsed: 0,
         };
         bombs.push(bomb);
+        requestGameplayTutorial("bomb", spriteTutorialTarget(warning, 92, 10));
 
-        scheduleGame(() => explodeBomb(bomb), 2000);
         if (scheduleNext) scheduleGame(spawnBomb, rng.range(5000, 8000));
       };
 
@@ -878,45 +1233,47 @@ function IsoRound({
       const updateBombs = (dtMs: number) => {
         for (let i = bombs.length - 1; i >= 0; i--) {
           const bomb = bombs[i];
-          if (bomb.phase === "warning") {
-            if (!bomb.warning) {
-              removeBomb(bomb);
-              continue;
-            }
-            bomb.warningElapsed += dtMs;
-            const elapsed = bomb.warningElapsed;
-            let tex = bombTex1;
-            if (elapsed > 1400) tex = bombTex3;
-            else if (elapsed > 600) tex = bombTex2;
-            if (bomb.warning.texture !== tex) {
-              updateBombWarningSprite(bomb.warning, tex);
-            }
-            const p = isoPos(bomb.gx, bomb.gy);
-            if (elapsed > 1400) {
-              const k = (elapsed - 1400) / 600;
-              const amp = 1 + k * 3;
-              bomb.warning.x = p.x + Math.sin((elapsed + bomb.gx * 17 + bomb.gy * 31) / 28) * amp;
-            } else {
-              bomb.warning.x = p.x;
-            }
+          if (!bomb.warning) {
+            removeBomb(bomb);
             continue;
           }
 
-          if (!bomb.boom) continue;
-          bomb.explosionElapsed += dtMs;
-          const k = Math.min(1, bomb.explosionElapsed / 220);
-          updateBombExplosionSprite(bomb.boom, boomTex, k);
-          bomb.boom.alpha = Math.max(0, 1 - Math.max(0, bomb.explosionElapsed - 280) / 220);
-          if (bomb.explosionElapsed >= 500) removeBomb(bomb);
+          bomb.warningElapsed += dtMs;
+          const elapsed = bomb.warningElapsed;
+          const frame = bombWarningFrameForElapsed(bombWarningFrames, elapsed);
+          if (bomb.warning.texture !== frame.texture) {
+            updateBombWarningSprite(bomb.warning, frame.texture, frame.anchor);
+          }
+
+          if (!bomb.detonated && elapsed >= BOMB_DETONATION_MS) {
+            explodeBomb(bomb);
+          }
+
+          if (!bomb.detonated) {
+            const blink = 0.45 + 0.55 * Math.abs(Math.sin(elapsed / 120));
+            const pulse = 0.85 + 0.15 * Math.abs(Math.sin(elapsed / 160));
+            for (const marker of bomb.dangerMarkers) {
+              marker.alpha = blink;
+              marker.scale.set(pulse);
+            }
+          }
+
+          const p = isoPos(bomb.gx, bomb.gy);
+          bomb.warning.x = p.x;
+          bomb.warning.y = p.y;
+
+          if (bomb.detonated) bomb.explosionElapsed += dtMs;
+          if (elapsed >= BOMB_WARNING_DURATION_MS) removeBomb(bomb);
         }
       };
 
-      let boots: { gx: number; gy: number; gfx: Sprite } | null = null;
+      let boots: { gx: number; gy: number; gfx: Sprite; baseScale: number } | null = null;
       const placeBoots = (gx: number, gy: number) => {
         if (boots) removeAndDestroy(boots.gfx);
         const gfx = createBootsSprite(bootsTex, gx, gy);
         depthLayer.addChild(gfx);
-        boots = { gx, gy, gfx };
+        boots = { gx, gy, gfx, baseScale: gfx.scale.x };
+        requestGameplayTutorial("boots", spriteTutorialTarget(gfx, 74));
       };
       const spawnBoots = () => {
         if (gameOverRef.current || destroyed || !startedRef.current || boots) return;
@@ -930,12 +1287,24 @@ function IsoRound({
         removeAndDestroy(boots.gfx);
         boots = null;
         c.boostUntil = gameNow() + BOOST_DURATION;
-        scheduleGame(spawnBoots, rng.range(10000, 15000));
+        if (level >= BOOTS_UNLOCK_LEVEL) scheduleGame(spawnBoots, rng.range(10000, 15000));
       };
 
       // ---------- Rotating Arrow ----------
-      // dir: 0=UP, 1=RIGHT, 2=DOWN, 3=LEFT
+      // dir follows the isometric arrow graphic: 0=grid left, 1=grid up, 2=grid right, 3=grid down.
       let arrow: ArrowState | null = null;
+
+      getGameplayTutorialTargetRef.current = (step) => {
+        if (step === "paint") return characterTutorialTarget(player);
+        if (step === "chest") return spriteTutorialTarget(chestSprite, 78, -40);
+        if (step === "boots" && boots) return spriteTutorialTarget(boots.gfx, 74);
+        if (step === "bomb") {
+          const bomb = bombs.find((b) => b.warning);
+          if (bomb?.warning) return spriteTutorialTarget(bomb.warning, 92, 10);
+        }
+        if (step === "arrow" && arrow) return spriteTutorialTarget(arrow.gfx, 70);
+        return null;
+      };
 
       const removeArrow = () => {
         if (!arrow) return;
@@ -950,6 +1319,7 @@ function IsoRound({
         depthLayer.addChild(gfx);
 
         arrow = { gx, gy, dir, gfx, rotateElapsed: 0, lifeElapsed: 0 };
+        requestGameplayTutorial("arrow", spriteTutorialTarget(gfx, 70));
         if (scheduleNext) scheduleGame(spawnArrow, 20000);
       };
 
@@ -971,12 +1341,35 @@ function IsoRound({
         if (arrow && arrow.lifeElapsed >= 15000) removeArrow();
       };
 
-      const tryTriggerArrow = (c: Character, snapshotDir: number | null) => {
+      const updatePickupAnimations = () => {
+        const nowMs = gameNow();
+
+        placeChestSprite(chestSprite, chest.gx, chest.gy);
+        chestSprite.y += Math.sin(nowMs / 420) * CHEST_BOB_AMPLITUDE_PX;
+        chestSprite.scale.set(chestBaseScale * (1 + Math.sin(nowMs / 520) * CHEST_PULSE_SCALE));
+
+        if (boots) {
+          placeBootsSprite(boots.gfx, boots.gx, boots.gy);
+          boots.gfx.y += Math.sin(nowMs / 300 + 0.8) * BOOTS_BOB_AMPLITUDE_PX;
+          boots.gfx.rotation = Math.sin(nowMs / 260) * BOOTS_TILT_RADIANS;
+          boots.gfx.scale.set(
+            boots.baseScale * (1 + Math.sin(nowMs / 360) * 0.035),
+            boots.baseScale * (1 - Math.sin(nowMs / 360) * 0.02),
+          );
+        }
+
+        if (arrow) {
+          placeArrowGraphic(arrow.gfx, arrow.gx, arrow.gy);
+          const pulse = 1 + Math.sin(nowMs / 260) * ARROW_PULSE_SCALE;
+          arrow.gfx.scale.set(pulse);
+          arrow.gfx.alpha = 0.86 + 0.14 * Math.sin(nowMs / 180);
+        }
+      };
+
+      const tryTriggerArrow = (c: Character) => {
         if (!arrow) return;
         if (c.gx !== arrow.gx || c.gy !== arrow.gy) return;
-        const dir = snapshotDir ?? arrow.dir;
-        const dx = dir === 1 ? 1 : dir === 3 ? -1 : 0;
-        const dy = dir === 0 ? -1 : dir === 2 ? 1 : 0;
+        const { dx, dy } = arrowPaintStep(arrow.dir);
         paintAt(c.gx, c.gy, c.skin);
         let x = c.gx + dx;
         let y = c.gy + dy;
@@ -990,16 +1383,33 @@ function IsoRound({
 
       // Initial paint (player only; bots activated on kickoff)
       land(player);
+      syncPaintTutorialTarget();
       positionMinimap();
       updateMinimap();
       recomputeScores();
 
+      const startLevelMechanics = () => {
+        spawnChest();
+
+        if (level >= BOMB_UNLOCK_LEVEL) {
+          const { gx, gy } = randomUnoccupiedCell();
+          spawnBombAt(gx, gy, true);
+        }
+
+        if (level >= BOOTS_UNLOCK_LEVEL) {
+          const { gx, gy } = randomUnoccupiedCell();
+          placeBoots(gx, gy);
+        }
+
+        if (level >= ARROW_UNLOCK_LEVEL) {
+          const { gx, gy } = randomUnoccupiedCell();
+          spawnArrowAt(gx, gy, 0, true);
+        }
+      };
+
       const applyDeterministicScenarioFixture = () => {
         if (!deterministicScenario) {
-          spawnChest();
-          scheduleGame(spawnBomb, rng.range(5000, 8000));
-          scheduleGame(spawnBoots, rng.range(8000, 12000));
-          scheduleGame(spawnArrow, 15000);
+          startLevelMechanics();
           return;
         }
 
@@ -1045,6 +1455,7 @@ function IsoRound({
           const active = i < n;
           allEnemies[i].sprite.visible = active;
           allEnemies[i].shadow.visible = active;
+          allEnemies[i].stunStars.visible = false;
           allMiniEnemies[i].visible = active;
           if (active) {
             enemies.push(allEnemies[i]);
@@ -1054,12 +1465,7 @@ function IsoRound({
         }
         updateMinimap();
         if (deterministicTestMode.enabled) applyDeterministicScenarioFixture();
-        else {
-          spawnChest();
-          scheduleGame(spawnBomb, rng.range(5000, 8000));
-          scheduleGame(spawnBoots, rng.range(8000, 12000));
-          scheduleGame(spawnArrow, 15000);
-        }
+        else startLevelMechanics();
       };
       if (startedRef.current) kickoffRef.current();
 
@@ -1077,7 +1483,6 @@ function IsoRound({
         c.gy = next.gy;
         c.landingSquashElapsed = null;
         updateMinimap();
-        const arrowDir = arrow && arrow.gx === next.gx && arrow.gy === next.gy ? arrow.dir : null;
         c.anim = {
           fromX,
           fromY,
@@ -1085,7 +1490,6 @@ function IsoRound({
           toY: next.gy,
           elapsed: 0,
           duration: jumpDurationFor(c),
-          arrowDir,
         };
         return true;
       };
@@ -1193,6 +1597,7 @@ function IsoRound({
         flushGameTimers();
         updateBombs(dtMs);
         updateArrow(dtMs);
+        updatePickupAnimations();
         let landedAny = false;
         for (let ci = -1; ci < enemies.length; ci++) {
           const c = ci < 0 ? player : enemies[ci];
@@ -1208,12 +1613,11 @@ function IsoRound({
           const bodyScale = characterJumpBodyScale(linear, arc);
           renderCharacterAt(c, gx, gy, jumpOffset, shadowScale, bodyScale);
           if (linear >= 1) {
-            const arrowDir = c.anim.arrowDir;
             c.anim = null;
             land(c, true);
             tryCollectChest(c);
             tryCollectBoots(c);
-            tryTriggerArrow(c, arrowDir);
+            tryTriggerArrow(c);
             landedAny = true;
           }
         }
@@ -1252,9 +1656,7 @@ function IsoRound({
           if (active) {
             placeBoostAura(c, nowMs);
           }
-          if (nowMs < c.stunnedUntil) {
-            c.sprite.x += Math.sin(nowMs / 30) * 2;
-          }
+          updateCharacterStunView(c, nowMs);
         }
 
         enemyTimer += dtMs;
@@ -1396,6 +1798,7 @@ function IsoRound({
 
         if (!manualTicker && !deterministicTestMode.enabled) advanceGameplayBy(dtMs);
         updateBoardTiles();
+        updatePaintTutorialTiles(performance.now());
         advanceJoystickMovement();
         advanceKeyboardMovement();
       });
@@ -1537,6 +1940,7 @@ function IsoRound({
         updateHitArea();
         positionMinimap();
         centerCamera();
+        syncActiveGameplayTutorialTarget();
       };
       resizeHandler = () => {
         if (viewportRefreshFrame !== null) cancelAnimationFrame(viewportRefreshFrame);
@@ -1550,6 +1954,7 @@ function IsoRound({
       visualViewport = window.visualViewport ?? null;
       visualViewport?.addEventListener("resize", resizeHandler);
       centerCamera();
+      syncActiveGameplayTutorialTarget();
       if (manualTicker) renderManualFrame();
     })().catch((err) => {
       if (destroyed) return;
@@ -1567,6 +1972,7 @@ function IsoRound({
       if (keyDownHandler) window.removeEventListener("keydown", keyDownHandler);
       if (keyUpHandler) window.removeEventListener("keyup", keyUpHandler);
       if (keyBlurHandler) window.removeEventListener("blur", keyBlurHandler);
+      getGameplayTutorialTargetRef.current = null;
       if (resizeHandler) {
         window.removeEventListener("resize", resizeHandler);
         window.removeEventListener("orientationchange", resizeHandler);
@@ -1577,7 +1983,7 @@ function IsoRound({
       if (window.advanceTime) delete window.advanceTime;
       destroyPixiApp();
     };
-  }, [level, roundIndex, roundDuration]);
+  }, [activateGameplayTutorial, level, roundIndex, roundDuration]);
 
   const playerSkin = SKINS[PLAYER_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
@@ -1591,7 +1997,6 @@ function IsoRound({
   const isTie = activeSkins.filter((id) => banked[id] === topScore).length > 1;
 
   const backgroundInertProps = inertBackgroundProps(modalOpen);
-  const settingsInertProps = inertBackgroundProps(tutorialOpen);
 
   return (
     <>
@@ -1811,10 +2216,17 @@ function IsoRound({
         <Settings size={24} />
       </button>
 
+      {gameplayTutorialStep && (
+        <GameplayTutorial
+          step={gameplayTutorialStep}
+          target={gameplayTutorialTarget}
+          onConfirm={closeGameplayTutorial}
+        />
+      )}
+
       {/* Pause overlay */}
       {settingsOpen && !gameOver && (
         <div
-          {...settingsInertProps}
           className="tt-overlay fixed inset-0 z-[95] flex items-center justify-center p-4"
         >
           <div
@@ -1849,17 +2261,9 @@ function IsoRound({
             >
               <Play size={16} fill="currentColor" /> Resume
             </button>
-            <button
-              type="button"
-              onClick={() => setTutorialOpen(true)}
-              className="tt-button tt-button-secondary mt-3 w-full gap-2"
-            >
-              How to play?
-            </button>
           </div>
         </div>
       )}
-      {tutorialOpen && <TutorialModal onClose={() => setTutorialOpen(false)} />}
 
       <div
         {...backgroundInertProps}
@@ -1926,25 +2330,14 @@ export function IsoGrid() {
   const [roundIdx, setRoundIdx] = useState(0);
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
   const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
-  const [tutorialOpen, setTutorialOpen] = useState(false);
 
   useEffect(() => {
     try {
       setUnlocked(readUnlockedLevel(window.localStorage));
-      setTutorialOpen(shouldShowTutorial(window.localStorage));
     } catch (err) {
       console.warn("[IsoGrid] localStorage read failed", err);
     }
   }, []);
-
-  const closeTutorial = () => {
-    setTutorialOpen(false);
-    try {
-      markTutorialSeen(window.localStorage);
-    } catch (err) {
-      console.warn("[IsoGrid] tutorial persistence failed", err);
-    }
-  };
 
   const persistUnlocked = (lv: number) => {
     setUnlocked(lv);
@@ -1991,31 +2384,22 @@ export function IsoGrid() {
     setPhase("playing");
   };
 
-  const managerInertProps = inertBackgroundProps(tutorialOpen);
-
   if (phase === "playing") {
     return (
-      <>
-        <div {...managerInertProps}>
-          <IsoRound
-            key={`lvl-${level}-r-${roundIdx}`}
-            level={level}
-            roundIndex={roundIdx}
-            matchWins={matchWins}
-            history={history}
-            onRoundEnd={handleRoundEnd}
-            parentModalOpen={tutorialOpen}
-          />
-        </div>
-        {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
-      </>
+      <IsoRound
+        key={`lvl-${level}-r-${roundIdx}`}
+        level={level}
+        roundIndex={roundIdx}
+        matchWins={matchWins}
+        history={history}
+        onRoundEnd={handleRoundEnd}
+      />
     );
   }
 
   return (
     <>
       <div
-        {...managerInertProps}
         className="tt-overlay fixed inset-0 z-[80] flex items-center justify-center p-4"
       >
         <div
@@ -2137,90 +2521,79 @@ export function IsoGrid() {
               </button>
             )}
           </div>
-
-          <button
-            type="button"
-            onClick={() => setTutorialOpen(true)}
-            className="mt-4 min-h-12 px-4 text-[18px] font-bold text-[var(--tt-text-secondary)] underline-offset-4 hover:text-[var(--tt-text-primary)] hover:underline"
-          >
-            How to play?
-          </button>
         </div>
       </div>
-      {tutorialOpen && <TutorialModal onClose={closeTutorial} />}
     </>
   );
 }
 
-function TutorialModal({ onClose }: { onClose: () => void }) {
+function GameplayTutorial({
+  step,
+  target,
+  onConfirm,
+}: {
+  step: GameplayTutorialStep;
+  target: GameplayTutorialTarget;
+  onConfirm: () => void;
+}) {
+  const copy = GAMEPLAY_TUTORIAL_COPY[step];
+  const viewportW = typeof window === "undefined" ? 1024 : window.innerWidth;
+  const viewportH = typeof window === "undefined" ? 768 : window.innerHeight;
+  const modalW = Math.min(340, Math.max(280, viewportW - 32));
+  const modalH = 190;
+  const gap = 22;
+  const targetX = target?.x ?? viewportW / 2;
+  const targetY = target?.y ?? viewportH / 2;
+  const radius = target?.radius ?? 96;
+  const modalLeft =
+    targetX + radius + modalW + gap < viewportW
+      ? targetX + radius + gap
+      : targetX - radius - modalW - gap > 0
+        ? targetX - radius - modalW - gap
+        : (viewportW - modalW) / 2;
+  const modalTop = Math.min(
+    viewportH - modalH - 16,
+    Math.max(16, targetY - Math.round(modalH / 2)),
+  );
+
   return (
-    <div className="tt-overlay fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div className="tt-no-select fixed inset-0 z-[92]" style={{ touchAction: "none" }}>
       <div
-        className="tt-dialog max-h-[90vh] w-full max-w-md overflow-y-auto px-8 py-8 text-left"
+        aria-hidden="true"
+        className="pointer-events-none fixed rounded-full"
+        style={{
+          left: targetX - radius,
+          top: targetY - radius,
+          width: radius * 2,
+          height: radius * 2,
+          boxShadow: "0 0 0 9999px rgba(22, 18, 12, 0.68), 0 0 0 7px rgba(255, 240, 166, 0.95)",
+        }}
+      />
+      <div
+        className="tt-dialog fixed px-6 py-5 text-left"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="tutorial-title"
+        aria-labelledby="gameplay-tutorial-title"
+        style={{
+          left: modalLeft,
+          top: modalTop,
+          width: modalW,
+          boxShadow: "0 16px 36px rgba(0,0,0,0.34)",
+        }}
       >
-        <div className="text-[18px] font-bold text-[var(--tt-accent-warning)]">Tutorial</div>
-        <div id="tutorial-title" className="mt-1 text-[32px] font-bold">
-          How to play
+        <div
+          id="gameplay-tutorial-title"
+          className="text-[28px] font-extrabold leading-tight text-[var(--tt-text-primary)]"
+        >
+          {copy.title}
         </div>
 
-        <div className="mt-6 space-y-4 text-[18px] leading-relaxed text-[var(--tt-text-secondary)]">
-          <p>
-            <span className="font-bold text-[var(--tt-text-primary)]">Goal:</span> move across the
-            grid to paint tiles in your color, then collect chests to bank those painted tiles as
-            round points.
-          </p>
-          <p>
-            <span className="font-bold text-[var(--tt-text-primary)]">Scoring:</span> the HUD shows
-            banked points first and your current painted tiles as a smaller + value. Chests add the
-            current + value to your bank and clear your active paint.
-          </p>
-          <p>
-            <span className="font-bold text-[var(--tt-text-primary)]">Match:</span> each level is
-            first to{" "}
-            <span className="font-bold text-[var(--tt-accent-success)]">
-              {WINS_TO_PASS} round wins
-            </span>
-            . If a bot reaches {WINS_TO_PASS} wins first, retry the level.
-          </p>
+        <div className="mt-2 text-[22px] font-bold leading-tight text-[var(--tt-text-secondary)]">
+          {copy.body}
         </div>
 
-        <div className="mt-6 space-y-3 text-[18px] text-[var(--tt-text-primary)]">
-          <div className="tt-panel flex items-start gap-3 px-4 py-3">
-            <div className="text-xl leading-none">🎁</div>
-            <div>
-              <div className="font-bold">Chest</div>
-              <div className="text-[14px] text-[var(--tt-text-secondary)]">
-                Banks your current painted tiles as points, clears those tiles, then respawns
-                elsewhere.
-              </div>
-            </div>
-          </div>
-          <div className="tt-panel flex items-start gap-3 px-4 py-3">
-            <div className="text-xl leading-none">➤</div>
-            <div>
-              <div className="font-bold">Arrow</div>
-              <div className="text-[14px] text-[var(--tt-text-secondary)]">
-                Paints a full line from the arrow tile in its current direction.
-              </div>
-            </div>
-          </div>
-          <div className="tt-panel flex items-start gap-3 px-4 py-3">
-            <div className="text-xl leading-none">💣</div>
-            <div>
-              <div className="font-bold">Bomb</div>
-              <div className="text-[14px] text-[var(--tt-text-secondary)]">
-                Explodes on its exact tile. A hit stuns that player and clears every tile they
-                currently own.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <button type="button" onClick={onClose} className="tt-button tt-button-warning mt-6 w-full">
-          Got it
+        <button type="button" onClick={onConfirm} className="tt-button tt-button-warning mt-5 w-full">
+          Продолжить обучение
         </button>
       </div>
     </div>

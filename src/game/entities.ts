@@ -1,4 +1,4 @@
-import type { Graphics, Sprite } from "pixi.js";
+import type { Container, Graphics, Sprite } from "pixi.js";
 import type { SkinConfig } from "@/game/game-constants";
 
 export interface CharacterAnimation {
@@ -8,7 +8,6 @@ export interface CharacterAnimation {
   toY: number;
   elapsed: number;
   duration: number;
-  arrowDir: number | null;
 }
 
 export interface Character {
@@ -21,6 +20,7 @@ export interface Character {
   anim: CharacterAnimation | null;
   landingSquashElapsed: number | null;
   stunnedUntil: number;
+  stunStars: Container;
   boostUntil: number;
   aura: Graphics;
 }

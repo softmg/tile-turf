@@ -83,6 +83,9 @@ export const zeroScores = (): Record<SkinId, number> => ({
 
 export const MAX_LEVEL = 10;
 export const WINS_TO_PASS = 3;
+export const BOMB_UNLOCK_LEVEL = 2;
+export const BOOTS_UNLOCK_LEVEL = 3;
+export const ARROW_UNLOCK_LEVEL = 4;
 export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : 3);
 export const enemyIntervalForLevel = (lv: number) => Math.max(220, 750 - (lv - 1) * 60);
 export const roundDurationForLevel = (lv: number) =>
@@ -97,12 +100,12 @@ export const ENEMY_SPAWN_POSITIONS: Array<[number, number]> = [
 
 export const BASE_JUMP_DURATION = 380;
 export const BOOST_JUMP_DURATION = 150;
-export const STUN_DURATION = 2000;
+export const STUN_DURATION = 3000;
 export const BOOST_DURATION = 12000;
 export const DIRECTIONS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
 
 export const LS_UNLOCKED = "iso_unlocked_level";
-export const LS_TUTORIAL_SEEN = "isogrid:tutorial:v1";
+export const LS_GAMEPLAY_TUTORIAL_SEEN = "isogrid:gameplay-tutorial:v1";
 
 export interface RoundHistoryEntry {
   level: number;

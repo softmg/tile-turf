@@ -5,8 +5,10 @@ export interface Bomb {
   gx: number;
   gy: number;
   warning: Sprite | null;
+  dangerMarkers: Graphics[];
   boom: Sprite | null;
   phase: "warning" | "explosion";
+  detonated: boolean;
   warningElapsed: number;
   explosionElapsed: number;
 }

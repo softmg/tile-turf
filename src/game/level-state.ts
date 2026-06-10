@@ -1,4 +1,4 @@
-import { LS_TUTORIAL_SEEN, LS_UNLOCKED, MAX_LEVEL } from "@/game/game-constants";
+import { LS_GAMEPLAY_TUTORIAL_SEEN, LS_UNLOCKED, MAX_LEVEL } from "@/game/game-constants";
 
 export const clampUnlockedLevel = (value: number) =>
   Math.min(MAX_LEVEL, Math.max(1, Number.isFinite(value) ? value : 1));
@@ -12,8 +12,24 @@ export const writeUnlockedLevel = (storage: Storage, level: number) => {
   storage.setItem(LS_UNLOCKED, String(clampUnlockedLevel(level)));
 };
 
-export const shouldShowTutorial = (storage: Storage) => storage.getItem(LS_TUTORIAL_SEEN) !== "1";
+/**
+ * Reads the completed gameplay tutorial steps from client storage.
+ * Unknown step names are preserved so future versions do not drop data.
+ */
+export const readGameplayTutorialSeenSteps = (storage: Storage) =>
+  new Set(
+    (storage.getItem(LS_GAMEPLAY_TUTORIAL_SEEN) || "")
+      .split(",")
+      .map((step) => step.trim())
+      .filter(Boolean),
+  );
 
-export const markTutorialSeen = (storage: Storage) => {
-  storage.setItem(LS_TUTORIAL_SEEN, "1");
+/**
+ * Marks one gameplay tutorial step as seen while keeping previously stored
+ * steps intact.
+ */
+export const markGameplayTutorialStepSeen = (storage: Storage, step: string) => {
+  const steps = readGameplayTutorialSeenSteps(storage);
+  steps.add(step);
+  storage.setItem(LS_GAMEPLAY_TUTORIAL_SEEN, Array.from(steps).join(","));
 };
