@@ -58,6 +58,10 @@ export const createBombWarningFrames = (sheet: Texture) => {
   return frames;
 };
 
+/**
+ * Selects the warning animation frame for the elapsed warning time, clamping at
+ * the final frame so late ticks keep showing the detonation frame.
+ */
 export const bombWarningFrameForElapsed = (frames: BombWarningFrame[], elapsedMs: number) => {
   const frameDuration = BOMB_WARNING_DURATION_MS / frames.length;
   const index = Math.min(frames.length - 1, Math.floor(elapsedMs / frameDuration));

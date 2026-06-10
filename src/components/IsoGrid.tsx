@@ -638,6 +638,7 @@ function IsoRound({
         step: GameplayTutorialStep,
         target: GameplayTutorialTarget,
       ) => {
+        if (shownGameplayTutorialRef.current[step]) return;
         if (
           step !== "paint" &&
           (!pickupTutorialReadyRef.current || gameplayTutorialStepRef.current !== null)
@@ -656,6 +657,11 @@ function IsoRound({
         if (gameplayTutorialStepRef.current === "paint") {
           setGameplayTutorialTarget(characterTutorialTarget(player));
         }
+      };
+      const syncActiveGameplayTutorialTarget = () => {
+        const step = gameplayTutorialStepRef.current;
+        if (!step) return;
+        setGameplayTutorialTarget(getGameplayTutorialTargetRef.current?.(step) ?? null);
       };
       let paintTutorialCells: Array<{ gx: number; gy: number }> = [];
       let paintTutorialLastIndex = -1;
@@ -1934,7 +1940,7 @@ function IsoRound({
         updateHitArea();
         positionMinimap();
         centerCamera();
-        syncPaintTutorialTarget();
+        syncActiveGameplayTutorialTarget();
       };
       resizeHandler = () => {
         if (viewportRefreshFrame !== null) cancelAnimationFrame(viewportRefreshFrame);
@@ -1948,7 +1954,7 @@ function IsoRound({
       visualViewport = window.visualViewport ?? null;
       visualViewport?.addEventListener("resize", resizeHandler);
       centerCamera();
-      syncPaintTutorialTarget();
+      syncActiveGameplayTutorialTarget();
       if (manualTicker) renderManualFrame();
     })().catch((err) => {
       if (destroyed) return;
