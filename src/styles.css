@@ -241,6 +241,7 @@
     color: var(--tt-text-primary);
   }
 
+  /* Keep the touch pad above the fixed zoom control: 100px control clearance + 12px gap, with safe-area inset added in bottom. */
   .tt-direction-pad {
     bottom: calc(env(safe-area-inset-bottom, 0px) + 112px);
     display: none;
@@ -264,15 +265,22 @@
     display: flex;
     height: 48px;
     justify-content: center;
+    outline: 3px solid transparent;
+    outline-offset: 4px;
     transition:
       background 120ms ease,
       box-shadow 120ms ease,
+      outline-color 120ms ease,
       transform 120ms ease;
     width: 48px;
   }
 
   .tt-direction-button:active {
     transform: scale(0.95);
+  }
+
+  .tt-direction-button:focus-visible {
+    outline-color: var(--tt-accent-primary);
   }
 
   .tt-direction-button-active {
