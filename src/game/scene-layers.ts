@@ -5,7 +5,6 @@ export interface SceneLayers {
   boardLayer: Container;
   depthLayer: Container;
   minimapLayer: Container;
-  joystickLayer: Container;
 }
 
 export const DEPTH_OFFSETS = {
@@ -33,17 +32,15 @@ export const createSceneLayers = (app: Application): SceneLayers => {
     sortableChildren: true,
   });
   const minimapLayer = new Container({ label: "minimap-layer" });
-  const joystickLayer = new Container({ label: "joystick-layer" });
 
   world.addChild(boardLayer, depthLayer);
-  app.stage.addChild(world, minimapLayer, joystickLayer);
+  app.stage.addChild(world, minimapLayer);
 
   return {
     world,
     boardLayer,
     depthLayer,
     minimapLayer,
-    joystickLayer,
   };
 };
 
