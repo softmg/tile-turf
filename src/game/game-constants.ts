@@ -87,7 +87,6 @@ export const BOMB_UNLOCK_LEVEL = 2;
 export const BOOTS_UNLOCK_LEVEL = 3;
 export const ARROW_UNLOCK_LEVEL = 4;
 export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : 3);
-export const enemyIntervalForLevel = (lv: number) => Math.max(220, 750 - (lv - 1) * 60);
 export const roundDurationForLevel = (lv: number) =>
   lv <= 2 ? 30 : lv <= 4 ? 45 : lv <= 6 ? 60 : lv <= 8 ? 75 : 90;
 
@@ -99,9 +98,18 @@ export const ENEMY_SPAWN_POSITIONS: Array<[number, number]> = [
 ];
 
 export const BASE_JUMP_DURATION = 380;
-export const BOOST_JUMP_DURATION = 150;
+export const BOOST_SPEED_MULTIPLIER = 1.5;
+export const BOOST_JUMP_DURATION = BASE_JUMP_DURATION / BOOST_SPEED_MULTIPLIER;
 export const STUN_DURATION = 3000;
 export const BOOST_DURATION = 12000;
+export const BOOTS_RESPAWN_MIN_MS = 5000;
+export const BOOTS_RESPAWN_MAX_MS = 7500;
+export const ARROW_RESPAWN_MS = 20000 / 3;
+export const BOT_TARGET_REACTION_DELAY_MS = 400;
+export const BOT_SUBOPTIMAL_ROUTE_CHANCE = 0.2;
+export const BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS = 1;
+export const BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS = 2;
+export const BOT_BOOTS_DISTANCE_RATIO = 0.65;
 export const DIRECTIONS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
 
 export const LS_UNLOCKED = "iso_unlocked_level";

@@ -22,7 +22,14 @@ import {
   BOOST_JUMP_DURATION,
   BOOTS_UNLOCK_LEVEL,
   BOMB_UNLOCK_LEVEL,
+  BOT_BOOTS_DISTANCE_RATIO,
   BOT_SKINS,
+  BOT_SUBOPTIMAL_ROUTE_CHANCE,
+  BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS,
+  BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS,
+  BOT_TARGET_REACTION_DELAY_MS,
+  BOOTS_RESPAWN_MAX_MS,
+  BOOTS_RESPAWN_MIN_MS,
   DIRECTIONS,
   ENEMY_SPAWN_POSITIONS,
   MAX_LEVEL,
@@ -37,12 +44,12 @@ import {
   UNPAINTED_TILE_URL,
   WINS_TO_PASS,
   botsForLevel,
-  enemyIntervalForLevel,
   roundDurationForLevel,
   type Direction,
   type RoundHistoryEntry,
   type SkinConfig,
   type SkinId,
+  ARROW_RESPAWN_MS,
   zeroScores,
 } from "@/game/game-constants";
 import { isoPos, isInsideBoard, manhattanDistance, nextGridPosition } from "@/game/grid-math";
@@ -808,6 +815,15 @@ function IsoRound({
         makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1]),
       );
       const enemies: Character[] = []; // active enemies; populated in kickoff
+      const botRoutePlans = new WeakMap<
+        Character,
+        {
+          target: { gx: number; gy: number };
+          targetKey: string;
+          waypoint: { gx: number; gy: number } | null;
+        }
+      >();
+      const nextBotMoveAt = new WeakMap<Character, number>();
       // Hide all bot sprites until activated
       for (const e of allEnemies) {
         e.sprite.visible = false;
@@ -1110,10 +1126,12 @@ function IsoRound({
       depthLayer.addChild(chestSprite);
       const chestBaseScale = chestSprite.scale.x;
       const chest = { gx: 0, gy: 0, gfx: chestSprite };
+      let botTargetReactionUntil = 0;
 
       const placeChest = (gx: number, gy: number) => {
         chest.gx = gx;
         chest.gy = gy;
+        botTargetReactionUntil = gameNow() + BOT_TARGET_REACTION_DELAY_MS;
         placeChestSprite(chestSprite, gx, gy);
         requestGameplayTutorial("chest", spriteTutorialTarget(chestSprite, 78, -40));
       };
@@ -1308,6 +1326,7 @@ function IsoRound({
         const gfx = createBootsSprite(bootsTex, gx, gy);
         depthLayer.addChild(gfx);
         boots = { gx, gy, gfx, baseScale: gfx.scale.x };
+        botTargetReactionUntil = gameNow() + BOT_TARGET_REACTION_DELAY_MS;
         requestGameplayTutorial("boots", spriteTutorialTarget(gfx, 74));
       };
       const spawnBoots = () => {
@@ -1322,7 +1341,9 @@ function IsoRound({
         removeAndDestroy(boots.gfx);
         boots = null;
         c.boostUntil = gameNow() + BOOST_DURATION;
-        if (level >= BOOTS_UNLOCK_LEVEL) scheduleGame(spawnBoots, rng.range(10000, 15000));
+        if (level >= BOOTS_UNLOCK_LEVEL) {
+          scheduleGame(spawnBoots, rng.range(BOOTS_RESPAWN_MIN_MS, BOOTS_RESPAWN_MAX_MS));
+        }
       };
 
       // ---------- Rotating Arrow ----------
@@ -1355,7 +1376,7 @@ function IsoRound({
 
         arrow = { gx, gy, dir, gfx, rotateElapsed: 0, lifeElapsed: 0 };
         requestGameplayTutorial("arrow", spriteTutorialTarget(gfx, 70));
-        if (scheduleNext) scheduleGame(spawnArrow, 20000);
+        if (scheduleNext) scheduleGame(spawnArrow, ARROW_RESPAWN_MS);
       };
 
       function spawnArrow() {
@@ -1531,8 +1552,6 @@ function IsoRound({
 
       const movePlayer = (d: Direction) => moveCharacter(player, d);
 
-      let enemyTimer = 0;
-      const enemyInterval = () => enemyIntervalForLevel(levelRef.current);
       const formatScores = (values: Record<SkinId, number>) =>
         SKIN_IDS.map((id) => `${id}:${values[id]}`).join(",");
       const remainingMs = (until: number) => Math.max(0, Math.ceil(until - gameNow()));
@@ -1694,56 +1713,98 @@ function IsoRound({
           updateCharacterStunView(c, nowMs);
         }
 
-        enemyTimer += dtMs;
-        if (enemyTimer >= enemyInterval()) {
-          enemyTimer = 0;
-          for (const en of enemies) {
-            if (en.anim) continue;
-            if (gameNow() < en.stunnedUntil) continue;
-            const valid = DIRECTIONS.filter((d) => {
-              const next = nextGridPosition(en.gx, en.gy, d);
-              if (!isInsideBoard(next.gx, next.gy)) return false;
-              if (isWarningAt(next.gx, next.gy)) return false;
-              return true;
-            });
-            const safe = valid.length
-              ? valid
-              : DIRECTIONS.filter((d) => {
-                  const next = nextGridPosition(en.gx, en.gy, d);
-                  return isInsideBoard(next.gx, next.gy);
-                });
-            if (!safe.length) continue;
-            const distTo = (d: Direction, tx: number, ty: number) => {
-              const next = nextGridPosition(en.gx, en.gy, d);
-              return manhattanDistance(next, { gx: tx, gy: ty });
-            };
-            const enemyPos = { gx: en.gx, gy: en.gy };
-            const bootsDist = boots ? manhattanDistance(enemyPos, boots) : Infinity;
-            const arrowDist = arrow ? manhattanDistance(enemyPos, arrow) : Infinity;
-            const ownedN = countOwned(en.skin.id);
-            let chosen: Direction;
-            if (arrow && arrowDist <= 2) {
-              chosen = safe.reduce(
-                (best, d) =>
-                  distTo(d, arrow!.gx, arrow!.gy) < distTo(best, arrow!.gx, arrow!.gy) ? d : best,
-                safe[0],
-              );
-            } else if (boots && bootsDist <= 2) {
-              chosen = safe.reduce(
-                (best, d) =>
-                  distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best,
-                safe[0],
-              );
-            } else if (ownedN > 3) {
-              chosen = safe.reduce(
-                (best, d) =>
-                  distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best,
-                safe[0],
-              );
-            } else {
-              chosen = rng.pick(safe);
+        for (const en of enemies) {
+          if (en.anim) continue;
+          if (gameNow() < en.stunnedUntil) continue;
+          if (gameNow() < (nextBotMoveAt.get(en) ?? 0)) continue;
+
+          const directions = DIRECTIONS.map((direction) => ({
+            direction,
+            next: nextGridPosition(en.gx, en.gy, direction),
+          })).filter(({ next }) => isInsideBoard(next.gx, next.gy));
+          if (!directions.length) continue;
+
+          const warningBombs = bombs.filter((bomb) => bomb.phase === "warning" && !bomb.detonated);
+          const currentPos = { gx: en.gx, gy: en.gy };
+          const isInAnyBombArea = (gx: number, gy: number) =>
+            warningBombs.some((bomb) => isInBombArea(gx, gy, bomb.gx, bomb.gy));
+          const nonWarningDirections = directions.filter(
+            (option) => !isWarningAt(option.next.gx, option.next.gy),
+          );
+          const currentInBombArea = isInAnyBombArea(en.gx, en.gy);
+          const nonBombAreaDirections = nonWarningDirections.filter(
+            (option) => !isInAnyBombArea(option.next.gx, option.next.gy),
+          );
+          const options =
+            nonBombAreaDirections.length > 0
+              ? nonBombAreaDirections
+              : nonWarningDirections.length > 0
+                ? nonWarningDirections
+                : directions;
+
+          const chestDist = manhattanDistance(currentPos, chest);
+          const directTarget =
+            !currentInBombArea &&
+            boots &&
+            manhattanDistance(currentPos, boots) <= chestDist * BOT_BOOTS_DISTANCE_RATIO
+              ? boots
+              : chest;
+          const targetKind = directTarget === boots ? "boots" : "chest";
+          const targetKey = `${targetKind}:${directTarget.gx},${directTarget.gy}`;
+          let routePlan = botRoutePlans.get(en);
+          const shouldKeepPreviousTarget = Boolean(
+            routePlan &&
+              routePlan.targetKey !== targetKey &&
+              !currentInBombArea &&
+              gameNow() < botTargetReactionUntil,
+          );
+          const routeTarget =
+            shouldKeepPreviousTarget && routePlan ? routePlan.target : directTarget;
+          if (!routePlan || (!shouldKeepPreviousTarget && routePlan.targetKey !== targetKey)) {
+            const directDistance = manhattanDistance(currentPos, routeTarget);
+            const waypointCandidates: Array<{ gx: number; gy: number }> = [];
+            if (!currentInBombArea && rng.next() < BOT_SUBOPTIMAL_ROUTE_CHANCE) {
+              for (let gx = 0; gx < BOARD_SIZE; gx++) {
+                for (let gy = 0; gy < BOARD_SIZE; gy++) {
+                  if ((gx === en.gx && gy === en.gy) || (gx === routeTarget.gx && gy === routeTarget.gy)) {
+                    continue;
+                  }
+                  const waypoint = { gx, gy };
+                  const extraSteps =
+                    manhattanDistance(currentPos, waypoint) +
+                    manhattanDistance(waypoint, routeTarget) -
+                    directDistance;
+                  if (
+                    extraSteps >= BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS &&
+                    extraSteps <= BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS
+                  ) {
+                    waypointCandidates.push(waypoint);
+                  }
+                }
+              }
             }
-            moveCharacter(en, chosen);
+            routePlan = {
+              target: { gx: routeTarget.gx, gy: routeTarget.gy },
+              targetKey,
+              waypoint: waypointCandidates.length ? rng.pick(waypointCandidates) : null,
+            };
+            botRoutePlans.set(en, routePlan);
+          }
+          if (
+            routePlan.waypoint &&
+            ((routePlan.waypoint.gx === en.gx && routePlan.waypoint.gy === en.gy) ||
+              isInAnyBombArea(routePlan.waypoint.gx, routePlan.waypoint.gy))
+          ) {
+            routePlan.waypoint = null;
+          }
+          const target = !currentInBombArea && routePlan.waypoint ? routePlan.waypoint : routePlan.target;
+          const ranked = [...options].sort(
+            (a, b) => manhattanDistance(a.next, target) - manhattanDistance(b.next, target),
+          );
+          const chosen = ranked[0].direction;
+
+          if (moveCharacter(en, chosen)) {
+            nextBotMoveAt.set(en, gameNow() + AUTO_MOVE_COOLDOWN_MS);
           }
         }
       };
@@ -2176,9 +2237,13 @@ function IsoRound({
             </div>
             <div className="mt-4 text-[18px] text-[var(--tt-text-secondary)]">
               Bots: <span className="font-bold text-[var(--tt-text-primary)]">{botCount}</span> ·
-              Speed{" "}
+              Detour{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
-                ×{(700 / enemyIntervalForLevel(level)).toFixed(2)}
+                {Math.round(BOT_SUBOPTIMAL_ROUTE_CHANCE * 100)}%
+              </span>{" "}
+              · React{" "}
+              <span className="font-bold text-[var(--tt-text-primary)]">
+                {BOT_TARGET_REACTION_DELAY_MS}ms
               </span>
             </div>
             <div className="mt-3 text-[18px] text-[var(--tt-text-secondary)]">
@@ -2446,7 +2511,7 @@ export function IsoGrid() {
           </div>
 
           <div className="mt-6 text-[18px] text-[var(--tt-text-secondary)]">
-            Bots scale: lvl 1-2 to 1, 3-4 to 2, 5-10 to 3. Bot speed grows each level.
+            Bots scale: lvl 1-2 to 1, 3-4 to 2, 5-10 to 3. Route detours use constants.
           </div>
 
           <div className="mt-6 flex gap-3">
