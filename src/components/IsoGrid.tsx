@@ -23,7 +23,10 @@ import {
   BOOTS_UNLOCK_LEVEL,
   BOMB_UNLOCK_LEVEL,
   BOT_BOOTS_DISTANCE_RATIO,
+  BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO,
   BOT_SKINS,
+  BOT_STRATEGY_BY_SKIN_OVERRIDE,
+  BOT_STRATEGY_BY_SLOT,
   BOT_SUBOPTIMAL_ROUTE_CHANCE,
   BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS,
   BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS,
@@ -50,6 +53,7 @@ import {
   type SkinConfig,
   type SkinId,
   ARROW_RESPAWN_MS,
+  type BotStrategyId,
   zeroScores,
 } from "@/game/game-constants";
 import { isoPos, isInsideBoard, manhattanDistance, nextGridPosition } from "@/game/grid-math";
@@ -824,12 +828,46 @@ function IsoRound({
         }
       >();
       const nextBotMoveAt = new WeakMap<Character, number>();
+      const botStrategies = new WeakMap<Character, BotStrategyId>();
+      const botStrategyLabels = new WeakMap<Character, Text>();
       // Hide all bot sprites until activated
       for (const e of allEnemies) {
         e.sprite.visible = false;
         e.shadow.visible = false;
         e.stunStars.visible = false;
       }
+
+      const botStrategyEmoji = (strategy: BotStrategyId) => (strategy === "paint" ? "🎨" : "🧰");
+      const placeBotStrategyLabel = (c: Character) => {
+        const label = botStrategyLabels.get(c);
+        if (!label) return;
+        label.x = c.sprite.x;
+        label.y = c.sprite.y - 124;
+        label.zIndex = c.sprite.zIndex + 0.05;
+      };
+      const setBotStrategyLabel = (c: Character, strategy: BotStrategyId, visible: boolean) => {
+        let label = botStrategyLabels.get(c);
+        if (!label) {
+          label = new Text({
+            text: "",
+            style: {
+              fontFamily: "system-ui, Apple Color Emoji, Segoe UI Emoji, sans-serif",
+              fontSize: 26,
+              fontWeight: "900",
+              fill: 0xffffff,
+              stroke: { color: 0x111111, width: 4 },
+              align: "center",
+            },
+          });
+          label.label = "bot-strategy-label";
+          label.anchor.set(0.5, 0.5);
+          depthLayer.addChild(label);
+          botStrategyLabels.set(c, label);
+        }
+        label.text = botStrategyEmoji(strategy);
+        label.visible = visible;
+        placeBotStrategyLabel(c);
+      };
 
       let gameTimeMs = 0;
       const gameNow = () => gameTimeMs;
@@ -1030,6 +1068,8 @@ function IsoRound({
           playerScoreText.x = c.sprite.x;
           playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
           playerScoreText.zIndex = c.sprite.zIndex + 0.02;
+        } else {
+          placeBotStrategyLabel(c);
         }
       };
 
@@ -1054,6 +1094,8 @@ function IsoRound({
           playerScoreText.x = c.sprite.x;
           playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
           playerScoreText.zIndex = c.sprite.zIndex + 0.02;
+        } else {
+          placeBotStrategyLabel(c);
         }
 
         const stars = c.stunStars;
@@ -1154,6 +1196,45 @@ function IsoRound({
       };
 
       const countOwned = (skinId: SkinId) => countOwnedTiles(owners, skinId);
+      const currentPaintLeaderFor = (skinId: SkinId) => {
+        let leader: SkinId | null = null;
+        let leaderScore = -1;
+        for (const id of SKIN_IDS) {
+          if (id === skinId) continue;
+          const score = countOwned(id);
+          if (score > leaderScore) {
+            leader = id;
+            leaderScore = score;
+          }
+        }
+        return leader;
+      };
+      const nearestPaintTargetFor = (c: Character) => {
+        const leader = currentPaintLeaderFor(c.skin.id);
+        const currentPos = { gx: c.gx, gy: c.gy };
+        let best: { gx: number; gy: number } | null = null;
+        let bestDistance = Infinity;
+        let bestIsLeaderOwned = false;
+
+        for (let gx = 0; gx < BOARD_SIZE; gx++) {
+          for (let gy = 0; gy < BOARD_SIZE; gy++) {
+            const owner = owners[gx][gy];
+            if (owner === c.skin.id) continue;
+            const distance = manhattanDistance(currentPos, { gx, gy });
+            const isLeaderOwned = owner === leader;
+            if (
+              distance < bestDistance ||
+              (distance === bestDistance && isLeaderOwned && !bestIsLeaderOwned)
+            ) {
+              best = { gx, gy };
+              bestDistance = distance;
+              bestIsLeaderOwned = isLeaderOwned;
+            }
+          }
+        }
+
+        return best ?? currentPos;
+      };
       let bankedScores: Record<SkinId, number> = zeroScores();
       const updatePlayerScoreText = () => {
         playerScoreText.text = String(bankedScores[PLAYER_SKIN]);
@@ -1338,6 +1419,7 @@ function IsoRound({
       const tryCollectBoots = (c: Character) => {
         if (!boots) return;
         if (c.gx !== boots.gx || c.gy !== boots.gy) return;
+        if (gameNow() < c.boostUntil) return;
         removeAndDestroy(boots.gfx);
         boots = null;
         c.boostUntil = gameNow() + BOOST_DURATION;
@@ -1516,7 +1598,16 @@ function IsoRound({
           if (active) {
             enemies.push(allEnemies[i]);
             miniEnemies.push(allMiniEnemies[i]);
+            const strategy =
+              BOT_STRATEGY_BY_SKIN_OVERRIDE[allEnemies[i].skin.id] ??
+                BOT_STRATEGY_BY_SLOT[i] ??
+                "chest";
+            botStrategies.set(allEnemies[i], strategy);
+            setBotStrategyLabel(allEnemies[i], strategy, true);
             land(allEnemies[i]);
+          } else {
+            const strategy = botStrategies.get(allEnemies[i]) ?? "chest";
+            setBotStrategyLabel(allEnemies[i], strategy, false);
           }
         }
         updateMinimap();
@@ -1743,24 +1834,43 @@ function IsoRound({
                 : directions;
 
           const chestDist = manhattanDistance(currentPos, chest);
-          const directTarget =
-            !currentInBombArea &&
-            boots &&
-            manhattanDistance(currentPos, boots) <= chestDist * BOT_BOOTS_DISTANCE_RATIO
+          const bestRivalChestDist = [player, ...enemies]
+            .filter((c) => c !== en)
+            .reduce(
+              (best, c) => Math.min(best, manhattanDistance({ gx: c.gx, gy: c.gy }, chest)),
+              Infinity,
+            );
+          const strategy = botStrategies.get(en) ?? "chest";
+          const shouldPaint =
+            strategy === "paint" &&
+            chestDist >= bestRivalChestDist * BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO;
+          const directTarget = shouldPaint
+            ? nearestPaintTargetFor(en)
+            : !currentInBombArea &&
+                boots &&
+                gameNow() >= en.boostUntil &&
+                manhattanDistance(currentPos, boots) <= chestDist * BOT_BOOTS_DISTANCE_RATIO
               ? boots
               : chest;
-          const targetKind = directTarget === boots ? "boots" : "chest";
+          const targetKind = shouldPaint ? "paint" : directTarget === boots ? "boots" : "chest";
           const targetKey = `${targetKind}:${directTarget.gx},${directTarget.gy}`;
           let routePlan = botRoutePlans.get(en);
+          const routePlanTargetReached =
+            routePlan?.target.gx === en.gx && routePlan.target.gy === en.gy;
           const shouldKeepPreviousTarget = Boolean(
             routePlan &&
               routePlan.targetKey !== targetKey &&
+              !routePlanTargetReached &&
               !currentInBombArea &&
               gameNow() < botTargetReactionUntil,
           );
           const routeTarget =
             shouldKeepPreviousTarget && routePlan ? routePlan.target : directTarget;
-          if (!routePlan || (!shouldKeepPreviousTarget && routePlan.targetKey !== targetKey)) {
+          if (
+            !routePlan ||
+            routePlanTargetReached ||
+            (!shouldKeepPreviousTarget && routePlan.targetKey !== targetKey)
+          ) {
             const directDistance = manhattanDistance(currentPos, routeTarget);
             const waypointCandidates: Array<{ gx: number; gy: number }> = [];
             if (!currentInBombArea && rng.next() < BOT_SUBOPTIMAL_ROUTE_CHANCE) {

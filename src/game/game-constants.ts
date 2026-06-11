@@ -73,6 +73,10 @@ export const UNPAINTED_MINIMAP_COLOR = 0xf5d0b0;
 export const PLAYER_SKIN: SkinId = "plush";
 export const BOT_SKINS: SkinId[] = ["banana", "dragon", "cat"];
 export const SKIN_IDS: SkinId[] = ["plush", "banana", "dragon", "cat"];
+export type BotStrategyId = "chest" | "paint";
+// Strategy assignment by active bot slot. Override per skin below for hand-tuned setups.
+export const BOT_STRATEGY_BY_SLOT: BotStrategyId[] = ["chest", "paint", "chest"];
+export const BOT_STRATEGY_BY_SKIN_OVERRIDE: Partial<Record<SkinId, BotStrategyId>> = {};
 
 export const zeroScores = (): Record<SkinId, number> => ({
   plush: 0,
@@ -102,14 +106,16 @@ export const BOOST_SPEED_MULTIPLIER = 1.5;
 export const BOOST_JUMP_DURATION = BASE_JUMP_DURATION / BOOST_SPEED_MULTIPLIER;
 export const STUN_DURATION = 3000;
 export const BOOST_DURATION = 12000;
-export const BOOTS_RESPAWN_MIN_MS = 5000;
-export const BOOTS_RESPAWN_MAX_MS = 7500;
+export const BOOTS_RESPAWN_MIN_MS = 2500;
+export const BOOTS_RESPAWN_MAX_MS = 3750;
 export const ARROW_RESPAWN_MS = 20000 / 3;
 export const BOT_TARGET_REACTION_DELAY_MS = 400;
 export const BOT_SUBOPTIMAL_ROUTE_CHANCE = 0.2;
 export const BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS = 1;
 export const BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS = 2;
 export const BOT_BOOTS_DISTANCE_RATIO = 0.65;
+// Paint strategy starts when the bot's chest distance is at least this multiple of the player's.
+export const BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO = 1.2;
 export const DIRECTIONS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
 
 export const LS_UNLOCKED = "iso_unlocked_level";
