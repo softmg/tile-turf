@@ -1,4 +1,9 @@
-import { LS_GAMEPLAY_TUTORIAL_SEEN, LS_UNLOCKED, MAX_LEVEL } from "@/game/game-constants";
+import {
+  LS_FIRST_LAUNCH_DONE,
+  LS_GAMEPLAY_TUTORIAL_SEEN,
+  LS_UNLOCKED,
+  MAX_LEVEL,
+} from "@/game/game-constants";
 
 export const clampUnlockedLevel = (value: number) =>
   Math.min(MAX_LEVEL, Math.max(1, Number.isFinite(value) ? value : 1));
@@ -10,6 +15,13 @@ export const readUnlockedLevel = (storage: Storage) => {
 
 export const writeUnlockedLevel = (storage: Storage, level: number) => {
   storage.setItem(LS_UNLOCKED, String(clampUnlockedLevel(level)));
+};
+
+export const readFirstLaunchDone = (storage: Storage) =>
+  storage.getItem(LS_FIRST_LAUNCH_DONE) === "1";
+
+export const writeFirstLaunchDone = (storage: Storage) => {
+  storage.setItem(LS_FIRST_LAUNCH_DONE, "1");
 };
 
 /**

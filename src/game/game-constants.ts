@@ -119,6 +119,7 @@ export const BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO = 1.2;
 export const DIRECTIONS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
 
 export const LS_UNLOCKED = "iso_unlocked_level";
+export const LS_FIRST_LAUNCH_DONE = "isogrid:first-launch-done:v1";
 export const LS_GAMEPLAY_TUTORIAL_SEEN = "isogrid:gameplay-tutorial:v1";
 
 export interface RoundHistoryEntry {

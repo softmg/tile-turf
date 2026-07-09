@@ -66,8 +66,10 @@ import {
 import { createSeededRng, seedFromParts } from "@/game/rng";
 import {
   markGameplayTutorialStepSeen,
+  readFirstLaunchDone,
   readGameplayTutorialSeenSteps,
   readUnlockedLevel,
+  writeFirstLaunchDone,
   writeUnlockedLevel,
 } from "@/game/level-state";
 import type { Character } from "@/game/entities";
@@ -179,6 +181,7 @@ interface IsoRoundProps {
   matchWins: Record<SkinId, number>;
   history: RoundHistoryEntry[];
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
+  onExitToLevelMenu: () => void;
 }
 
 const GAME_TEXTURE_DATA = {
@@ -314,6 +317,7 @@ function IsoRound({
   matchWins,
   history,
   onRoundEnd,
+  onExitToLevelMenu,
 }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
@@ -2371,6 +2375,13 @@ function IsoRound({
             >
               <Play size={16} fill="currentColor" /> Resume
             </button>
+            <button
+              type="button"
+              onClick={onExitToLevelMenu}
+              className="tt-button tt-button-secondary mt-3 w-full"
+            >
+              Exit to Level Select
+            </button>
           </div>
         </div>
       )}
@@ -2469,6 +2480,14 @@ export function IsoGrid() {
   useEffect(() => {
     try {
       setUnlocked(readUnlockedLevel(window.localStorage));
+      if (!readFirstLaunchDone(window.localStorage)) {
+        writeFirstLaunchDone(window.localStorage);
+        setLevel(1);
+        setMatchWins(zeroScores());
+        setHistory([]);
+        setRoundIdx((r) => r + 1);
+        setPhase("playing");
+      }
     } catch (err) {
       console.warn("[IsoGrid] localStorage read failed", err);
     }
@@ -2489,6 +2508,12 @@ export function IsoGrid() {
     setHistory([]);
     setRoundIdx((r) => r + 1);
     setPhase("playing");
+  };
+
+  const showLevelMenu = () => {
+    setMatchWins(zeroScores());
+    setHistory([]);
+    setPhase("menu");
   };
 
   const handleRoundEnd = (winner: SkinId | null, banked: Record<SkinId, number>) => {
@@ -2528,6 +2553,7 @@ export function IsoGrid() {
         matchWins={matchWins}
         history={history}
         onRoundEnd={handleRoundEnd}
+        onExitToLevelMenu={showLevelMenu}
       />
     );
   }
@@ -2573,17 +2599,16 @@ export function IsoGrid() {
           {phase === "menu" && (
             <>
               <div className="text-[18px] font-bold text-[var(--tt-text-secondary)]">
-                Paint the Grid
+                Tile Turf
               </div>
               <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
                 Select Level
               </div>
               <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
-                First to {WINS_TO_PASS} round wins clears the level.
+                Pick an unlocked level or continue from the latest one.
               </p>
             </>
           )}
-
           <div className="mt-6 grid grid-cols-5 gap-2">
             {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map((lv) => {
               const locked = lv > unlocked;
@@ -2621,7 +2646,8 @@ export function IsoGrid() {
           </div>
 
           <div className="mt-6 text-[18px] text-[var(--tt-text-secondary)]">
-            Bots scale: lvl 1-2 to 1, 3-4 to 2, 5-10 to 3. Route detours use constants.
+            Jump across neighboring tiles to paint them. Grab chests to turn your painted turf into
+            round points.
           </div>
 
           <div className="mt-6 flex gap-3">
