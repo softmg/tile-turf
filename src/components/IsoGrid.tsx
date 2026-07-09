@@ -374,6 +374,8 @@ function IsoRound({
   const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>(
     createGameplayTutorialSeenState(new Set()),
   );
+  const gameSceneReadyRef = useRef(false);
+  const pendingInitialPaintTutorialRef = useRef(false);
   const pickupTutorialReadyRef = useRef(false);
   const pendingGameplayTutorialRef = useRef<
     Array<{
@@ -407,6 +409,15 @@ function IsoRound({
     },
     [],
   );
+  const activateInitialPaintTutorial = useCallback(() => {
+    if (!pendingInitialPaintTutorialRef.current || !gameSceneReadyRef.current) return;
+    pendingInitialPaintTutorialRef.current = false;
+    activateGameplayTutorial("paint", {
+      x: Math.round(window.innerWidth / 2),
+      y: Math.round(window.innerHeight / 2),
+      radius: 96,
+    });
+  }, [activateGameplayTutorial]);
 
   const closeGameplayTutorial = () => {
     const completedStep = gameplayTutorialStepRef.current;
@@ -448,14 +459,9 @@ function IsoRound({
   useEffect(() => {
     const seen = readInitialGameplayTutorialSeen();
     shownGameplayTutorialRef.current = seen;
-    if (!seen.paint) {
-      activateGameplayTutorial("paint", {
-        x: Math.round(window.innerWidth / 2),
-        y: Math.round(window.innerHeight / 2),
-        radius: 96,
-      });
-    }
-  }, [activateGameplayTutorial]);
+    pendingInitialPaintTutorialRef.current = !seen.paint;
+    activateInitialPaintTutorial();
+  }, [activateInitialPaintTutorial]);
   useEffect(() => {
     pickupTutorialReadyRef.current = false;
     pendingGameplayTutorialRef.current = [];
@@ -577,6 +583,7 @@ function IsoRound({
     if (!host) return;
 
     setRenderError(null);
+    gameSceneReadyRef.current = false;
 
     const app = new Application();
     let appCanvas: HTMLCanvasElement | null = null;
@@ -2071,7 +2078,9 @@ function IsoRound({
       visualViewport?.addEventListener("resize", resizeHandler);
       centerCamera();
       syncActiveGameplayTutorialTarget();
-      if (manualTicker) renderManualFrame();
+      renderManualFrame();
+      gameSceneReadyRef.current = true;
+      activateInitialPaintTutorial();
     })().catch((err) => {
       if (destroyed) return;
       console.error("[IsoGrid] Pixi setup failed", err);
@@ -2080,6 +2089,7 @@ function IsoRound({
 
     return () => {
       destroyed = true;
+      gameSceneReadyRef.current = false;
       removeWindowErrorHandlers?.();
       if (viewportRefreshFrame !== null) cancelAnimationFrame(viewportRefreshFrame);
       if (keyDownHandler) window.removeEventListener("keydown", keyDownHandler);
@@ -2093,7 +2103,7 @@ function IsoRound({
       if (window.advanceTime) delete window.advanceTime;
       destroyPixiApp();
     };
-  }, [activateGameplayTutorial, level, roundIndex, roundDuration, selectDirection]);
+  }, [activateGameplayTutorial, activateInitialPaintTutorial, level, roundIndex, roundDuration, selectDirection]);
 
   const playerSkin = SKINS[PLAYER_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
