@@ -7,11 +7,14 @@
     "dev": "vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "build:yandex": "vite build --config vite.static.config.ts --mode yandex --outDir dist-yandex --emptyOutDir",
     "preview": "vite preview",
     "test": "playwright test",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "validate:yandex": "node scripts/validate-yandex-build.js",
+    "package:yandex": "npm run typecheck && npm run build:yandex && npm run validate:yandex && node scripts/package-yandex.js && node scripts/validate-yandex-archive.js"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

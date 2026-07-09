@@ -10,6 +10,10 @@ import {
 
 import appCss from "../styles.css?url";
 
+const isYandexBuild = import.meta.env.MODE === "yandex";
+const previewImageUrl =
+  "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1e2bf9da-6f44-407c-90a3-e06d2c60484a/id-preview-04c848a4--35e87f47-2309-49bc-a61a-973b9fbd8342.lovable.app-1778240684801.png";
+
 function NotFoundComponent() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -94,16 +98,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Interactive isometric grid game with player movement, painting mechanics, and mobile controls.",
       },
-      {
-        property: "og:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1e2bf9da-6f44-407c-90a3-e06d2c60484a/id-preview-04c848a4--35e87f47-2309-49bc-a61a-973b9fbd8342.lovable.app-1778240684801.png",
-      },
-      {
-        name: "twitter:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1e2bf9da-6f44-407c-90a3-e06d2c60484a/id-preview-04c848a4--35e87f47-2309-49bc-a61a-973b9fbd8342.lovable.app-1778240684801.png",
-      },
+      ...(isYandexBuild
+        ? []
+        : [
+            {
+              property: "og:image",
+              content: previewImageUrl,
+            },
+            {
+              name: "twitter:image",
+              content: previewImageUrl,
+            },
+          ]),
     ],
     links: [
       {
