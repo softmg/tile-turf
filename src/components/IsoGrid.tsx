@@ -356,8 +356,9 @@ function IsoRound({
   const [timeLeft, setTimeLeft] = useState(roundDuration);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
-  const [started, setStarted] = useState(true);
-  const startedRef = useRef(true);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
+  const [startCountdown, setStartCountdown] = useState(3);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
@@ -369,7 +370,9 @@ function IsoRound({
   const [gameplayTutorialTarget, setGameplayTutorialTarget] =
     useState<GameplayTutorialTarget>(null);
   const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(null);
-  const modalOpen = gameOver || settingsOpen || gameplayTutorialStep !== null;
+  const startCountdownVisible =
+    startCountdown !== null && !renderError && !gameplayTutorialStep && !settingsOpen && !gameOver;
+  const modalOpen = gameOver || settingsOpen || gameplayTutorialStep !== null || startCountdown !== null;
   const modalOpenRef = useRef(modalOpen);
   const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>(
     createGameplayTutorialSeenState(new Set()),
@@ -456,6 +459,29 @@ function IsoRound({
   useEffect(() => {
     gameplayTutorialStepRef.current = gameplayTutorialStep;
   }, [gameplayTutorialStep]);
+  useEffect(() => {
+    if (
+      startCountdown === null ||
+      settingsOpen ||
+      gameplayTutorialStep !== null ||
+      gameOver ||
+      renderError
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (startCountdown > 1) {
+        setStartCountdown((value) => (value === null ? null : value - 1));
+        return;
+      }
+
+      setStartCountdown(null);
+      setStarted(true);
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [gameOver, gameplayTutorialStep, renderError, settingsOpen, startCountdown]);
   useEffect(() => {
     const seen = readInitialGameplayTutorialSeen();
     shownGameplayTutorialRef.current = seen;
@@ -2139,6 +2165,34 @@ function IsoRound({
             className="tt-dialog max-w-sm px-8 py-6 text-center text-[18px] font-bold"
           >
             {renderError}
+          </div>
+        </div>
+      )}
+
+      {startCountdownVisible && (
+        <div
+          className="tt-overlay fixed inset-0 z-[85] flex items-center justify-center p-4"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className="text-center">
+            <div className="text-[18px] font-bold uppercase tracking-[0.18em] text-[var(--tt-text-secondary)]">
+              Get ready
+            </div>
+            <div
+              key={startCountdown}
+              className="mt-3 text-[96px] font-black leading-none tabular-nums text-[var(--tt-text-primary)] sm:text-[128px]"
+              style={{ animation: "iso-countdown-pop 0.45s ease-out both" }}
+            >
+              {startCountdown}
+            </div>
+            <style>{`
+              @keyframes iso-countdown-pop {
+                0% { transform: scale(0.72); opacity: 0; }
+                60% { transform: scale(1.08); opacity: 1; }
+                100% { transform: scale(1); opacity: 1; }
+              }
+            `}</style>
           </div>
         </div>
       )}
