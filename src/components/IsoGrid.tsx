@@ -74,7 +74,12 @@ import {
 } from "@/game/level-state";
 import type { Character } from "@/game/entities";
 import type { ArrowState, Bomb } from "@/game/hazards";
-import { AUTO_MOVE_COOLDOWN_MS, directionFromKeyboardEvent } from "@/game/input-controls";
+import {
+  AUTO_MOVE_COOLDOWN_MS,
+  JUMP_DIRECTION_CHANGE_GRACE_MS,
+  POST_LANDING_MOVE_DELAY_MS,
+  directionFromKeyboardEvent,
+} from "@/game/input-controls";
 import { createMinimapView, MINI_CELL } from "@/game/minimap-view";
 import {
   BOMB_DETONATION_MS,
@@ -867,7 +872,7 @@ function IsoRound({
           waypoint: { gx: number; gy: number } | null;
         }
       >();
-      const nextBotMoveAt = new WeakMap<Character, number>();
+      const nextMoveAt = new WeakMap<Character, number>();
       const botStrategies = new WeakMap<Character, BotStrategyId>();
       const botStrategyLabels = new WeakMap<Character, Text>();
       // Hide all bot sprites until activated
@@ -1169,6 +1174,7 @@ function IsoRound({
       const land = (c: Character, startSquash = false) => {
         paintAt(c.gx, c.gy, c.skin);
         c.landingSquashElapsed = startSquash ? 0 : null;
+        nextMoveAt.set(c, gameNow() + POST_LANDING_MOVE_DELAY_MS);
         renderCharacterAt(c, c.gx, c.gy);
       };
 
@@ -1669,7 +1675,19 @@ function IsoRound({
 
       const moveCharacter = (c: Character, direction: Direction) => {
         if (gameOverRef.current || !startedRef.current || pausedRef.current) return false;
-        if (c.anim) return false;
+        if (c.anim) {
+          if (c.anim.elapsed > JUMP_DIRECTION_CHANGE_GRACE_MS) return false;
+          const rollbackNext = nextGridPosition(c.anim.fromX, c.anim.fromY, direction);
+          if (!isInsideBoard(rollbackNext.gx, rollbackNext.gy)) return false;
+          if (rollbackNext.gx === c.anim.toX && rollbackNext.gy === c.anim.toY) return false;
+          c.gx = c.anim.fromX;
+          c.gy = c.anim.fromY;
+          c.anim = null;
+          c.landingSquashElapsed = null;
+          updateMinimap();
+          renderCharacterAt(c, c.gx, c.gy);
+        }
+        if (gameNow() < (nextMoveAt.get(c) ?? 0)) return false;
         if (gameNow() < c.stunnedUntil) return false;
         const next = nextGridPosition(c.gx, c.gy, direction);
         if (!isInsideBoard(next.gx, next.gy)) return false;
@@ -1856,7 +1874,7 @@ function IsoRound({
         for (const en of enemies) {
           if (en.anim) continue;
           if (gameNow() < en.stunnedUntil) continue;
-          if (gameNow() < (nextBotMoveAt.get(en) ?? 0)) continue;
+          if (gameNow() < (nextMoveAt.get(en) ?? 0)) continue;
 
           const directions = DIRECTIONS.map((direction) => ({
             direction,
@@ -1962,9 +1980,7 @@ function IsoRound({
           );
           const chosen = ranked[0].direction;
 
-          if (moveCharacter(en, chosen)) {
-            nextBotMoveAt.set(en, gameNow() + AUTO_MOVE_COOLDOWN_MS);
-          }
+          moveCharacter(en, chosen);
         }
       };
 

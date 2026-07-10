@@ -1,6 +1,8 @@
 import type { Direction } from "@/game/game-constants";
 
 export const AUTO_MOVE_COOLDOWN_MS = 200;
+export const POST_LANDING_MOVE_DELAY_MS = 120;
+export const JUMP_DIRECTION_CHANGE_GRACE_MS = 100;
 
 export const directionFromKeyboardKey = (key: string): Direction | null => {
   switch (key) {
