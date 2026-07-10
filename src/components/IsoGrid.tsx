@@ -186,7 +186,7 @@ interface IsoRoundProps {
 
 const GAME_TEXTURE_DATA = {
   scaleMode: "linear",
-  autoGenerateMipmaps: true,
+  autoGenerateMipmaps: false,
 } as const;
 
 const GAME_TEXTURE_ASSETS = [
@@ -209,6 +209,7 @@ const GAME_TEXTURE_LOAD_OPTIONS = {
 const DEBUG_HUD_ENABLED = false;
 const GAME_VIEW_TOP_RESERVED_PX = 178;
 const GAME_VIEW_BOTTOM_RESERVED_PX = 92;
+const GAME_VIEW_MOBILE_BOTTOM_RESERVED_PX = 320;
 const PLAYER_SCORE_OFFSET_Y = -126;
 
 const JUMP_APEX_STRETCH = 0.08;
@@ -358,7 +359,7 @@ function IsoRound({
   const gameOverRef = useRef(false);
   const [started, setStarted] = useState(false);
   const startedRef = useRef(false);
-  const [startCountdown, setStartCountdown] = useState(3);
+  const [startCountdown, setStartCountdown] = useState<number | null>(3);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
@@ -625,6 +626,11 @@ function IsoRound({
     const manualTicker =
       window.__HOP_AND_FILL_MANUAL_TICKER__ === true ||
       (manualTickerParam !== null && manualTickerParam !== "0" && manualTickerParam !== "false");
+    const isCoarseInput =
+      window.innerWidth <= 768 ||
+      (typeof window.matchMedia === "function" &&
+        (window.matchMedia("(pointer: coarse)").matches ||
+          window.matchMedia("(hover: none)").matches));
     const destroyPixiApp = () => {
       if (!appInitialized || appDestroyed) return;
       appDestroyed = true;
@@ -640,17 +646,14 @@ function IsoRound({
 
     (async () => {
       try {
-        // Detect coarse-pointer / mobile to lower resolution and disable AA.
-        const isCoarse =
-          typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
         const dpr = window.devicePixelRatio || 1;
         // High-DPR mobile devices (e.g. iPhone Pro at DPR 3) ate 9× pixels.
-        // Cap aggressively on mobile; cap at 2 on desktop.
-        const resolution = isCoarse ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+        // Keep high-DPR phones crisp; cap above DPR 3 to avoid excessive canvas memory.
+        const resolution = Math.min(dpr, 3);
         await app.init({
           resizeTo: window,
           backgroundAlpha: 0,
-          antialias: !isCoarse,
+          antialias: true,
           resolution,
           autoDensity: true,
           autoStart: !manualTicker,
@@ -1029,7 +1032,13 @@ function IsoRound({
         const gridCx = (minX + maxX) / 2;
         const gridCy = (minY + maxY) / 2;
         const reservedTop = Math.min(GAME_VIEW_TOP_RESERVED_PX, app.screen.height * 0.32);
-        const reservedBottom = Math.min(GAME_VIEW_BOTTOM_RESERVED_PX, app.screen.height * 0.22);
+        const bottomReservePx = isCoarseInput
+          ? GAME_VIEW_MOBILE_BOTTOM_RESERVED_PX
+          : GAME_VIEW_BOTTOM_RESERVED_PX;
+        const reservedBottom = Math.min(
+          bottomReservePx,
+          app.screen.height * (isCoarseInput ? 0.45 : 0.22),
+        );
         const playTop = reservedTop;
         const playBottom = Math.max(playTop + 120, app.screen.height - reservedBottom);
         const playCenterY = (playTop + playBottom) / 2;
@@ -1055,9 +1064,12 @@ function IsoRound({
           const rawH = maxY - minY + TILE_SIZE;
           // Reserve screen space occupied by HUD so panels do not cover the board.
           const padX = 24;
+          const bottomReservePx = isCoarseInput
+            ? GAME_VIEW_MOBILE_BOTTOM_RESERVED_PX
+            : GAME_VIEW_BOTTOM_RESERVED_PX;
           const padY =
             Math.min(GAME_VIEW_TOP_RESERVED_PX, app.screen.height * 0.32) +
-            Math.min(GAME_VIEW_BOTTOM_RESERVED_PX, app.screen.height * 0.22);
+            Math.min(bottomReservePx, app.screen.height * (isCoarseInput ? 0.45 : 0.22));
           const availW = Math.max(100, app.screen.width - padX * 2);
           const availH = Math.max(100, app.screen.height - padY);
           const fit = Math.min(availW / rawW, availH / rawH);
@@ -2200,7 +2212,7 @@ function IsoRound({
       {/* Scoreboard */}
       <div
         {...backgroundInertProps}
-        className="tt-no-select tt-chip fixed z-50 flex -translate-y-1/2 flex-col items-stretch gap-2 px-3 py-3 text-[18px] font-bold"
+        className="tt-no-select tt-chip tt-scoreboard fixed z-50 flex -translate-y-1/2 flex-col items-stretch gap-2 px-3 py-3 text-[18px] font-bold"
         style={{
           touchAction: "none",
           left: "calc(env(safe-area-inset-left, 0px) + 16px)",
@@ -2229,7 +2241,7 @@ function IsoRound({
       {/* Timer */}
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed left-1/2 z-50 -translate-x-1/2 px-6 py-2"
+        className="tt-chip tt-timer fixed left-1/2 z-50 -translate-x-1/2 px-6 py-2"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
       >
         <span
@@ -2249,7 +2261,7 @@ function IsoRound({
       {/* Match wins HUD (player vs bots, first to 3) */}
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed z-50 px-4 py-2 text-[14px] font-bold"
+        className="tt-chip tt-match-hud fixed z-50 px-4 py-2 text-[14px] font-bold"
         style={{
           touchAction: "none",
           left: "calc(env(safe-area-inset-left, 0px) + 16px)",
@@ -2383,7 +2395,7 @@ function IsoRound({
           setSettingsOpen(true);
         }}
         disabled={gameOver}
-        className="tt-chip fixed right-4 z-50 flex h-14 w-14 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
+        className="tt-chip tt-settings-button fixed right-4 z-50 flex h-14 w-14 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
         aria-label="Settings"
       >
@@ -2452,7 +2464,7 @@ function IsoRound({
 
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed left-4 z-50 flex items-center gap-3 px-3 py-2"
+        className="tt-chip tt-zoom-control fixed left-4 z-50 flex items-center gap-3 px-3 py-2"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
         <ZoomIn size={24} aria-hidden="true" className="text-[var(--tt-text-primary)]" />
