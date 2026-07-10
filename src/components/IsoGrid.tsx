@@ -365,6 +365,7 @@ function IsoRound({
   const [started, setStarted] = useState(false);
   const startedRef = useRef(false);
   const [startCountdown, setStartCountdown] = useState<number | null>(3);
+  const [gameSceneReady, setGameSceneReady] = useState(false);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
@@ -376,9 +377,20 @@ function IsoRound({
   const [gameplayTutorialTarget, setGameplayTutorialTarget] =
     useState<GameplayTutorialTarget>(null);
   const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(null);
+  const gameSceneLoading = !gameSceneReady && !renderError && !gameOver;
   const startCountdownVisible =
-    startCountdown !== null && !renderError && !gameplayTutorialStep && !settingsOpen && !gameOver;
-  const modalOpen = gameOver || settingsOpen || gameplayTutorialStep !== null || startCountdown !== null;
+    gameSceneReady &&
+    startCountdown !== null &&
+    !renderError &&
+    !gameplayTutorialStep &&
+    !settingsOpen &&
+    !gameOver;
+  const modalOpen =
+    gameOver ||
+    settingsOpen ||
+    gameplayTutorialStep !== null ||
+    startCountdown !== null ||
+    gameSceneLoading;
   const modalOpenRef = useRef(modalOpen);
   const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>(
     createGameplayTutorialSeenState(new Set()),
@@ -468,6 +480,7 @@ function IsoRound({
   useEffect(() => {
     if (
       startCountdown === null ||
+      !gameSceneReady ||
       settingsOpen ||
       gameplayTutorialStep !== null ||
       gameOver ||
@@ -487,7 +500,7 @@ function IsoRound({
     }, 500);
 
     return () => window.clearTimeout(timer);
-  }, [gameOver, gameplayTutorialStep, renderError, settingsOpen, startCountdown]);
+  }, [gameOver, gameSceneReady, gameplayTutorialStep, renderError, settingsOpen, startCountdown]);
   useEffect(() => {
     const seen = readInitialGameplayTutorialSeen();
     shownGameplayTutorialRef.current = seen;
@@ -615,6 +628,7 @@ function IsoRound({
     if (!host) return;
 
     setRenderError(null);
+    setGameSceneReady(false);
     gameSceneReadyRef.current = false;
 
     const app = new Application();
@@ -2134,6 +2148,7 @@ function IsoRound({
       syncActiveGameplayTutorialTarget();
       renderManualFrame();
       gameSceneReadyRef.current = true;
+      setGameSceneReady(true);
       activateInitialPaintTutorial();
     })().catch((err) => {
       if (destroyed) return;
@@ -2193,6 +2208,21 @@ function IsoRound({
             className="tt-dialog max-w-sm px-8 py-6 text-center text-[18px] font-bold"
           >
             {renderError}
+          </div>
+        </div>
+      )}
+
+      {gameSceneLoading && (
+        <div
+          className="tt-overlay fixed inset-0 z-[85] flex items-center justify-center p-4"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className="tt-dialog px-8 py-6 text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[rgba(112,98,80,0.22)] border-t-[var(--tt-text-primary)]" />
+            <div className="mt-4 text-[18px] font-bold text-[var(--tt-text-primary)]">
+              Loading field
+            </div>
           </div>
         </div>
       )}
