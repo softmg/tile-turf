@@ -225,6 +225,7 @@ const STUN_STARS_Y_OFFSET = -118;
 const BOMB_DANGER_MARKER_Y_OFFSET = -18;
 const CHEST_BOB_AMPLITUDE_PX = 3;
 const CHEST_PULSE_SCALE = 0.035;
+const CHEST_SPAWN_DISTANCE_DELTA = 3;
 const BOOTS_BOB_AMPLITUDE_PX = 4;
 const BOOTS_TILT_RADIANS = 0.12;
 const ARROW_PULSE_SCALE = 0.08;
@@ -1194,15 +1195,55 @@ function IsoRound({
 
       const rng = createSeededRng(seedFromParts("tile-turf", level, roundIndex));
       const randomCell = () => ({ gx: rng.int(BOARD_SIZE), gy: rng.int(BOARD_SIZE) });
-      const randomUnoccupiedCell = () => {
-        let cell = randomCell();
-        for (let i = 0; i < 50; i++) {
-          cell = randomCell();
-          const occupiedByPlayer = player.gx === cell.gx && player.gy === cell.gy;
-          const occupiedByEnemy = enemies.some((c) => c.gx === cell.gx && c.gy === cell.gy);
-          if (!occupiedByPlayer && !occupiedByEnemy) break;
+      const occupiedCharacters = () => [player, ...enemies];
+      const isCharacterOccupiedCell = (gx: number, gy: number, characters: Character[]) =>
+        characters.some((c) => c.gx === gx && c.gy === gy);
+      const unoccupiedCells = (characters = occupiedCharacters()) => {
+        const cells: Array<{ gx: number; gy: number }> = [];
+        for (let gx = 0; gx < BOARD_SIZE; gx++) {
+          for (let gy = 0; gy < BOARD_SIZE; gy++) {
+            if (!isCharacterOccupiedCell(gx, gy, characters)) cells.push({ gx, gy });
+          }
         }
-        return cell;
+        return cells;
+      };
+      const randomUnoccupiedCell = () => {
+        const cells = unoccupiedCells();
+        return cells.length > 0 ? cells[rng.int(cells.length)] : randomCell();
+      };
+      const fairChestSpawnCell = () => {
+        const characters = occupiedCharacters();
+        if (characters.length <= 1) return randomUnoccupiedCell();
+
+        let bestDistanceDelta = Infinity;
+        let bestMinDistance = -Infinity;
+        let best: Array<{ gx: number; gy: number }> = [];
+        for (const cell of unoccupiedCells(characters)) {
+          let minDistance = Infinity;
+          let maxDistance = -Infinity;
+          for (const character of characters) {
+            const distance = manhattanDistance({ gx: character.gx, gy: character.gy }, cell);
+            minDistance = Math.min(minDistance, distance);
+            maxDistance = Math.max(maxDistance, distance);
+          }
+          const distanceDelta = maxDistance - minDistance;
+          if (distanceDelta > CHEST_SPAWN_DISTANCE_DELTA) continue;
+
+          if (
+            distanceDelta < bestDistanceDelta ||
+            (distanceDelta === bestDistanceDelta && minDistance > bestMinDistance)
+          ) {
+            bestDistanceDelta = distanceDelta;
+            bestMinDistance = minDistance;
+            best = [cell];
+            continue;
+          }
+          if (distanceDelta === bestDistanceDelta && minDistance === bestMinDistance) {
+            best.push(cell);
+          }
+        }
+
+        return best.length > 0 ? best[rng.int(best.length)] : randomUnoccupiedCell();
       };
 
       interface GameTimer {
@@ -1248,7 +1289,7 @@ function IsoRound({
       };
 
       const spawnChest = () => {
-        const { gx, gy } = randomUnoccupiedCell();
+        const { gx, gy } = fairChestSpawnCell();
         placeChest(gx, gy);
       };
 
