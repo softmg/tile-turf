@@ -109,7 +109,14 @@ export const BOOST_DURATION = 12000;
 export const BOOTS_RESPAWN_MIN_MS = 2500;
 export const BOOTS_RESPAWN_MAX_MS = 3750;
 export const ARROW_RESPAWN_MS = 20000 / 3;
-export const BOT_TARGET_REACTION_DELAY_MS = 400;
+export const BOT_TARGET_REACTION_DELAY_MIN_MS = 400;
+export const BOT_TARGET_REACTION_MAX_MS = 2000;
+export const botTargetReactionDelayForLevel = (lv: number) => {
+  const t = Math.min(1, Math.max(0, (lv - 1) / (MAX_LEVEL - 1)));
+  return Math.round(
+    BOT_TARGET_REACTION_MAX_MS + (BOT_TARGET_REACTION_DELAY_MIN_MS - BOT_TARGET_REACTION_MAX_MS) * t,
+  );
+};
 export const BOT_SUBOPTIMAL_ROUTE_CHANCE = 0.2;
 export const BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS = 1;
 export const BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS = 2;

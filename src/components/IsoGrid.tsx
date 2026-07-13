@@ -30,7 +30,6 @@ import {
   BOT_SUBOPTIMAL_ROUTE_CHANCE,
   BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS,
   BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS,
-  BOT_TARGET_REACTION_DELAY_MS,
   BOOTS_RESPAWN_MAX_MS,
   BOOTS_RESPAWN_MIN_MS,
   DIRECTIONS,
@@ -46,6 +45,7 @@ import {
   UNPAINTED_MINIMAP_COLOR,
   UNPAINTED_TILE_URL,
   WINS_TO_PASS,
+  botTargetReactionDelayForLevel,
   botsForLevel,
   roundDurationForLevel,
   type Direction,
@@ -225,6 +225,7 @@ const STUN_STARS_Y_OFFSET = -118;
 const BOMB_DANGER_MARKER_Y_OFFSET = -18;
 const CHEST_BOB_AMPLITUDE_PX = 3;
 const CHEST_PULSE_SCALE = 0.035;
+const CHEST_MIN_SPAWN_DISTANCE = 3;
 const CHEST_SPAWN_DISTANCE_DELTA = 3;
 const BOOTS_BOB_AMPLITUDE_PX = 4;
 const BOOTS_TILT_RADIANS = 0.12;
@@ -1215,9 +1216,8 @@ function IsoRound({
         const characters = occupiedCharacters();
         if (characters.length <= 1) return randomUnoccupiedCell();
 
-        let bestDistanceDelta = Infinity;
-        let bestMinDistance = -Infinity;
-        let best: Array<{ gx: number; gy: number }> = [];
+        const distantCandidates: Array<{ gx: number; gy: number }> = [];
+        const fairCandidates: Array<{ gx: number; gy: number }> = [];
         for (const cell of unoccupiedCells(characters)) {
           let minDistance = Infinity;
           let maxDistance = -Infinity;
@@ -1226,24 +1226,19 @@ function IsoRound({
             minDistance = Math.min(minDistance, distance);
             maxDistance = Math.max(maxDistance, distance);
           }
+          if (minDistance < CHEST_MIN_SPAWN_DISTANCE) continue;
+
+          distantCandidates.push(cell);
           const distanceDelta = maxDistance - minDistance;
           if (distanceDelta > CHEST_SPAWN_DISTANCE_DELTA) continue;
 
-          if (
-            distanceDelta < bestDistanceDelta ||
-            (distanceDelta === bestDistanceDelta && minDistance > bestMinDistance)
-          ) {
-            bestDistanceDelta = distanceDelta;
-            bestMinDistance = minDistance;
-            best = [cell];
-            continue;
-          }
-          if (distanceDelta === bestDistanceDelta && minDistance === bestMinDistance) {
-            best.push(cell);
-          }
+          fairCandidates.push(cell);
         }
 
-        return best.length > 0 ? best[rng.int(best.length)] : randomUnoccupiedCell();
+        if (fairCandidates.length > 0) return fairCandidates[rng.int(fairCandidates.length)];
+        return distantCandidates.length > 0
+          ? distantCandidates[rng.int(distantCandidates.length)]
+          : randomUnoccupiedCell();
       };
 
       interface GameTimer {
@@ -1283,7 +1278,7 @@ function IsoRound({
       const placeChest = (gx: number, gy: number) => {
         chest.gx = gx;
         chest.gy = gy;
-        botTargetReactionUntil = gameNow() + BOT_TARGET_REACTION_DELAY_MS;
+        botTargetReactionUntil = gameNow() + botTargetReactionDelayForLevel(level);
         placeChestSprite(chestSprite, gx, gy);
         requestGameplayTutorial("chest", spriteTutorialTarget(chestSprite, 78, -40));
       };
@@ -1517,7 +1512,7 @@ function IsoRound({
         const gfx = createBootsSprite(bootsTex, gx, gy);
         depthLayer.addChild(gfx);
         boots = { gx, gy, gfx, baseScale: gfx.scale.x };
-        botTargetReactionUntil = gameNow() + BOT_TARGET_REACTION_DELAY_MS;
+        botTargetReactionUntil = gameNow() + botTargetReactionDelayForLevel(level);
         requestGameplayTutorial("boots", spriteTutorialTarget(gfx, 74));
       };
       const spawnBoots = () => {
@@ -2520,7 +2515,7 @@ function IsoRound({
               </span>{" "}
               · React{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
-                {BOT_TARGET_REACTION_DELAY_MS}ms
+                {botTargetReactionDelayForLevel(level)}ms
               </span>
             </div>
             <div className="mt-3 text-[18px] text-[var(--tt-text-secondary)]">
