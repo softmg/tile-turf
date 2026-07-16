@@ -207,6 +207,29 @@
   .tt-overlay {
     background-color: var(--tt-overlay-dark);
     backdrop-filter: blur(8px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: max(1rem, env(safe-area-inset-bottom, 0px)) !important;
+    padding-left: max(1rem, env(safe-area-inset-left, 0px)) !important;
+    padding-right: max(1rem, env(safe-area-inset-right, 0px)) !important;
+    padding-top: max(1rem, env(safe-area-inset-top, 0px)) !important;
+  }
+
+  .tt-overlay > .tt-dialog,
+  .tt-overlay > .tt-window {
+    box-sizing: border-box;
+    flex-shrink: 0;
+    max-height: calc(
+      100dvh - max(1rem, env(safe-area-inset-top, 0px)) -
+        max(1rem, env(safe-area-inset-bottom, 0px))
+    );
+    max-width: calc(
+      100vw - max(1rem, env(safe-area-inset-left, 0px)) -
+        max(1rem, env(safe-area-inset-right, 0px))
+    );
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .tt-window {
@@ -462,5 +485,13 @@
     color: var(--tt-text-secondary);
     cursor: not-allowed;
     opacity: 0.55;
+  }
+
+  @media (max-width: 420px), (max-height: 600px) {
+    .tt-overlay > .tt-dialog,
+    .tt-overlay > .tt-window {
+      border-radius: 28px;
+      padding: clamp(1rem, 4dvh, 1.5rem) !important;
+    }
   }
 }

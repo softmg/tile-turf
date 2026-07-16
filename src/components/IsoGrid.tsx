@@ -868,7 +868,7 @@ function IsoRound({
       const botRoutePlans = new WeakMap<Character, BotRoutePlan>();
       const nextMoveAt = new WeakMap<Character, number>();
       const botStrategies = new WeakMap<Character, BotStrategyId>();
-      const botStrategyLabels = new WeakMap<Character, Text>();
+      const botScoreTexts = new WeakMap<Character, Text>();
       // Hide all bot sprites until activated
       for (const e of allEnemies) {
         e.sprite.visible = false;
@@ -876,36 +876,35 @@ function IsoRound({
         e.stunStars.visible = false;
       }
 
-      const botStrategyEmoji = (strategy: BotStrategyId) => (strategy === "paint" ? "🎨" : "🧰");
-      const placeBotStrategyLabel = (c: Character) => {
-        const label = botStrategyLabels.get(c);
+      const placeBotScoreText = (c: Character) => {
+        const label = botScoreTexts.get(c);
         if (!label) return;
         label.x = c.sprite.x;
-        label.y = c.sprite.y - 124;
-        label.zIndex = c.sprite.zIndex + 0.05;
+        label.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
+        label.zIndex = c.sprite.zIndex + 0.02;
       };
-      const setBotStrategyLabel = (c: Character, strategy: BotStrategyId, visible: boolean) => {
-        let label = botStrategyLabels.get(c);
+      const setBotScoreText = (c: Character, score: number, visible: boolean) => {
+        let label = botScoreTexts.get(c);
         if (!label) {
           label = new Text({
             text: "",
             style: {
-              fontFamily: "system-ui, Apple Color Emoji, Segoe UI Emoji, sans-serif",
-              fontSize: 26,
+              fontFamily: "ui-rounded, system-ui, sans-serif",
+              fontSize: 22,
               fontWeight: "900",
               fill: 0xffffff,
-              stroke: { color: 0x111111, width: 4 },
+              stroke: { color: 0x111111, width: 5 },
               align: "center",
             },
           });
-          label.label = "bot-strategy-label";
+          label.label = "bot-score";
           label.anchor.set(0.5, 0.5);
           depthLayer.addChild(label);
-          botStrategyLabels.set(c, label);
+          botScoreTexts.set(c, label);
         }
-        label.text = botStrategyEmoji(strategy);
+        label.text = String(score);
         label.visible = visible;
-        placeBotStrategyLabel(c);
+        placeBotScoreText(c);
       };
 
       let gameTimeMs = 0;
@@ -1117,7 +1116,7 @@ function IsoRound({
           playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
           playerScoreText.zIndex = c.sprite.zIndex + 0.02;
         } else {
-          placeBotStrategyLabel(c);
+          placeBotScoreText(c);
         }
       };
 
@@ -1143,7 +1142,7 @@ function IsoRound({
           playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
           playerScoreText.zIndex = c.sprite.zIndex + 0.02;
         } else {
-          placeBotStrategyLabel(c);
+          placeBotScoreText(c);
         }
 
         const stars = c.stunStars;
@@ -1173,15 +1172,24 @@ function IsoRound({
       };
 
       const rng = createSeededRng(seedFromParts("tile-turf", level, roundIndex));
-      const randomCell = () => ({ gx: rng.int(BOARD_SIZE), gy: rng.int(BOARD_SIZE) });
       const occupiedCharacters = () => [player, ...enemies];
-      const randomUnoccupiedCell = () => {
-        const cells = unoccupiedCells(occupiedCharacters());
-        return cells.length > 0 ? cells[rng.int(cells.length)] : randomCell();
+      const occupiedItemCells = () => [
+        ...bombs.map(({ gx, gy }) => ({ gx, gy })),
+        ...(boots ? [{ gx: boots.gx, gy: boots.gy }] : []),
+        ...(arrow ? [{ gx: arrow.gx, gy: arrow.gy }] : []),
+      ];
+      const randomAvailableItemCell = () => {
+        const cells = unoccupiedCells([
+          ...occupiedCharacters(),
+          { gx: chest.gx, gy: chest.gy },
+          ...occupiedItemCells(),
+        ]);
+        return cells.length > 0 ? cells[rng.int(cells.length)] : null;
       };
       const fairChestSpawnCell = () =>
         chooseFairSpawnCell({
           characters: occupiedCharacters(),
+          blockedCells: occupiedItemCells(),
           minDistance: CHEST_MIN_SPAWN_DISTANCE,
           maxDistanceDelta: CHEST_SPAWN_DISTANCE_DELTA,
           rng,
@@ -1302,6 +1310,7 @@ function IsoRound({
           bankedScores = { ...bankedScores, [c.skin.id]: bankedScores[c.skin.id] + gained };
           setBanked(bankedScores);
           if (c === player) updatePlayerScoreText();
+          else setBotScoreText(c, bankedScores[c.skin.id], true);
           clearOwnedBy(c.skin.id);
         }
         spawnChest();
@@ -1372,7 +1381,12 @@ function IsoRound({
 
       function spawnBomb() {
         if (gameOverRef.current || destroyed || !startedRef.current) return;
-        const { gx, gy } = randomCell();
+        const spawnCell = randomAvailableItemCell();
+        if (!spawnCell) {
+          scheduleGame(spawnBomb, rng.range(5000, 8000));
+          return;
+        }
+        const { gx, gy } = spawnCell;
         spawnBombAt(gx, gy, true);
       }
 
@@ -1424,7 +1438,12 @@ function IsoRound({
       };
       const spawnBoots = () => {
         if (gameOverRef.current || destroyed || !startedRef.current || boots) return;
-        const { gx, gy } = randomCell();
+        const spawnCell = randomAvailableItemCell();
+        if (!spawnCell) {
+          scheduleGame(spawnBoots, rng.range(BOOTS_RESPAWN_MIN_MS, BOOTS_RESPAWN_MAX_MS));
+          return;
+        }
+        const { gx, gy } = spawnCell;
         placeBoots(gx, gy);
       };
 
@@ -1474,7 +1493,12 @@ function IsoRound({
 
       function spawnArrow() {
         if (gameOverRef.current || destroyed || !startedRef.current) return;
-        const { gx, gy } = randomCell();
+        const spawnCell = randomAvailableItemCell();
+        if (!spawnCell) {
+          scheduleGame(spawnArrow, ARROW_RESPAWN_MS);
+          return;
+        }
+        const { gx, gy } = spawnCell;
         spawnArrowAt(gx, gy, 0, true);
       }
 
@@ -1541,18 +1565,18 @@ function IsoRound({
         spawnChest();
 
         if (isBombUnlocked(level, roundNumber)) {
-          const { gx, gy } = randomUnoccupiedCell();
-          spawnBombAt(gx, gy, true);
+          const spawnCell = randomAvailableItemCell();
+          if (spawnCell) spawnBombAt(spawnCell.gx, spawnCell.gy, true);
         }
 
         if (isBootsUnlocked(level)) {
-          const { gx, gy } = randomUnoccupiedCell();
-          placeBoots(gx, gy);
+          const spawnCell = randomAvailableItemCell();
+          if (spawnCell) placeBoots(spawnCell.gx, spawnCell.gy);
         }
 
         if (isArrowUnlocked(level)) {
-          const { gx, gy } = randomUnoccupiedCell();
-          spawnArrowAt(gx, gy, 0, true);
+          const spawnCell = randomAvailableItemCell();
+          if (spawnCell) spawnArrowAt(spawnCell.gx, spawnCell.gy, 0, true);
         }
       };
 
@@ -1614,11 +1638,10 @@ function IsoRound({
                 BOT_STRATEGY_BY_SLOT[i] ??
                 "chest";
             botStrategies.set(allEnemies[i], strategy);
-            setBotStrategyLabel(allEnemies[i], strategy, true);
+            setBotScoreText(allEnemies[i], bankedScores[allEnemies[i].skin.id], true);
             land(allEnemies[i]);
           } else {
-            const strategy = botStrategies.get(allEnemies[i]) ?? "chest";
-            setBotStrategyLabel(allEnemies[i], strategy, false);
+            setBotScoreText(allEnemies[i], 0, false);
           }
         }
         updateMinimap();
@@ -2208,7 +2231,7 @@ function IsoRound({
       {gameOver && (
         <div className="tt-overlay fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
-            className="tt-dialog min-w-[280px] px-8 py-7 text-center"
+            className="tt-dialog w-full max-w-md px-8 py-7 text-center"
             role="dialog"
             aria-modal="true"
             aria-labelledby="round-over-title"
@@ -2258,46 +2281,6 @@ function IsoRound({
                 );
               })}
             </div>
-            {history.length > 0 && (
-              <>
-                <div className="mt-6 text-left text-[18px] font-bold text-[var(--tt-text-secondary)]">
-                  Previous rounds
-                </div>
-                <div className="mt-2 space-y-1.5 text-left max-h-48 overflow-y-auto pr-1">
-                  {history.map((h, i) => (
-                    <div key={i} className="tt-panel px-4 py-2">
-                      <div className="flex items-center justify-between text-[14px] text-[var(--tt-text-secondary)]">
-                        <span className="font-bold">
-                          L{h.level} · R{h.round}
-                        </span>
-                        <span
-                          className="font-bold"
-                          style={{ color: h.winner ? SKINS[h.winner].uiColor : undefined }}
-                        >
-                          {h.winner ? `${SKINS[h.winner].name} won` : "Tie"}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                        {activeSkins.map((id) => (
-                          <span
-                            key={id}
-                            className="flex items-center gap-1 font-mono text-[11px] tabular-nums"
-                          >
-                            <span
-                              className="inline-block h-2 w-2 rounded-full"
-                              style={{ background: SKINS[id].uiColor }}
-                            />
-                            <span className="text-[var(--tt-text-primary)]">
-                              {h.scores[id] ?? 0}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
             <button
               type="button"
               onClick={() => onRoundEnd(isTie ? null : winner, banked)}
@@ -2339,7 +2322,7 @@ function IsoRound({
           className="tt-overlay fixed inset-0 z-[95] flex items-center justify-center p-4"
         >
           <div
-            className="tt-dialog min-w-[280px] max-w-[90vw] px-8 py-7 text-center"
+            className="tt-dialog w-full max-w-md px-8 py-7 text-center"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pause-title"
@@ -2698,24 +2681,50 @@ function GameplayTutorial({
   onConfirm: () => void;
 }) {
   const copy = GAMEPLAY_TUTORIAL_COPY[step];
-  const viewportW = typeof window === "undefined" ? 1024 : window.innerWidth;
-  const viewportH = typeof window === "undefined" ? 768 : window.innerHeight;
-  const modalW = Math.min(340, Math.max(280, viewportW - 32));
-  const modalH = 190;
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === "undefined" ? 1024 : window.innerWidth,
+    height: typeof window === "undefined" ? 768 : window.innerHeight,
+  }));
+
+  useEffect(() => {
+    const updateViewport = () =>
+      setViewport({
+        width: window.visualViewport?.width ?? window.innerWidth,
+        height: window.visualViewport?.height ?? window.innerHeight,
+      });
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener("resize", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+    };
+  }, []);
+
+  const viewportW = viewport.width;
+  const viewportH = viewport.height;
+  const viewportPadding = 16;
+  const modalW = Math.max(1, Math.min(340, viewportW - viewportPadding * 2));
+  const estimatedModalH = Math.min(230, Math.max(1, viewportH - viewportPadding * 2));
   const gap = 22;
   const targetX = target?.x ?? viewportW / 2;
   const targetY = target?.y ?? viewportH / 2;
   const radius = target?.radius ?? 96;
-  const modalLeft =
+  const preferredModalLeft =
     targetX + radius + modalW + gap < viewportW
       ? targetX + radius + gap
       : targetX - radius - modalW - gap > 0
         ? targetX - radius - modalW - gap
         : (viewportW - modalW) / 2;
-  const modalTop = Math.min(
-    viewportH - modalH - 16,
-    Math.max(16, targetY - Math.round(modalH / 2)),
+  const modalLeft = Math.min(
+    Math.max(viewportPadding, preferredModalLeft),
+    Math.max(viewportPadding, viewportW - modalW - viewportPadding),
   );
+  const modalTop = Math.min(
+    Math.max(viewportPadding, viewportH - estimatedModalH - viewportPadding),
+    Math.max(viewportPadding, targetY - Math.round(estimatedModalH / 2)),
+  );
+  const modalMaxHeight = Math.max(1, viewportH - modalTop - viewportPadding);
 
   return (
     <div className="tt-no-select fixed inset-0 z-[92]" style={{ touchAction: "none" }}>
@@ -2739,6 +2748,10 @@ function GameplayTutorial({
           left: modalLeft,
           top: modalTop,
           width: modalW,
+          maxHeight: modalMaxHeight,
+          boxSizing: "border-box",
+          overflowY: "auto",
+          overscrollBehavior: "contain",
           boxShadow: "0 16px 36px rgba(0,0,0,0.34)",
         }}
       >
