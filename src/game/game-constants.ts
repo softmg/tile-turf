@@ -73,6 +73,10 @@ export const UNPAINTED_MINIMAP_COLOR = 0xf5d0b0;
 export const PLAYER_SKIN: SkinId = "plush";
 export const BOT_SKINS: SkinId[] = ["banana", "dragon", "cat"];
 export const SKIN_IDS: SkinId[] = ["plush", "banana", "dragon", "cat"];
+export type BotStrategyId = "chest" | "paint";
+// Strategy assignment by active bot slot. Override per skin below for hand-tuned setups.
+export const BOT_STRATEGY_BY_SLOT: BotStrategyId[] = ["chest", "paint", "chest"];
+export const BOT_STRATEGY_BY_SKIN_OVERRIDE: Partial<Record<SkinId, BotStrategyId>> = {};
 
 export const zeroScores = (): Record<SkinId, number> => ({
   plush: 0,
@@ -87,7 +91,6 @@ export const BOMB_UNLOCK_LEVEL = 2;
 export const BOOTS_UNLOCK_LEVEL = 3;
 export const ARROW_UNLOCK_LEVEL = 4;
 export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : 3);
-export const enemyIntervalForLevel = (lv: number) => Math.max(220, 750 - (lv - 1) * 60);
 export const roundDurationForLevel = (lv: number) =>
   lv <= 2 ? 30 : lv <= 4 ? 45 : lv <= 6 ? 60 : lv <= 8 ? 75 : 90;
 
@@ -98,13 +101,33 @@ export const ENEMY_SPAWN_POSITIONS: Array<[number, number]> = [
   [4, 4],
 ];
 
-export const BASE_JUMP_DURATION = 380;
-export const BOOST_JUMP_DURATION = 150;
+export const BASE_JUMP_DURATION = 422;
+export const BOOST_SPEED_MULTIPLIER = 1.5;
+export const BOOST_JUMP_DURATION = BASE_JUMP_DURATION / BOOST_SPEED_MULTIPLIER;
 export const STUN_DURATION = 3000;
 export const BOOST_DURATION = 12000;
+export const BOOTS_RESPAWN_MIN_MS = 2500;
+export const BOOTS_RESPAWN_MAX_MS = 3750;
+export const ARROW_RESPAWN_MS = 20000 / 3;
+export const BOT_TARGET_REACTION_DELAY_MIN_MS = 400;
+export const BOT_TARGET_REACTION_MAX_MS = 2000;
+export const botTargetReactionDelayForLevel = (lv: number) => {
+  const t = Math.min(1, Math.max(0, (lv - 1) / (MAX_LEVEL - 1)));
+  return Math.round(
+    BOT_TARGET_REACTION_MAX_MS + (BOT_TARGET_REACTION_DELAY_MIN_MS - BOT_TARGET_REACTION_MAX_MS) * t,
+  );
+};
+export const BOT_SUBOPTIMAL_ROUTE_CHANCE = 0.2;
+export const BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS = 1;
+export const BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS = 2;
+export const BOT_BOOTS_DISTANCE_RATIO = 0.65;
+// Paint strategy starts when the bot's chest distance is at least this multiple of the nearest
+// rival character's (the player or another bot).
+export const BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO = 1.2;
 export const DIRECTIONS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
 
 export const LS_UNLOCKED = "iso_unlocked_level";
+export const LS_FIRST_LAUNCH_DONE = "isogrid:first-launch-done:v1";
 export const LS_GAMEPLAY_TUTORIAL_SEEN = "isogrid:gameplay-tutorial:v1";
 
 export interface RoundHistoryEntry {

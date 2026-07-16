@@ -1,0 +1,4 @@
+interface:
+  display_name: "Yandex Games ASO"
+  short_description: "Prepare bilingual Yandex Games store assets"
+  default_prompt: "Use $yagames-aso to prepare Russian and English Yandex Games copy and screenshots for this game."

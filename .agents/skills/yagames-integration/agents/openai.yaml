@@ -1,0 +1,4 @@
+interface:
+  display_name: "Yandex Games Integration"
+  short_description: "Integrate and audit Yandex Games HTML5 SDK"
+  default_prompt: "Use $yagames-integration to audit this JavaScript browser game, implement the required Yandex Games SDK integration, and verify its release archive."

@@ -23,6 +23,11 @@ import {
   BOOTS_UNLOCK_LEVEL,
   BOMB_UNLOCK_LEVEL,
   BOT_SKINS,
+  BOT_STRATEGY_BY_SKIN_OVERRIDE,
+  BOT_STRATEGY_BY_SLOT,
+  BOT_SUBOPTIMAL_ROUTE_CHANCE,
+  BOOTS_RESPAWN_MAX_MS,
+  BOOTS_RESPAWN_MIN_MS,
   DIRECTIONS,
   ENEMY_SPAWN_POSITIONS,
   MAX_LEVEL,
@@ -36,16 +41,18 @@ import {
   UNPAINTED_MINIMAP_COLOR,
   UNPAINTED_TILE_URL,
   WINS_TO_PASS,
+  botTargetReactionDelayForLevel,
   botsForLevel,
-  enemyIntervalForLevel,
   roundDurationForLevel,
   type Direction,
   type RoundHistoryEntry,
   type SkinConfig,
   type SkinId,
+  ARROW_RESPAWN_MS,
+  type BotStrategyId,
   zeroScores,
 } from "@/game/game-constants";
-import { isoPos, isInsideBoard, manhattanDistance, nextGridPosition } from "@/game/grid-math";
+import { isoPos, isInsideBoard, nextGridPosition } from "@/game/grid-math";
 import {
   countOwned as countOwnedTiles,
   scoreOwners,
@@ -53,15 +60,24 @@ import {
   type OwnerGrid,
 } from "@/game/scoring";
 import { createSeededRng, seedFromParts } from "@/game/rng";
+import { chooseBotMove, type BotRoutePlan } from "@/game/bot-ai";
+import { chooseFairSpawnCell, unoccupiedCells } from "@/game/spawn-selection";
 import {
   markGameplayTutorialStepSeen,
+  readFirstLaunchDone,
   readGameplayTutorialSeenSteps,
   readUnlockedLevel,
+  writeFirstLaunchDone,
   writeUnlockedLevel,
 } from "@/game/level-state";
 import type { Character } from "@/game/entities";
 import type { ArrowState, Bomb } from "@/game/hazards";
-import { AUTO_MOVE_COOLDOWN_MS, directionFromKeyboardEvent } from "@/game/input-controls";
+import {
+  AUTO_MOVE_COOLDOWN_MS,
+  JUMP_DIRECTION_CHANGE_GRACE_MS,
+  POST_LANDING_MOVE_DELAY_MS,
+  directionFromKeyboardEvent,
+} from "@/game/input-controls";
 import { createMinimapView, MINI_CELL } from "@/game/minimap-view";
 import {
   BOMB_DETONATION_MS,
@@ -168,11 +184,12 @@ interface IsoRoundProps {
   matchWins: Record<SkinId, number>;
   history: RoundHistoryEntry[];
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
+  onExitToLevelMenu: () => void;
 }
 
 const GAME_TEXTURE_DATA = {
   scaleMode: "linear",
-  autoGenerateMipmaps: true,
+  autoGenerateMipmaps: false,
 } as const;
 
 const GAME_TEXTURE_ASSETS = [
@@ -195,6 +212,7 @@ const GAME_TEXTURE_LOAD_OPTIONS = {
 const DEBUG_HUD_ENABLED = false;
 const GAME_VIEW_TOP_RESERVED_PX = 178;
 const GAME_VIEW_BOTTOM_RESERVED_PX = 92;
+const GAME_VIEW_MOBILE_BOTTOM_RESERVED_PX = 320;
 const PLAYER_SCORE_OFFSET_Y = -126;
 
 const JUMP_APEX_STRETCH = 0.08;
@@ -205,6 +223,8 @@ const STUN_STARS_Y_OFFSET = -118;
 const BOMB_DANGER_MARKER_Y_OFFSET = -18;
 const CHEST_BOB_AMPLITUDE_PX = 3;
 const CHEST_PULSE_SCALE = 0.035;
+const CHEST_MIN_SPAWN_DISTANCE = 3;
+const CHEST_SPAWN_DISTANCE_DELTA = 3;
 const BOOTS_BOB_AMPLITUDE_PX = 4;
 const BOOTS_TILT_RADIANS = 0.12;
 const ARROW_PULSE_SCALE = 0.08;
@@ -303,6 +323,7 @@ function IsoRound({
   matchWins,
   history,
   onRoundEnd,
+  onExitToLevelMenu,
 }: IsoRoundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
@@ -341,8 +362,10 @@ function IsoRound({
   const [timeLeft, setTimeLeft] = useState(roundDuration);
   const [gameOver, setGameOver] = useState(false);
   const gameOverRef = useRef(false);
-  const [started, setStarted] = useState(true);
-  const startedRef = useRef(true);
+  const [started, setStarted] = useState(false);
+  const startedRef = useRef(false);
+  const [startCountdown, setStartCountdown] = useState<number | null>(3);
+  const [gameSceneReady, setGameSceneReady] = useState(false);
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
@@ -354,11 +377,26 @@ function IsoRound({
   const [gameplayTutorialTarget, setGameplayTutorialTarget] =
     useState<GameplayTutorialTarget>(null);
   const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(null);
-  const modalOpen = gameOver || settingsOpen || gameplayTutorialStep !== null;
+  const gameSceneLoading = !gameSceneReady && !renderError && !gameOver;
+  const startCountdownVisible =
+    gameSceneReady &&
+    startCountdown !== null &&
+    !renderError &&
+    !gameplayTutorialStep &&
+    !settingsOpen &&
+    !gameOver;
+  const modalOpen =
+    gameOver ||
+    settingsOpen ||
+    gameplayTutorialStep !== null ||
+    startCountdown !== null ||
+    gameSceneLoading;
   const modalOpenRef = useRef(modalOpen);
   const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>(
     createGameplayTutorialSeenState(new Set()),
   );
+  const gameSceneReadyRef = useRef(false);
+  const pendingInitialPaintTutorialRef = useRef(false);
   const pickupTutorialReadyRef = useRef(false);
   const pendingGameplayTutorialRef = useRef<
     Array<{
@@ -392,6 +430,15 @@ function IsoRound({
     },
     [],
   );
+  const activateInitialPaintTutorial = useCallback(() => {
+    if (!pendingInitialPaintTutorialRef.current || !gameSceneReadyRef.current) return;
+    pendingInitialPaintTutorialRef.current = false;
+    activateGameplayTutorial("paint", {
+      x: Math.round(window.innerWidth / 2),
+      y: Math.round(window.innerHeight / 2),
+      radius: 96,
+    });
+  }, [activateGameplayTutorial]);
 
   const closeGameplayTutorial = () => {
     const completedStep = gameplayTutorialStepRef.current;
@@ -431,16 +478,35 @@ function IsoRound({
     gameplayTutorialStepRef.current = gameplayTutorialStep;
   }, [gameplayTutorialStep]);
   useEffect(() => {
+    if (
+      startCountdown === null ||
+      !gameSceneReady ||
+      settingsOpen ||
+      gameplayTutorialStep !== null ||
+      gameOver ||
+      renderError
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (startCountdown > 1) {
+        setStartCountdown((value) => (value === null ? null : value - 1));
+        return;
+      }
+
+      setStartCountdown(null);
+      setStarted(true);
+    }, 500);
+
+    return () => window.clearTimeout(timer);
+  }, [gameOver, gameSceneReady, gameplayTutorialStep, renderError, settingsOpen, startCountdown]);
+  useEffect(() => {
     const seen = readInitialGameplayTutorialSeen();
     shownGameplayTutorialRef.current = seen;
-    if (!seen.paint) {
-      activateGameplayTutorial("paint", {
-        x: Math.round(window.innerWidth / 2),
-        y: Math.round(window.innerHeight / 2),
-        radius: 96,
-      });
-    }
-  }, [activateGameplayTutorial]);
+    pendingInitialPaintTutorialRef.current = !seen.paint;
+    activateInitialPaintTutorial();
+  }, [activateInitialPaintTutorial]);
   useEffect(() => {
     pickupTutorialReadyRef.current = false;
     pendingGameplayTutorialRef.current = [];
@@ -562,6 +628,8 @@ function IsoRound({
     if (!host) return;
 
     setRenderError(null);
+    setGameSceneReady(false);
+    gameSceneReadyRef.current = false;
 
     const app = new Application();
     let appCanvas: HTMLCanvasElement | null = null;
@@ -577,6 +645,11 @@ function IsoRound({
     const manualTicker =
       window.__HOP_AND_FILL_MANUAL_TICKER__ === true ||
       (manualTickerParam !== null && manualTickerParam !== "0" && manualTickerParam !== "false");
+    const isCoarseInput =
+      window.innerWidth <= 768 ||
+      (typeof window.matchMedia === "function" &&
+        (window.matchMedia("(pointer: coarse)").matches ||
+          window.matchMedia("(hover: none)").matches));
     const destroyPixiApp = () => {
       if (!appInitialized || appDestroyed) return;
       appDestroyed = true;
@@ -592,17 +665,14 @@ function IsoRound({
 
     (async () => {
       try {
-        // Detect coarse-pointer / mobile to lower resolution and disable AA.
-        const isCoarse =
-          typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
         const dpr = window.devicePixelRatio || 1;
         // High-DPR mobile devices (e.g. iPhone Pro at DPR 3) ate 9× pixels.
-        // Cap aggressively on mobile; cap at 2 on desktop.
-        const resolution = isCoarse ? Math.min(dpr, 1.5) : Math.min(dpr, 2);
+        // Keep high-DPR phones crisp; cap above DPR 3 to avoid excessive canvas memory.
+        const resolution = Math.min(dpr, 3);
         await app.init({
           resizeTo: window,
           backgroundAlpha: 0,
-          antialias: !isCoarse,
+          antialias: true,
           resolution,
           autoDensity: true,
           autoStart: !manualTicker,
@@ -808,12 +878,48 @@ function IsoRound({
         makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1]),
       );
       const enemies: Character[] = []; // active enemies; populated in kickoff
+      const botRoutePlans = new WeakMap<Character, BotRoutePlan>();
+      const nextMoveAt = new WeakMap<Character, number>();
+      const botStrategies = new WeakMap<Character, BotStrategyId>();
+      const botStrategyLabels = new WeakMap<Character, Text>();
       // Hide all bot sprites until activated
       for (const e of allEnemies) {
         e.sprite.visible = false;
         e.shadow.visible = false;
         e.stunStars.visible = false;
       }
+
+      const botStrategyEmoji = (strategy: BotStrategyId) => (strategy === "paint" ? "🎨" : "🧰");
+      const placeBotStrategyLabel = (c: Character) => {
+        const label = botStrategyLabels.get(c);
+        if (!label) return;
+        label.x = c.sprite.x;
+        label.y = c.sprite.y - 124;
+        label.zIndex = c.sprite.zIndex + 0.05;
+      };
+      const setBotStrategyLabel = (c: Character, strategy: BotStrategyId, visible: boolean) => {
+        let label = botStrategyLabels.get(c);
+        if (!label) {
+          label = new Text({
+            text: "",
+            style: {
+              fontFamily: "system-ui, Apple Color Emoji, Segoe UI Emoji, sans-serif",
+              fontSize: 26,
+              fontWeight: "900",
+              fill: 0xffffff,
+              stroke: { color: 0x111111, width: 4 },
+              align: "center",
+            },
+          });
+          label.label = "bot-strategy-label";
+          label.anchor.set(0.5, 0.5);
+          depthLayer.addChild(label);
+          botStrategyLabels.set(c, label);
+        }
+        label.text = botStrategyEmoji(strategy);
+        label.visible = visible;
+        placeBotStrategyLabel(c);
+      };
 
       let gameTimeMs = 0;
       const gameNow = () => gameTimeMs;
@@ -938,7 +1044,13 @@ function IsoRound({
         const gridCx = (minX + maxX) / 2;
         const gridCy = (minY + maxY) / 2;
         const reservedTop = Math.min(GAME_VIEW_TOP_RESERVED_PX, app.screen.height * 0.32);
-        const reservedBottom = Math.min(GAME_VIEW_BOTTOM_RESERVED_PX, app.screen.height * 0.22);
+        const bottomReservePx = isCoarseInput
+          ? GAME_VIEW_MOBILE_BOTTOM_RESERVED_PX
+          : GAME_VIEW_BOTTOM_RESERVED_PX;
+        const reservedBottom = Math.min(
+          bottomReservePx,
+          app.screen.height * (isCoarseInput ? 0.45 : 0.22),
+        );
         const playTop = reservedTop;
         const playBottom = Math.max(playTop + 120, app.screen.height - reservedBottom);
         const playCenterY = (playTop + playBottom) / 2;
@@ -964,9 +1076,12 @@ function IsoRound({
           const rawH = maxY - minY + TILE_SIZE;
           // Reserve screen space occupied by HUD so panels do not cover the board.
           const padX = 24;
+          const bottomReservePx = isCoarseInput
+            ? GAME_VIEW_MOBILE_BOTTOM_RESERVED_PX
+            : GAME_VIEW_BOTTOM_RESERVED_PX;
           const padY =
             Math.min(GAME_VIEW_TOP_RESERVED_PX, app.screen.height * 0.32) +
-            Math.min(GAME_VIEW_BOTTOM_RESERVED_PX, app.screen.height * 0.22);
+            Math.min(bottomReservePx, app.screen.height * (isCoarseInput ? 0.45 : 0.22));
           const availW = Math.max(100, app.screen.width - padX * 2);
           const availH = Math.max(100, app.screen.height - padY);
           const fit = Math.min(availW / rawW, availH / rawH);
@@ -1014,6 +1129,8 @@ function IsoRound({
           playerScoreText.x = c.sprite.x;
           playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
           playerScoreText.zIndex = c.sprite.zIndex + 0.02;
+        } else {
+          placeBotStrategyLabel(c);
         }
       };
 
@@ -1038,6 +1155,8 @@ function IsoRound({
           playerScoreText.x = c.sprite.x;
           playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
           playerScoreText.zIndex = c.sprite.zIndex + 0.02;
+        } else {
+          placeBotStrategyLabel(c);
         }
 
         const stars = c.stunStars;
@@ -1062,21 +1181,24 @@ function IsoRound({
       const land = (c: Character, startSquash = false) => {
         paintAt(c.gx, c.gy, c.skin);
         c.landingSquashElapsed = startSquash ? 0 : null;
+        nextMoveAt.set(c, gameNow() + POST_LANDING_MOVE_DELAY_MS);
         renderCharacterAt(c, c.gx, c.gy);
       };
 
       const rng = createSeededRng(seedFromParts("tile-turf", level, roundIndex));
       const randomCell = () => ({ gx: rng.int(BOARD_SIZE), gy: rng.int(BOARD_SIZE) });
+      const occupiedCharacters = () => [player, ...enemies];
       const randomUnoccupiedCell = () => {
-        let cell = randomCell();
-        for (let i = 0; i < 50; i++) {
-          cell = randomCell();
-          const occupiedByPlayer = player.gx === cell.gx && player.gy === cell.gy;
-          const occupiedByEnemy = enemies.some((c) => c.gx === cell.gx && c.gy === cell.gy);
-          if (!occupiedByPlayer && !occupiedByEnemy) break;
-        }
-        return cell;
+        const cells = unoccupiedCells(occupiedCharacters());
+        return cells.length > 0 ? cells[rng.int(cells.length)] : randomCell();
       };
+      const fairChestSpawnCell = () =>
+        chooseFairSpawnCell({
+          characters: occupiedCharacters(),
+          minDistance: CHEST_MIN_SPAWN_DISTANCE,
+          maxDistanceDelta: CHEST_SPAWN_DISTANCE_DELTA,
+          rng,
+        });
 
       interface GameTimer {
         due: number;
@@ -1110,16 +1232,20 @@ function IsoRound({
       depthLayer.addChild(chestSprite);
       const chestBaseScale = chestSprite.scale.x;
       const chest = { gx: 0, gy: 0, gfx: chestSprite };
+      let botTargetReactionUntil = 0;
 
       const placeChest = (gx: number, gy: number) => {
         chest.gx = gx;
         chest.gy = gy;
+        botTargetReactionUntil = gameNow() + botTargetReactionDelayForLevel(level);
         placeChestSprite(chestSprite, gx, gy);
         requestGameplayTutorial("chest", spriteTutorialTarget(chestSprite, 78, -40));
       };
 
       const spawnChest = () => {
-        const { gx, gy } = randomUnoccupiedCell();
+        const spawnCell = fairChestSpawnCell();
+        if (!spawnCell) return;
+        const { gx, gy } = spawnCell;
         placeChest(gx, gy);
       };
 
@@ -1197,8 +1323,6 @@ function IsoRound({
 
       // ---------- Hazards (Bombs) & Boots ----------
       const bombs: Bomb[] = [];
-      const isWarningAt = (gx: number, gy: number) =>
-        bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
 
       const removeBomb = (bomb: Bomb) => {
         removeAndDestroy(bomb.warning);
@@ -1308,6 +1432,7 @@ function IsoRound({
         const gfx = createBootsSprite(bootsTex, gx, gy);
         depthLayer.addChild(gfx);
         boots = { gx, gy, gfx, baseScale: gfx.scale.x };
+        botTargetReactionUntil = gameNow() + botTargetReactionDelayForLevel(level);
         requestGameplayTutorial("boots", spriteTutorialTarget(gfx, 74));
       };
       const spawnBoots = () => {
@@ -1319,10 +1444,13 @@ function IsoRound({
       const tryCollectBoots = (c: Character) => {
         if (!boots) return;
         if (c.gx !== boots.gx || c.gy !== boots.gy) return;
+        if (gameNow() < c.boostUntil) return;
         removeAndDestroy(boots.gfx);
         boots = null;
         c.boostUntil = gameNow() + BOOST_DURATION;
-        if (level >= BOOTS_UNLOCK_LEVEL) scheduleGame(spawnBoots, rng.range(10000, 15000));
+        if (level >= BOOTS_UNLOCK_LEVEL) {
+          scheduleGame(spawnBoots, rng.range(BOOTS_RESPAWN_MIN_MS, BOOTS_RESPAWN_MAX_MS));
+        }
       };
 
       // ---------- Rotating Arrow ----------
@@ -1355,7 +1483,7 @@ function IsoRound({
 
         arrow = { gx, gy, dir, gfx, rotateElapsed: 0, lifeElapsed: 0 };
         requestGameplayTutorial("arrow", spriteTutorialTarget(gfx, 70));
-        if (scheduleNext) scheduleGame(spawnArrow, 20000);
+        if (scheduleNext) scheduleGame(spawnArrow, ARROW_RESPAWN_MS);
       };
 
       function spawnArrow() {
@@ -1495,7 +1623,16 @@ function IsoRound({
           if (active) {
             enemies.push(allEnemies[i]);
             miniEnemies.push(allMiniEnemies[i]);
+            const strategy =
+              BOT_STRATEGY_BY_SKIN_OVERRIDE[allEnemies[i].skin.id] ??
+                BOT_STRATEGY_BY_SLOT[i] ??
+                "chest";
+            botStrategies.set(allEnemies[i], strategy);
+            setBotStrategyLabel(allEnemies[i], strategy, true);
             land(allEnemies[i]);
+          } else {
+            const strategy = botStrategies.get(allEnemies[i]) ?? "chest";
+            setBotStrategyLabel(allEnemies[i], strategy, false);
           }
         }
         updateMinimap();
@@ -1508,7 +1645,19 @@ function IsoRound({
 
       const moveCharacter = (c: Character, direction: Direction) => {
         if (gameOverRef.current || !startedRef.current || pausedRef.current) return false;
-        if (c.anim) return false;
+        if (c.anim) {
+          if (c.anim.elapsed > JUMP_DIRECTION_CHANGE_GRACE_MS) return false;
+          const rollbackNext = nextGridPosition(c.anim.fromX, c.anim.fromY, direction);
+          if (!isInsideBoard(rollbackNext.gx, rollbackNext.gy)) return false;
+          if (rollbackNext.gx === c.anim.toX && rollbackNext.gy === c.anim.toY) return false;
+          c.gx = c.anim.fromX;
+          c.gy = c.anim.fromY;
+          c.anim = null;
+          c.landingSquashElapsed = null;
+          updateMinimap();
+          renderCharacterAt(c, c.gx, c.gy);
+        }
+        if (gameNow() < (nextMoveAt.get(c) ?? 0)) return false;
         if (gameNow() < c.stunnedUntil) return false;
         const next = nextGridPosition(c.gx, c.gy, direction);
         if (!isInsideBoard(next.gx, next.gy)) return false;
@@ -1531,8 +1680,6 @@ function IsoRound({
 
       const movePlayer = (d: Direction) => moveCharacter(player, d);
 
-      let enemyTimer = 0;
-      const enemyInterval = () => enemyIntervalForLevel(levelRef.current);
       const formatScores = (values: Record<SkinId, number>) =>
         SKIN_IDS.map((id) => `${id}:${values[id]}`).join(",");
       const remainingMs = (until: number) => Math.max(0, Math.ceil(until - gameNow()));
@@ -1694,57 +1841,35 @@ function IsoRound({
           updateCharacterStunView(c, nowMs);
         }
 
-        enemyTimer += dtMs;
-        if (enemyTimer >= enemyInterval()) {
-          enemyTimer = 0;
-          for (const en of enemies) {
-            if (en.anim) continue;
-            if (gameNow() < en.stunnedUntil) continue;
-            const valid = DIRECTIONS.filter((d) => {
-              const next = nextGridPosition(en.gx, en.gy, d);
-              if (!isInsideBoard(next.gx, next.gy)) return false;
-              if (isWarningAt(next.gx, next.gy)) return false;
-              return true;
-            });
-            const safe = valid.length
-              ? valid
-              : DIRECTIONS.filter((d) => {
-                  const next = nextGridPosition(en.gx, en.gy, d);
-                  return isInsideBoard(next.gx, next.gy);
-                });
-            if (!safe.length) continue;
-            const distTo = (d: Direction, tx: number, ty: number) => {
-              const next = nextGridPosition(en.gx, en.gy, d);
-              return manhattanDistance(next, { gx: tx, gy: ty });
-            };
-            const enemyPos = { gx: en.gx, gy: en.gy };
-            const bootsDist = boots ? manhattanDistance(enemyPos, boots) : Infinity;
-            const arrowDist = arrow ? manhattanDistance(enemyPos, arrow) : Infinity;
-            const ownedN = countOwned(en.skin.id);
-            let chosen: Direction;
-            if (arrow && arrowDist <= 2) {
-              chosen = safe.reduce(
-                (best, d) =>
-                  distTo(d, arrow!.gx, arrow!.gy) < distTo(best, arrow!.gx, arrow!.gy) ? d : best,
-                safe[0],
-              );
-            } else if (boots && bootsDist <= 2) {
-              chosen = safe.reduce(
-                (best, d) =>
-                  distTo(d, boots!.gx, boots!.gy) < distTo(best, boots!.gx, boots!.gy) ? d : best,
-                safe[0],
-              );
-            } else if (ownedN > 3) {
-              chosen = safe.reduce(
-                (best, d) =>
-                  distTo(d, chest.gx, chest.gy) < distTo(best, chest.gx, chest.gy) ? d : best,
-                safe[0],
-              );
-            } else {
-              chosen = rng.pick(safe);
-            }
-            moveCharacter(en, chosen);
-          }
+        for (const en of enemies) {
+          if (en.anim) continue;
+          if (gameNow() < en.stunnedUntil) continue;
+          if (gameNow() < (nextMoveAt.get(en) ?? 0)) continue;
+
+          const warningBombs = bombs.filter((bomb) => bomb.phase === "warning" && !bomb.detonated);
+          const decision = chooseBotMove({
+            bot: {
+              gx: en.gx,
+              gy: en.gy,
+              skinId: en.skin.id,
+              boostUntil: en.boostUntil,
+            },
+            rivals: [player, ...enemies]
+              .filter((character) => character !== en)
+              .map(({ gx, gy }) => ({ gx, gy })),
+            strategy: botStrategies.get(en) ?? "chest",
+            chest,
+            boots,
+            owners,
+            warningBombs,
+            previousPlan: botRoutePlans.get(en),
+            targetReactionUntil: botTargetReactionUntil,
+            nowMs: gameNow(),
+            rng,
+          });
+          if (!decision) continue;
+          botRoutePlans.set(en, decision.routePlan);
+          moveCharacter(en, decision.direction);
         }
       };
 
@@ -1896,7 +2021,10 @@ function IsoRound({
       visualViewport?.addEventListener("resize", resizeHandler);
       centerCamera();
       syncActiveGameplayTutorialTarget();
-      if (manualTicker) renderManualFrame();
+      renderManualFrame();
+      gameSceneReadyRef.current = true;
+      setGameSceneReady(true);
+      activateInitialPaintTutorial();
     })().catch((err) => {
       if (destroyed) return;
       console.error("[IsoGrid] Pixi setup failed", err);
@@ -1905,6 +2033,7 @@ function IsoRound({
 
     return () => {
       destroyed = true;
+      gameSceneReadyRef.current = false;
       removeWindowErrorHandlers?.();
       if (viewportRefreshFrame !== null) cancelAnimationFrame(viewportRefreshFrame);
       if (keyDownHandler) window.removeEventListener("keydown", keyDownHandler);
@@ -1918,7 +2047,7 @@ function IsoRound({
       if (window.advanceTime) delete window.advanceTime;
       destroyPixiApp();
     };
-  }, [activateGameplayTutorial, level, roundIndex, roundDuration, selectDirection]);
+  }, [activateGameplayTutorial, activateInitialPaintTutorial, level, roundIndex, roundDuration, selectDirection]);
 
   const playerSkin = SKINS[PLAYER_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
@@ -1958,10 +2087,53 @@ function IsoRound({
         </div>
       )}
 
+      {gameSceneLoading && (
+        <div
+          className="tt-overlay fixed inset-0 z-[85] flex items-center justify-center p-4"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className="tt-dialog px-8 py-6 text-center">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[rgba(112,98,80,0.22)] border-t-[var(--tt-text-primary)]" />
+            <div className="mt-4 text-[18px] font-bold text-[var(--tt-text-primary)]">
+              Loading field
+            </div>
+          </div>
+        </div>
+      )}
+
+      {startCountdownVisible && (
+        <div
+          className="tt-overlay fixed inset-0 z-[85] flex items-center justify-center p-4"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className="text-center">
+            <div className="text-[18px] font-bold uppercase tracking-[0.18em] text-[var(--tt-text-secondary)]">
+              Get ready
+            </div>
+            <div
+              key={startCountdown}
+              className="mt-3 text-[96px] font-black leading-none tabular-nums text-[var(--tt-text-primary)] sm:text-[128px]"
+              style={{ animation: "iso-countdown-pop 0.45s ease-out both" }}
+            >
+              {startCountdown}
+            </div>
+            <style>{`
+              @keyframes iso-countdown-pop {
+                0% { transform: scale(0.72); opacity: 0; }
+                60% { transform: scale(1.08); opacity: 1; }
+                100% { transform: scale(1); opacity: 1; }
+              }
+            `}</style>
+          </div>
+        </div>
+      )}
+
       {/* Scoreboard */}
       <div
         {...backgroundInertProps}
-        className="tt-no-select tt-chip fixed z-50 flex -translate-y-1/2 flex-col items-stretch gap-2 px-3 py-3 text-[18px] font-bold"
+        className="tt-no-select tt-chip tt-scoreboard fixed z-50 flex -translate-y-1/2 flex-col items-stretch gap-2 px-3 py-3 text-[18px] font-bold"
         style={{
           touchAction: "none",
           left: "calc(env(safe-area-inset-left, 0px) + 16px)",
@@ -1990,7 +2162,7 @@ function IsoRound({
       {/* Timer */}
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed left-1/2 z-50 -translate-x-1/2 px-6 py-2"
+        className="tt-chip tt-timer fixed left-1/2 z-50 -translate-x-1/2 px-6 py-2"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
       >
         <span
@@ -2010,7 +2182,7 @@ function IsoRound({
       {/* Match wins HUD (player vs bots, first to 3) */}
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed z-50 px-4 py-2 text-[14px] font-bold"
+        className="tt-chip tt-match-hud fixed z-50 px-4 py-2 text-[14px] font-bold"
         style={{
           touchAction: "none",
           left: "calc(env(safe-area-inset-left, 0px) + 16px)",
@@ -2144,7 +2316,7 @@ function IsoRound({
           setSettingsOpen(true);
         }}
         disabled={gameOver}
-        className="tt-chip fixed right-4 z-50 flex h-14 w-14 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
+        className="tt-chip tt-settings-button fixed right-4 z-50 flex h-14 w-14 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
         aria-label="Settings"
       >
@@ -2176,9 +2348,13 @@ function IsoRound({
             </div>
             <div className="mt-4 text-[18px] text-[var(--tt-text-secondary)]">
               Bots: <span className="font-bold text-[var(--tt-text-primary)]">{botCount}</span> ·
-              Speed{" "}
+              Detour{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
-                ×{(700 / enemyIntervalForLevel(level)).toFixed(2)}
+                {Math.round(BOT_SUBOPTIMAL_ROUTE_CHANCE * 100)}%
+              </span>{" "}
+              · React{" "}
+              <span className="font-bold text-[var(--tt-text-primary)]">
+                {botTargetReactionDelayForLevel(level)}ms
               </span>
             </div>
             <div className="mt-3 text-[18px] text-[var(--tt-text-secondary)]">
@@ -2196,13 +2372,25 @@ function IsoRound({
             >
               <Play size={16} fill="currentColor" /> Resume
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const confirmed = window.confirm(
+                  "Leave this match? Your current round wins and match history will be lost.",
+                );
+                if (confirmed) onExitToLevelMenu();
+              }}
+              className="tt-button tt-button-secondary mt-3 w-full"
+            >
+              Exit to Level Select
+            </button>
           </div>
         </div>
       )}
 
       <div
         {...backgroundInertProps}
-        className="tt-chip fixed left-4 z-50 flex items-center gap-3 px-3 py-2"
+        className="tt-chip tt-zoom-control fixed left-4 z-50 flex items-center gap-3 px-3 py-2"
         style={{ touchAction: "none", bottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}
       >
         <ZoomIn size={24} aria-hidden="true" className="text-[var(--tt-text-primary)]" />
@@ -2291,13 +2479,25 @@ export function IsoGrid() {
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
   const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
 
+  const startLevel = useCallback((lv: number) => {
+    setLevel(lv);
+    setMatchWins(zeroScores());
+    setHistory([]);
+    setRoundIdx((r) => r + 1);
+    setPhase("playing");
+  }, []);
+
   useEffect(() => {
     try {
       setUnlocked(readUnlockedLevel(window.localStorage));
+      if (!readFirstLaunchDone(window.localStorage)) {
+        writeFirstLaunchDone(window.localStorage);
+        startLevel(1);
+      }
     } catch (err) {
       console.warn("[IsoGrid] localStorage read failed", err);
     }
-  }, []);
+  }, [startLevel]);
 
   const persistUnlocked = (lv: number) => {
     setUnlocked(lv);
@@ -2308,12 +2508,10 @@ export function IsoGrid() {
     }
   };
 
-  const startLevel = (lv: number) => {
-    setLevel(lv);
+  const showLevelMenu = () => {
     setMatchWins(zeroScores());
     setHistory([]);
-    setRoundIdx((r) => r + 1);
-    setPhase("playing");
+    setPhase("menu");
   };
 
   const handleRoundEnd = (winner: SkinId | null, banked: Record<SkinId, number>) => {
@@ -2353,6 +2551,7 @@ export function IsoGrid() {
         matchWins={matchWins}
         history={history}
         onRoundEnd={handleRoundEnd}
+        onExitToLevelMenu={showLevelMenu}
       />
     );
   }
@@ -2398,17 +2597,16 @@ export function IsoGrid() {
           {phase === "menu" && (
             <>
               <div className="text-[18px] font-bold text-[var(--tt-text-secondary)]">
-                Paint the Grid
+                Tile Turf
               </div>
               <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
                 Select Level
               </div>
               <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
-                First to {WINS_TO_PASS} round wins clears the level.
+                Pick an unlocked level or continue from the latest one.
               </p>
             </>
           )}
-
           <div className="mt-6 grid grid-cols-5 gap-2">
             {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map((lv) => {
               const locked = lv > unlocked;
@@ -2446,7 +2644,8 @@ export function IsoGrid() {
           </div>
 
           <div className="mt-6 text-[18px] text-[var(--tt-text-secondary)]">
-            Bots scale: lvl 1-2 to 1, 3-4 to 2, 5-10 to 3. Bot speed grows each level.
+            Jump across neighboring tiles to paint them. Grab chests to turn your painted turf into
+            round points.
           </div>
 
           <div className="mt-6 flex gap-3">

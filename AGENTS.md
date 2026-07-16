@@ -22,6 +22,8 @@ Use Bun for this repo because `bun.lock` is present.
 - Install dependencies: `bun install`
 - Start dev server: `bun run dev`
 - Production build: `bun run build`
+- Yandex Games build: `bun run build:yandex`
+- Yandex Games archive package: `bun run package:yandex`
 - Test/static type gate: `bun run test`
 - Lint: `bun run lint`
 - Format: `bun run format`
