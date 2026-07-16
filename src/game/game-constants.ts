@@ -121,7 +121,8 @@ export const BOT_SUBOPTIMAL_ROUTE_CHANCE = 0.2;
 export const BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS = 1;
 export const BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS = 2;
 export const BOT_BOOTS_DISTANCE_RATIO = 0.65;
-// Paint strategy starts when the bot's chest distance is at least this multiple of the player's.
+// Paint strategy starts when the bot's chest distance is at least this multiple of the nearest
+// rival character's (the player or another bot).
 export const BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO = 1.2;
 export const DIRECTIONS: Direction[] = ["UP", "DOWN", "LEFT", "RIGHT"];
 

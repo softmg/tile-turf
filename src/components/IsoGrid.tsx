@@ -22,14 +22,10 @@ import {
   BOOST_JUMP_DURATION,
   BOOTS_UNLOCK_LEVEL,
   BOMB_UNLOCK_LEVEL,
-  BOT_BOOTS_DISTANCE_RATIO,
-  BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO,
   BOT_SKINS,
   BOT_STRATEGY_BY_SKIN_OVERRIDE,
   BOT_STRATEGY_BY_SLOT,
   BOT_SUBOPTIMAL_ROUTE_CHANCE,
-  BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS,
-  BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS,
   BOOTS_RESPAWN_MAX_MS,
   BOOTS_RESPAWN_MIN_MS,
   DIRECTIONS,
@@ -56,7 +52,7 @@ import {
   type BotStrategyId,
   zeroScores,
 } from "@/game/game-constants";
-import { isoPos, isInsideBoard, manhattanDistance, nextGridPosition } from "@/game/grid-math";
+import { isoPos, isInsideBoard, nextGridPosition } from "@/game/grid-math";
 import {
   countOwned as countOwnedTiles,
   scoreOwners,
@@ -64,6 +60,8 @@ import {
   type OwnerGrid,
 } from "@/game/scoring";
 import { createSeededRng, seedFromParts } from "@/game/rng";
+import { chooseBotMove, type BotRoutePlan } from "@/game/bot-ai";
+import { chooseFairSpawnCell, unoccupiedCells } from "@/game/spawn-selection";
 import {
   markGameplayTutorialStepSeen,
   readFirstLaunchDone,
@@ -880,14 +878,7 @@ function IsoRound({
         makeCharacter(sid, ENEMY_SPAWN_POSITIONS[i][0], ENEMY_SPAWN_POSITIONS[i][1]),
       );
       const enemies: Character[] = []; // active enemies; populated in kickoff
-      const botRoutePlans = new WeakMap<
-        Character,
-        {
-          target: { gx: number; gy: number };
-          targetKey: string;
-          waypoint: { gx: number; gy: number } | null;
-        }
-      >();
+      const botRoutePlans = new WeakMap<Character, BotRoutePlan>();
       const nextMoveAt = new WeakMap<Character, number>();
       const botStrategies = new WeakMap<Character, BotStrategyId>();
       const botStrategyLabels = new WeakMap<Character, Text>();
@@ -1197,49 +1188,17 @@ function IsoRound({
       const rng = createSeededRng(seedFromParts("tile-turf", level, roundIndex));
       const randomCell = () => ({ gx: rng.int(BOARD_SIZE), gy: rng.int(BOARD_SIZE) });
       const occupiedCharacters = () => [player, ...enemies];
-      const isCharacterOccupiedCell = (gx: number, gy: number, characters: Character[]) =>
-        characters.some((c) => c.gx === gx && c.gy === gy);
-      const unoccupiedCells = (characters = occupiedCharacters()) => {
-        const cells: Array<{ gx: number; gy: number }> = [];
-        for (let gx = 0; gx < BOARD_SIZE; gx++) {
-          for (let gy = 0; gy < BOARD_SIZE; gy++) {
-            if (!isCharacterOccupiedCell(gx, gy, characters)) cells.push({ gx, gy });
-          }
-        }
-        return cells;
-      };
       const randomUnoccupiedCell = () => {
-        const cells = unoccupiedCells();
+        const cells = unoccupiedCells(occupiedCharacters());
         return cells.length > 0 ? cells[rng.int(cells.length)] : randomCell();
       };
-      const fairChestSpawnCell = () => {
-        const characters = occupiedCharacters();
-        if (characters.length <= 1) return randomUnoccupiedCell();
-
-        const distantCandidates: Array<{ gx: number; gy: number }> = [];
-        const fairCandidates: Array<{ gx: number; gy: number }> = [];
-        for (const cell of unoccupiedCells(characters)) {
-          let minDistance = Infinity;
-          let maxDistance = -Infinity;
-          for (const character of characters) {
-            const distance = manhattanDistance({ gx: character.gx, gy: character.gy }, cell);
-            minDistance = Math.min(minDistance, distance);
-            maxDistance = Math.max(maxDistance, distance);
-          }
-          if (minDistance < CHEST_MIN_SPAWN_DISTANCE) continue;
-
-          distantCandidates.push(cell);
-          const distanceDelta = maxDistance - minDistance;
-          if (distanceDelta > CHEST_SPAWN_DISTANCE_DELTA) continue;
-
-          fairCandidates.push(cell);
-        }
-
-        if (fairCandidates.length > 0) return fairCandidates[rng.int(fairCandidates.length)];
-        return distantCandidates.length > 0
-          ? distantCandidates[rng.int(distantCandidates.length)]
-          : randomUnoccupiedCell();
-      };
+      const fairChestSpawnCell = () =>
+        chooseFairSpawnCell({
+          characters: occupiedCharacters(),
+          minDistance: CHEST_MIN_SPAWN_DISTANCE,
+          maxDistanceDelta: CHEST_SPAWN_DISTANCE_DELTA,
+          rng,
+        });
 
       interface GameTimer {
         due: number;
@@ -1301,45 +1260,6 @@ function IsoRound({
       };
 
       const countOwned = (skinId: SkinId) => countOwnedTiles(owners, skinId);
-      const currentPaintLeaderFor = (skinId: SkinId) => {
-        let leader: SkinId | null = null;
-        let leaderScore = -1;
-        for (const id of SKIN_IDS) {
-          if (id === skinId) continue;
-          const score = countOwned(id);
-          if (score > leaderScore) {
-            leader = id;
-            leaderScore = score;
-          }
-        }
-        return leader;
-      };
-      const nearestPaintTargetFor = (c: Character) => {
-        const leader = currentPaintLeaderFor(c.skin.id);
-        const currentPos = { gx: c.gx, gy: c.gy };
-        let best: { gx: number; gy: number } | null = null;
-        let bestDistance = Infinity;
-        let bestIsLeaderOwned = false;
-
-        for (let gx = 0; gx < BOARD_SIZE; gx++) {
-          for (let gy = 0; gy < BOARD_SIZE; gy++) {
-            const owner = owners[gx][gy];
-            if (owner === c.skin.id) continue;
-            const distance = manhattanDistance(currentPos, { gx, gy });
-            const isLeaderOwned = owner === leader;
-            if (
-              distance < bestDistance ||
-              (distance === bestDistance && isLeaderOwned && !bestIsLeaderOwned)
-            ) {
-              best = { gx, gy };
-              bestDistance = distance;
-              bestIsLeaderOwned = isLeaderOwned;
-            }
-          }
-        }
-
-        return best ?? currentPos;
-      };
       let bankedScores: Record<SkinId, number> = zeroScores();
       const updatePlayerScoreText = () => {
         playerScoreText.text = String(bankedScores[PLAYER_SKIN]);
@@ -1401,8 +1321,6 @@ function IsoRound({
 
       // ---------- Hazards (Bombs) & Boots ----------
       const bombs: Bomb[] = [];
-      const isWarningAt = (gx: number, gy: number) =>
-        bombs.some((b) => b.phase === "warning" && b.gx === gx && b.gy === gy);
 
       const removeBomb = (bomb: Bomb) => {
         removeAndDestroy(bomb.warning);
@@ -1926,111 +1844,30 @@ function IsoRound({
           if (gameNow() < en.stunnedUntil) continue;
           if (gameNow() < (nextMoveAt.get(en) ?? 0)) continue;
 
-          const directions = DIRECTIONS.map((direction) => ({
-            direction,
-            next: nextGridPosition(en.gx, en.gy, direction),
-          })).filter(({ next }) => isInsideBoard(next.gx, next.gy));
-          if (!directions.length) continue;
-
           const warningBombs = bombs.filter((bomb) => bomb.phase === "warning" && !bomb.detonated);
-          const currentPos = { gx: en.gx, gy: en.gy };
-          const isInAnyBombArea = (gx: number, gy: number) =>
-            warningBombs.some((bomb) => isInBombArea(gx, gy, bomb.gx, bomb.gy));
-          const nonWarningDirections = directions.filter(
-            (option) => !isWarningAt(option.next.gx, option.next.gy),
-          );
-          const currentInBombArea = isInAnyBombArea(en.gx, en.gy);
-          const nonBombAreaDirections = nonWarningDirections.filter(
-            (option) => !isInAnyBombArea(option.next.gx, option.next.gy),
-          );
-          const options =
-            nonBombAreaDirections.length > 0
-              ? nonBombAreaDirections
-              : nonWarningDirections.length > 0
-                ? nonWarningDirections
-                : directions;
-
-          const chestDist = manhattanDistance(currentPos, chest);
-          const bestRivalChestDist = [player, ...enemies]
-            .filter((c) => c !== en)
-            .reduce(
-              (best, c) => Math.min(best, manhattanDistance({ gx: c.gx, gy: c.gy }, chest)),
-              Infinity,
-            );
-          const strategy = botStrategies.get(en) ?? "chest";
-          const shouldPaint =
-            strategy === "paint" &&
-            chestDist >= bestRivalChestDist * BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO;
-          const directTarget = shouldPaint
-            ? nearestPaintTargetFor(en)
-            : !currentInBombArea &&
-                boots &&
-                gameNow() >= en.boostUntil &&
-                manhattanDistance(currentPos, boots) <= chestDist * BOT_BOOTS_DISTANCE_RATIO
-              ? boots
-              : chest;
-          const targetKind = shouldPaint ? "paint" : directTarget === boots ? "boots" : "chest";
-          const targetKey = `${targetKind}:${directTarget.gx},${directTarget.gy}`;
-          let routePlan = botRoutePlans.get(en);
-          const routePlanTargetReached =
-            routePlan?.target.gx === en.gx && routePlan.target.gy === en.gy;
-          const shouldKeepPreviousTarget = Boolean(
-            routePlan &&
-              routePlan.targetKey !== targetKey &&
-              !routePlanTargetReached &&
-              !currentInBombArea &&
-              gameNow() < botTargetReactionUntil,
-          );
-          const routeTarget =
-            shouldKeepPreviousTarget && routePlan ? routePlan.target : directTarget;
-          if (
-            !routePlan ||
-            routePlanTargetReached ||
-            (!shouldKeepPreviousTarget && routePlan.targetKey !== targetKey)
-          ) {
-            const directDistance = manhattanDistance(currentPos, routeTarget);
-            const waypointCandidates: Array<{ gx: number; gy: number }> = [];
-            if (!currentInBombArea && rng.next() < BOT_SUBOPTIMAL_ROUTE_CHANCE) {
-              for (let gx = 0; gx < BOARD_SIZE; gx++) {
-                for (let gy = 0; gy < BOARD_SIZE; gy++) {
-                  if ((gx === en.gx && gy === en.gy) || (gx === routeTarget.gx && gy === routeTarget.gy)) {
-                    continue;
-                  }
-                  const waypoint = { gx, gy };
-                  const extraSteps =
-                    manhattanDistance(currentPos, waypoint) +
-                    manhattanDistance(waypoint, routeTarget) -
-                    directDistance;
-                  if (
-                    extraSteps >= BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS &&
-                    extraSteps <= BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS
-                  ) {
-                    waypointCandidates.push(waypoint);
-                  }
-                }
-              }
-            }
-            routePlan = {
-              target: { gx: routeTarget.gx, gy: routeTarget.gy },
-              targetKey,
-              waypoint: waypointCandidates.length ? rng.pick(waypointCandidates) : null,
-            };
-            botRoutePlans.set(en, routePlan);
-          }
-          if (
-            routePlan.waypoint &&
-            ((routePlan.waypoint.gx === en.gx && routePlan.waypoint.gy === en.gy) ||
-              isInAnyBombArea(routePlan.waypoint.gx, routePlan.waypoint.gy))
-          ) {
-            routePlan.waypoint = null;
-          }
-          const target = !currentInBombArea && routePlan.waypoint ? routePlan.waypoint : routePlan.target;
-          const ranked = [...options].sort(
-            (a, b) => manhattanDistance(a.next, target) - manhattanDistance(b.next, target),
-          );
-          const chosen = ranked[0].direction;
-
-          moveCharacter(en, chosen);
+          const decision = chooseBotMove({
+            bot: {
+              gx: en.gx,
+              gy: en.gy,
+              skinId: en.skin.id,
+              boostUntil: en.boostUntil,
+            },
+            rivals: [player, ...enemies]
+              .filter((character) => character !== en)
+              .map(({ gx, gy }) => ({ gx, gy })),
+            strategy: botStrategies.get(en) ?? "chest",
+            chest,
+            boots,
+            owners,
+            warningBombs,
+            previousPlan: botRoutePlans.get(en),
+            targetReactionUntil: botTargetReactionUntil,
+            nowMs: gameNow(),
+            rng,
+          });
+          if (!decision) continue;
+          botRoutePlans.set(en, decision.routePlan);
+          moveCharacter(en, decision.direction);
         }
       };
 
@@ -2535,7 +2372,12 @@ function IsoRound({
             </button>
             <button
               type="button"
-              onClick={onExitToLevelMenu}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  "Leave this match? Your current round wins and match history will be lost.",
+                );
+                if (confirmed) onExitToLevelMenu();
+              }}
               className="tt-button tt-button-secondary mt-3 w-full"
             >
               Exit to Level Select
@@ -2635,21 +2477,25 @@ export function IsoGrid() {
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
   const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
 
+  const startLevel = useCallback((lv: number) => {
+    setLevel(lv);
+    setMatchWins(zeroScores());
+    setHistory([]);
+    setRoundIdx((r) => r + 1);
+    setPhase("playing");
+  }, []);
+
   useEffect(() => {
     try {
       setUnlocked(readUnlockedLevel(window.localStorage));
       if (!readFirstLaunchDone(window.localStorage)) {
         writeFirstLaunchDone(window.localStorage);
-        setLevel(1);
-        setMatchWins(zeroScores());
-        setHistory([]);
-        setRoundIdx((r) => r + 1);
-        setPhase("playing");
+        startLevel(1);
       }
     } catch (err) {
       console.warn("[IsoGrid] localStorage read failed", err);
     }
-  }, []);
+  }, [startLevel]);
 
   const persistUnlocked = (lv: number) => {
     setUnlocked(lv);
@@ -2658,14 +2504,6 @@ export function IsoGrid() {
     } catch (err) {
       console.warn("[IsoGrid] unlocked level persistence failed", err);
     }
-  };
-
-  const startLevel = (lv: number) => {
-    setLevel(lv);
-    setMatchWins(zeroScores());
-    setHistory([]);
-    setRoundIdx((r) => r + 1);
-    setPhase("playing");
   };
 
   const showLevelMenu = () => {
