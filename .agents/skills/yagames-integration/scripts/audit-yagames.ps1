@@ -116,7 +116,7 @@ if ($latestArchive) {
 Write-Section "Bundler asset base"
 $bundlerConfigs = Get-ChildItem -LiteralPath $resolvedRoot -Force -File |
   Where-Object {
-    $_.Name -match "^(vite|webpack|rollup|parcel|rspack)\.config\." -or
+    $_.Name -match "^(vite|webpack|rollup|parcel|rspack)(?:\.[^.]+)*\.config\." -or
     $_.Name -eq ".parcelrc"
   }
 if ($bundlerConfigs) {

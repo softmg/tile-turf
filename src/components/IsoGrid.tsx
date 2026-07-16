@@ -1243,7 +1243,9 @@ function IsoRound({
       };
 
       const spawnChest = () => {
-        const { gx, gy } = fairChestSpawnCell();
+        const spawnCell = fairChestSpawnCell();
+        if (!spawnCell) return;
+        const { gx, gy } = spawnCell;
         placeChest(gx, gy);
       };
 

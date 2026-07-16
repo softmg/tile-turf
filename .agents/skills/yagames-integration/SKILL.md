@@ -16,7 +16,7 @@ requirements.
 ## Workflow
 
 1. Search the project for `AGENTS.md` before inspecting source files.
-2. Run `scripts/audit-yagames.ps1 -Root <project-root>` for a first pass.
+2. Run `.agents/skills/yagames-integration/scripts/audit-yagames.ps1 -Root <project-root>` for a first pass.
 3. Read the actual integration surface:
    - SDK adapter or bridge;
    - HTML entry points;

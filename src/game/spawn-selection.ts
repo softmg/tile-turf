@@ -32,11 +32,10 @@ export const chooseFairSpawnCell = ({
   maxDistanceDelta,
   rng,
   boardSize = BOARD_SIZE,
-}: FairSpawnOptions): GridPosition => {
-  const randomCell = () => ({ gx: rng.int(boardSize), gy: rng.int(boardSize) });
+}: FairSpawnOptions): GridPosition | null => {
   const availableCells = unoccupiedCells(characters, boardSize);
   const randomUnoccupiedCell = () =>
-    availableCells.length > 0 ? availableCells[rng.int(availableCells.length)] : randomCell();
+    availableCells.length > 0 ? availableCells[rng.int(availableCells.length)] : null;
 
   if (characters.length <= 1) return randomUnoccupiedCell();
 

@@ -50,9 +50,9 @@ copy archive-hosting assumptions into an own-domain release.
 Use the official local proxy for SDK testing:
 
 ```text
-npx @yandex-games/sdk-dev-proxy -p <build-output>
-npx @yandex-games/sdk-dev-proxy -h <local-server>
-npx @yandex-games/sdk-dev-proxy -p <build-output> --dev-mode=true
+bunx @yandex-games/sdk-dev-proxy -p <build-output>
+bunx @yandex-games/sdk-dev-proxy -h <local-server>
+bunx @yandex-games/sdk-dev-proxy -p <build-output> --dev-mode=true
 ```
 
 The proxy can also accept `--app-id`, `--csp`, and other documented options.
