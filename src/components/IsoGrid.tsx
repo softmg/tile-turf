@@ -17,15 +17,11 @@ import {
   BACKGROUND_URL,
   BASE_JUMP_DURATION,
   BOARD_SIZE,
-  ARROW_UNLOCK_LEVEL,
   BOOST_DURATION,
   BOOST_JUMP_DURATION,
-  BOOTS_UNLOCK_LEVEL,
-  BOMB_UNLOCK_LEVEL,
   BOT_SKINS,
   BOT_STRATEGY_BY_SKIN_OVERRIDE,
   BOT_STRATEGY_BY_SLOT,
-  BOT_SUBOPTIMAL_ROUTE_CHANCE,
   BOOTS_RESPAWN_MAX_MS,
   BOOTS_RESPAWN_MIN_MS,
   DIRECTIONS,
@@ -42,7 +38,12 @@ import {
   UNPAINTED_TILE_URL,
   WINS_TO_PASS,
   botTargetReactionDelayForLevel,
+  botSuboptimalRouteChance,
   botsForLevel,
+  botsForRound,
+  isArrowUnlocked,
+  isBombUnlocked,
+  isBootsUnlocked,
   roundDurationForLevel,
   type Direction,
   type RoundHistoryEntry,
@@ -228,6 +229,7 @@ const CHEST_SPAWN_DISTANCE_DELTA = 3;
 const BOOTS_BOB_AMPLITUDE_PX = 4;
 const BOOTS_TILT_RADIANS = 0.12;
 const ARROW_PULSE_SCALE = 0.08;
+const JUMP_HEIGHT_PX = 44;
 
 const characterJumpBodyScale = (linear: number, arc: number) => {
   const landingProgress = Math.min(1, Math.max(0, (linear - 0.7) / 0.3));
@@ -369,7 +371,9 @@ function IsoRound({
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
-  const botCount = botsForLevel(level);
+  const roundNumber = history.length + 1;
+  const botCount = botsForRound(level, roundNumber);
+  const suboptimalRouteChance = botSuboptimalRouteChance(level, roundNumber);
   const botCountRef = useRef(botCount);
   const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -510,24 +514,7 @@ function IsoRound({
   useEffect(() => {
     pickupTutorialReadyRef.current = false;
     pendingGameplayTutorialRef.current = [];
-    setGameplayTutorialTarget({
-      x: Math.round(window.innerWidth / 2),
-      y: Math.round(window.innerHeight / 2),
-      radius: 96,
-    });
-    const timer = window.setTimeout(() => {
-      pickupTutorialReadyRef.current = true;
-      const pending = pendingGameplayTutorialRef.current[0];
-      if (pending && gameplayTutorialStepRef.current === null) {
-        pendingGameplayTutorialRef.current.shift();
-        activateGameplayTutorial(pending.step, pending.target);
-      }
-    }, 2600);
-    return () => window.clearTimeout(timer);
-  }, [activateGameplayTutorial]);
-  useEffect(() => {
-    if (started) kickoffRef.current?.();
-  }, [started]);
+  }, []);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -1358,7 +1345,7 @@ function IsoRound({
       };
 
       const spawnBombAt = (gx: number, gy: number, scheduleNext: boolean) => {
-        if (gameOverRef.current || destroyed || !startedRef.current) return;
+        if (gameOverRef.current || destroyed) return;
         const firstFrame = bombWarningFrames[0];
         const warning = createBombWarningSprite(firstFrame.texture, gx, gy, firstFrame.anchor);
         depthLayer.addChild(warning);
@@ -1444,11 +1431,10 @@ function IsoRound({
       const tryCollectBoots = (c: Character) => {
         if (!boots) return;
         if (c.gx !== boots.gx || c.gy !== boots.gy) return;
-        if (gameNow() < c.boostUntil) return;
         removeAndDestroy(boots.gfx);
         boots = null;
-        c.boostUntil = gameNow() + BOOST_DURATION;
-        if (level >= BOOTS_UNLOCK_LEVEL) {
+        c.boostUntil = Math.max(c.boostUntil, gameNow() + BOOST_DURATION);
+        if (isBootsUnlocked(level)) {
           scheduleGame(spawnBoots, rng.range(BOOTS_RESPAWN_MIN_MS, BOOTS_RESPAWN_MAX_MS));
         }
       };
@@ -1476,7 +1462,7 @@ function IsoRound({
       };
 
       const spawnArrowAt = (gx: number, gy: number, dir: number, scheduleNext: boolean) => {
-        if (gameOverRef.current || destroyed || !startedRef.current) return;
+        if (gameOverRef.current || destroyed) return;
         if (arrow) removeArrow();
         const gfx = createArrowGraphic(gx, gy, dir);
         depthLayer.addChild(gfx);
@@ -1554,17 +1540,17 @@ function IsoRound({
       const startLevelMechanics = () => {
         spawnChest();
 
-        if (level >= BOMB_UNLOCK_LEVEL) {
+        if (isBombUnlocked(level, roundNumber)) {
           const { gx, gy } = randomUnoccupiedCell();
           spawnBombAt(gx, gy, true);
         }
 
-        if (level >= BOOTS_UNLOCK_LEVEL) {
+        if (isBootsUnlocked(level)) {
           const { gx, gy } = randomUnoccupiedCell();
           placeBoots(gx, gy);
         }
 
-        if (level >= ARROW_UNLOCK_LEVEL) {
+        if (isArrowUnlocked(level)) {
           const { gx, gy } = randomUnoccupiedCell();
           spawnArrowAt(gx, gy, 0, true);
         }
@@ -1639,8 +1625,6 @@ function IsoRound({
         if (deterministicTestMode.enabled) applyDeterministicScenarioFixture();
         else startLevelMechanics();
       };
-      if (startedRef.current) kickoffRef.current();
-
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       const moveCharacter = (c: Character, direction: Direction) => {
@@ -1790,7 +1774,7 @@ function IsoRound({
           const gx = c.anim.fromX + (c.anim.toX - c.anim.fromX) * t;
           const gy = c.anim.fromY + (c.anim.toY - c.anim.fromY) * t;
           const arc = Math.sin(linear * Math.PI);
-          const jumpOffset = arc * -55;
+          const jumpOffset = arc * -JUMP_HEIGHT_PX;
           const shadowScale = 1 - arc * 0.5;
           const bodyScale = characterJumpBodyScale(linear, arc);
           renderCharacterAt(c, gx, gy, jumpOffset, shadowScale, bodyScale);
@@ -1865,6 +1849,7 @@ function IsoRound({
             previousPlan: botRoutePlans.get(en),
             targetReactionUntil: botTargetReactionUntil,
             nowMs: gameNow(),
+            suboptimalRouteChance,
             rng,
           });
           if (!decision) continue;
@@ -2025,6 +2010,14 @@ function IsoRound({
       gameSceneReadyRef.current = true;
       setGameSceneReady(true);
       activateInitialPaintTutorial();
+      kickoffRef.current?.();
+      pickupTutorialReadyRef.current = true;
+      if (gameplayTutorialStepRef.current === null) {
+        const pendingTutorial = pendingGameplayTutorialRef.current.shift();
+        if (pendingTutorial) {
+          activateGameplayTutorial(pendingTutorial.step, pendingTutorial.target);
+        }
+      }
     })().catch((err) => {
       if (destroyed) return;
       console.error("[IsoGrid] Pixi setup failed", err);
@@ -2047,7 +2040,16 @@ function IsoRound({
       if (window.advanceTime) delete window.advanceTime;
       destroyPixiApp();
     };
-  }, [activateGameplayTutorial, activateInitialPaintTutorial, level, roundIndex, roundDuration, selectDirection]);
+  }, [
+    activateGameplayTutorial,
+    activateInitialPaintTutorial,
+    level,
+    roundIndex,
+    roundNumber,
+    roundDuration,
+    selectDirection,
+    suboptimalRouteChance,
+  ]);
 
   const playerSkin = SKINS[PLAYER_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
@@ -2350,7 +2352,7 @@ function IsoRound({
               Bots: <span className="font-bold text-[var(--tt-text-primary)]">{botCount}</span> ·
               Detour{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
-                {Math.round(BOT_SUBOPTIMAL_ROUTE_CHANCE * 100)}%
+                {Math.round(suboptimalRouteChance * 100)}%
               </span>{" "}
               · React{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
