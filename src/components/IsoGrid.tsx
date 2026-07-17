@@ -222,6 +222,7 @@ const DEBUG_HUD_ENABLED = false;
 const GAME_VIEW_TOP_RESERVED_PX = 178;
 const GAME_VIEW_BOTTOM_RESERVED_PX = 92;
 const GAME_VIEW_MOBILE_BOTTOM_RESERVED_PX = 320;
+const MOBILE_INITIAL_ZOOM_MULTIPLIER = 1.3;
 const PLAYER_SCORE_OFFSET_Y = -126;
 
 const JUMP_APEX_STRETCH = 0.08;
@@ -299,30 +300,35 @@ const ISO_DIRECTION_CONTROLS = [
   {
     direction: "LEFT",
     label: "Turn up-left",
+    key: "A",
     Icon: ArrowUpLeft,
-    className: "col-start-1 row-start-1",
+    className: "tt-direction-button-up-left",
   },
   {
     direction: "UP",
     label: "Turn up-right",
+    key: "W",
     Icon: ArrowUpRight,
-    className: "col-start-3 row-start-1",
+    className: "tt-direction-button-up-right",
   },
   {
     direction: "DOWN",
     label: "Turn down-left",
+    key: "S",
     Icon: ArrowDownLeft,
-    className: "col-start-1 row-start-3",
+    className: "tt-direction-button-down-left",
   },
   {
     direction: "RIGHT",
     label: "Turn down-right",
+    key: "D",
     Icon: ArrowDownRight,
-    className: "col-start-3 row-start-3",
+    className: "tt-direction-button-down-right",
   },
 ] satisfies Array<{
   direction: Direction;
   label: string;
+  key: string;
   Icon: typeof ArrowUpLeft;
   className: string;
 }>;
@@ -1085,7 +1091,8 @@ function IsoRound({
           const availW = Math.max(100, app.screen.width - padX * 2);
           const availH = Math.max(100, app.screen.height - padY);
           const fit = Math.min(availW / rawW, availH / rawH);
-          const fitZoom = Math.max(0.3, Math.min(2, fit));
+          const initialZoom = fit * (isCoarseInput ? MOBILE_INITIAL_ZOOM_MULTIPLIER : 1);
+          const fitZoom = Math.max(0.3, Math.min(2, initialZoom));
           zoomRef.current = fitZoom;
           setZoom(fitZoom);
         }
@@ -2418,11 +2425,11 @@ function IsoRound({
 
       <div
         {...backgroundInertProps}
-        className="tt-chip tt-direction-pad fixed left-1/2 z-50 h-36 w-36 -translate-x-1/2 grid-cols-3 grid-rows-3 place-items-center p-2"
+        className="tt-direction-pad fixed left-1/2 z-50 -translate-x-1/2"
         style={{ touchAction: "none" }}
         aria-label="Movement direction"
       >
-        {ISO_DIRECTION_CONTROLS.map(({ direction, label, Icon, className }) => {
+        {ISO_DIRECTION_CONTROLS.map(({ direction, label, key, Icon, className }) => {
           const active = selectedDirection === direction;
           return (
             <button
@@ -2435,7 +2442,8 @@ function IsoRound({
                 active ? "tt-direction-button-active" : ""
               }`}
             >
-              <Icon size={26} aria-hidden="true" />
+              <Icon aria-hidden="true" preserveAspectRatio="none" />
+              <span aria-hidden="true">{key}</span>
             </button>
           );
         })}
@@ -2749,6 +2757,12 @@ function GameplayTutorial({
 
   const viewportW = viewport.width;
   const viewportH = viewport.height;
+  const useMobileLayout =
+    viewportW <= 768 ||
+    (typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      (window.matchMedia("(pointer: coarse)").matches ||
+        window.matchMedia("(hover: none)").matches));
   const viewportPadding = 16;
   const modalW = Math.max(1, Math.min(340, viewportW - viewportPadding * 2));
   const estimatedModalH = Math.min(230, Math.max(1, viewportH - viewportPadding * 2));
@@ -2762,15 +2776,19 @@ function GameplayTutorial({
       : targetX - radius - modalW - gap > 0
         ? targetX - radius - modalW - gap
         : (viewportW - modalW) / 2;
-  const modalLeft = Math.min(
-    Math.max(viewportPadding, preferredModalLeft),
-    Math.max(viewportPadding, viewportW - modalW - viewportPadding),
-  );
+  const modalLeft = useMobileLayout
+    ? Math.max(viewportPadding, (viewportW - modalW) / 2)
+    : Math.min(
+        Math.max(viewportPadding, preferredModalLeft),
+        Math.max(viewportPadding, viewportW - modalW - viewportPadding),
+      );
   const modalTop = Math.min(
     Math.max(viewportPadding, viewportH - estimatedModalH - viewportPadding),
     Math.max(viewportPadding, targetY - Math.round(estimatedModalH / 2)),
   );
-  const modalMaxHeight = Math.max(1, viewportH - modalTop - viewportPadding);
+  const modalMaxHeight = useMobileLayout
+    ? Math.max(1, viewportH - viewportPadding * 2)
+    : Math.max(1, viewportH - modalTop - viewportPadding);
 
   return (
     <div className="tt-no-select fixed inset-0 z-[92]" style={{ touchAction: "none" }}>
@@ -2792,7 +2810,10 @@ function GameplayTutorial({
         aria-labelledby="gameplay-tutorial-title"
         style={{
           left: modalLeft,
-          top: modalTop,
+          top: useMobileLayout ? undefined : modalTop,
+          bottom: useMobileLayout
+            ? "calc(env(safe-area-inset-bottom, 0px) + 16px)"
+            : undefined,
           width: modalW,
           maxHeight: modalMaxHeight,
           boxSizing: "border-box",
