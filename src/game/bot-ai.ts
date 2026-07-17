@@ -2,7 +2,6 @@ import {
   BOARD_SIZE,
   BOT_BOOTS_DISTANCE_RATIO,
   BOT_PAINT_STRATEGY_CHEST_DISTANCE_RATIO,
-  BOT_SUBOPTIMAL_ROUTE_CHANCE,
   BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS,
   BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS,
   DIRECTIONS,
@@ -42,6 +41,7 @@ export interface ChooseBotMoveOptions {
   previousPlan?: BotRoutePlan;
   targetReactionUntil: number;
   nowMs: number;
+  suboptimalRouteChance: number;
   rng: SeededRng;
 }
 
@@ -108,6 +108,7 @@ export const chooseBotMove = ({
   previousPlan,
   targetReactionUntil,
   nowMs,
+  suboptimalRouteChance,
   rng,
 }: ChooseBotMoveOptions): BotMoveDecision | null => {
   const directions = DIRECTIONS.map((direction) => ({
@@ -169,7 +170,7 @@ export const chooseBotMove = ({
   if (!routePlan || targetReached || (!keepPreviousTarget && routePlan.targetKey !== targetKey)) {
     const directDistance = manhattanDistance(currentPosition, routeTarget);
     const waypointCandidates: GridPosition[] = [];
-    if (!currentInBombArea && rng.next() < BOT_SUBOPTIMAL_ROUTE_CHANCE) {
+    if (!currentInBombArea && rng.next() < suboptimalRouteChance) {
       for (let gx = 0; gx < BOARD_SIZE; gx++) {
         for (let gy = 0; gy < BOARD_SIZE; gy++) {
           if (

@@ -5,6 +5,7 @@ import type { SeededRng } from "@/game/rng";
 
 export interface FairSpawnOptions {
   characters: GridPosition[];
+  blockedCells?: GridPosition[];
   minDistance: number;
   maxDistanceDelta: number;
   rng: SeededRng;
@@ -28,12 +29,13 @@ export const unoccupiedCells = (
 
 export const chooseFairSpawnCell = ({
   characters,
+  blockedCells = [],
   minDistance,
   maxDistanceDelta,
   rng,
   boardSize = BOARD_SIZE,
 }: FairSpawnOptions): GridPosition | null => {
-  const availableCells = unoccupiedCells(characters, boardSize);
+  const availableCells = unoccupiedCells([...characters, ...blockedCells], boardSize);
   const randomUnoccupiedCell = () =>
     availableCells.length > 0 ? availableCells[rng.int(availableCells.length)] : null;
 

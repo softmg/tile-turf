@@ -87,10 +87,18 @@ export const zeroScores = (): Record<SkinId, number> => ({
 
 export const MAX_LEVEL = 10;
 export const WINS_TO_PASS = 3;
-export const BOMB_UNLOCK_LEVEL = 2;
-export const BOOTS_UNLOCK_LEVEL = 3;
-export const ARROW_UNLOCK_LEVEL = 4;
-export const botsForLevel = (lv: number) => (lv <= 2 ? 1 : lv <= 4 ? 2 : 3);
+export const BOMB_UNLOCK_LEVEL = 1;
+export const BOOTS_UNLOCK_LEVEL = 2;
+export const ARROW_UNLOCK_LEVEL = 3;
+export const isBombUnlocked = (level: number, round: number) =>
+  level > BOMB_UNLOCK_LEVEL || (level === BOMB_UNLOCK_LEVEL && round >= 2);
+export const isBootsUnlocked = (level: number) => level >= BOOTS_UNLOCK_LEVEL;
+export const isArrowUnlocked = (level: number) => level >= ARROW_UNLOCK_LEVEL;
+export const botsForRound = (level: number, round: number) => {
+  if (level < 4) return level === 1 && round < 3 ? 1 : 2;
+  return 3;
+};
+export const botsForLevel = (level: number) => botsForRound(level, Number.POSITIVE_INFINITY);
 export const roundDurationForLevel = (lv: number) =>
   lv <= 2 ? 30 : lv <= 4 ? 45 : lv <= 6 ? 60 : lv <= 8 ? 75 : 90;
 
@@ -101,7 +109,7 @@ export const ENEMY_SPAWN_POSITIONS: Array<[number, number]> = [
   [4, 4],
 ];
 
-export const BASE_JUMP_DURATION = 422;
+export const BASE_JUMP_DURATION = 200;
 export const BOOST_SPEED_MULTIPLIER = 1.5;
 export const BOOST_JUMP_DURATION = BASE_JUMP_DURATION / BOOST_SPEED_MULTIPLIER;
 export const STUN_DURATION = 3000;
@@ -118,6 +126,10 @@ export const botTargetReactionDelayForLevel = (lv: number) => {
   );
 };
 export const BOT_SUBOPTIMAL_ROUTE_CHANCE = 0.2;
+export const botSuboptimalRouteChance = (level: number, round: number) => {
+  if (level !== 1) return BOT_SUBOPTIMAL_ROUTE_CHANCE;
+  return Math.min(1, BOT_SUBOPTIMAL_ROUTE_CHANCE * (round <= 2 ? 3 : 2));
+};
 export const BOT_SUBOPTIMAL_ROUTE_MIN_EXTRA_STEPS = 1;
 export const BOT_SUBOPTIMAL_ROUTE_MAX_EXTRA_STEPS = 2;
 export const BOT_BOOTS_DISTANCE_RATIO = 0.65;

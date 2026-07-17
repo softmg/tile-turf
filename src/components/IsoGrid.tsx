@@ -17,15 +17,11 @@ import {
   BACKGROUND_URL,
   BASE_JUMP_DURATION,
   BOARD_SIZE,
-  ARROW_UNLOCK_LEVEL,
   BOOST_DURATION,
   BOOST_JUMP_DURATION,
-  BOOTS_UNLOCK_LEVEL,
-  BOMB_UNLOCK_LEVEL,
   BOT_SKINS,
   BOT_STRATEGY_BY_SKIN_OVERRIDE,
   BOT_STRATEGY_BY_SLOT,
-  BOT_SUBOPTIMAL_ROUTE_CHANCE,
   BOOTS_RESPAWN_MAX_MS,
   BOOTS_RESPAWN_MIN_MS,
   DIRECTIONS,
@@ -42,7 +38,12 @@ import {
   UNPAINTED_TILE_URL,
   WINS_TO_PASS,
   botTargetReactionDelayForLevel,
+  botSuboptimalRouteChance,
   botsForLevel,
+  botsForRound,
+  isArrowUnlocked,
+  isBombUnlocked,
+  isBootsUnlocked,
   roundDurationForLevel,
   type Direction,
   type RoundHistoryEntry,
@@ -105,6 +106,10 @@ import {
 } from "@/game/pixi-factories";
 import { createSceneLayers, removeAndDestroy } from "@/game/scene-layers";
 import { getDeterministicTestMode } from "@/game/test-mode";
+import { playGameSound, setGameMusicBlocked } from "@/game/audio";
+import { useGamePlatformLifecycle } from "@/game/use-game-platform-lifecycle";
+import { formatMessage, skinName, useMessages } from "@/lib/i18n";
+import { useYandexGameplay } from "@/lib/yandex-games";
 
 type InertProps = { "aria-hidden"?: true; inert?: boolean };
 type GameplayTutorialStep = "paint" | "chest" | "boots" | "bomb" | "arrow";
@@ -112,29 +117,6 @@ type GameplayTutorialTarget = { x: number; y: number; radius: number } | null;
 
 const inertBackgroundProps = (isInert: boolean): InertProps =>
   isInert ? { "aria-hidden": true, inert: true } : {};
-
-const GAMEPLAY_TUTORIAL_COPY: Record<GameplayTutorialStep, { title: string; body: string }> = {
-  paint: {
-    title: "Закрашивай клетки",
-    body: "Прыгай по соседним клеткам. Твой цвет приносит очки.",
-  },
-  chest: {
-    title: "Бери сундук",
-    body: "Он превращает закрашенные клетки в очки раунда.",
-  },
-  boots: {
-    title: "Бери ботинки",
-    body: "Они ненадолго ускоряют прыжки.",
-  },
-  bomb: {
-    title: "Остерегайся бомб",
-    body: "Взрыв оглушает и сбрасывает твой цвет.",
-  },
-  arrow: {
-    title: "Лови стрелку",
-    body: "Она закрашивает целый ряд клеток.",
-  },
-};
 
 const PAINT_TUTORIAL_STEP_MS = 520;
 const GAMEPLAY_TUTORIAL_STEPS: GameplayTutorialStep[] = [
@@ -174,6 +156,7 @@ declare global {
   interface Window {
     render_game_to_text?: () => string;
     advanceTime?: (ms: number) => string;
+    move_game_direction?: (direction: Direction) => string;
     __HOP_AND_FILL_MANUAL_TICKER__?: boolean;
   }
 }
@@ -183,6 +166,7 @@ interface IsoRoundProps {
   roundIndex: number;
   matchWins: Record<SkinId, number>;
   history: RoundHistoryEntry[];
+  externallyPaused: boolean;
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
   onExitToLevelMenu: () => void;
 }
@@ -213,6 +197,7 @@ const DEBUG_HUD_ENABLED = false;
 const GAME_VIEW_TOP_RESERVED_PX = 178;
 const GAME_VIEW_BOTTOM_RESERVED_PX = 92;
 const GAME_VIEW_MOBILE_BOTTOM_RESERVED_PX = 320;
+const MOBILE_INITIAL_ZOOM_MULTIPLIER = 1.3;
 const PLAYER_SCORE_OFFSET_Y = -126;
 
 const JUMP_APEX_STRETCH = 0.08;
@@ -228,6 +213,7 @@ const CHEST_SPAWN_DISTANCE_DELTA = 3;
 const BOOTS_BOB_AMPLITUDE_PX = 4;
 const BOOTS_TILT_RADIANS = 0.12;
 const ARROW_PULSE_SCALE = 0.08;
+const JUMP_HEIGHT_PX = 44;
 
 const characterJumpBodyScale = (linear: number, arc: number) => {
   const landingProgress = Math.min(1, Math.max(0, (linear - 0.7) / 0.3));
@@ -288,31 +274,36 @@ const arrowPaintStep = (dir: number) => {
 const ISO_DIRECTION_CONTROLS = [
   {
     direction: "LEFT",
-    label: "Turn up-left",
+    labelKey: "turnUpLeft",
+    key: "A",
     Icon: ArrowUpLeft,
-    className: "col-start-1 row-start-1",
+    className: "tt-direction-button-up-left",
   },
   {
     direction: "UP",
-    label: "Turn up-right",
+    labelKey: "turnUpRight",
+    key: "W",
     Icon: ArrowUpRight,
-    className: "col-start-3 row-start-1",
+    className: "tt-direction-button-up-right",
   },
   {
     direction: "DOWN",
-    label: "Turn down-left",
+    labelKey: "turnDownLeft",
+    key: "S",
     Icon: ArrowDownLeft,
-    className: "col-start-1 row-start-3",
+    className: "tt-direction-button-down-left",
   },
   {
     direction: "RIGHT",
-    label: "Turn down-right",
+    labelKey: "turnDownRight",
+    key: "D",
     Icon: ArrowDownRight,
-    className: "col-start-3 row-start-3",
+    className: "tt-direction-button-down-right",
   },
 ] satisfies Array<{
   direction: Direction;
-  label: string;
+  labelKey: "turnUpLeft" | "turnUpRight" | "turnDownLeft" | "turnDownRight";
+  key: string;
   Icon: typeof ArrowUpLeft;
   className: string;
 }>;
@@ -322,14 +313,16 @@ function IsoRound({
   roundIndex,
   matchWins,
   history,
+  externallyPaused,
   onRoundEnd,
   onExitToLevelMenu,
 }: IsoRoundProps) {
+  const messages = useMessages();
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
   const debug = import.meta.env.DEV && DEBUG_HUD_ENABLED;
-  const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<"renderer" | null>(null);
   const canShowDebug = debug;
   const debugRef = useRef(false);
   const [stats, setStats] = useState({
@@ -369,11 +362,15 @@ function IsoRound({
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const kickoffRef = useRef<(() => void) | null>(null);
-  const botCount = botsForLevel(level);
+  const roundNumber = history.length + 1;
+  const botCount = botsForRound(level, roundNumber);
+  const suboptimalRouteChance = botSuboptimalRouteChance(level, roundNumber);
   const botCountRef = useRef(botCount);
   const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [gameplayTutorialStep, setGameplayTutorialStep] = useState<GameplayTutorialStep | null>(null);
+  const [gameplayTutorialStep, setGameplayTutorialStep] = useState<GameplayTutorialStep | null>(
+    null,
+  );
   const [gameplayTutorialTarget, setGameplayTutorialTarget] =
     useState<GameplayTutorialTarget>(null);
   const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(null);
@@ -392,6 +389,7 @@ function IsoRound({
     startCountdown !== null ||
     gameSceneLoading;
   const modalOpenRef = useRef(modalOpen);
+  useYandexGameplay(started && !paused && !externallyPaused && !gameOver);
   const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>(
     createGameplayTutorialSeenState(new Set()),
   );
@@ -472,13 +470,18 @@ function IsoRound({
     startedRef.current = started;
   }, [started]);
   useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
+    pausedRef.current = paused || externallyPaused;
+  }, [externallyPaused, paused]);
+  useEffect(() => {
+    setGameMusicBlocked("round-over", gameOver);
+    return () => setGameMusicBlocked("round-over", false);
+  }, [gameOver]);
   useEffect(() => {
     gameplayTutorialStepRef.current = gameplayTutorialStep;
   }, [gameplayTutorialStep]);
   useEffect(() => {
     if (
+      externallyPaused ||
       startCountdown === null ||
       !gameSceneReady ||
       settingsOpen ||
@@ -500,7 +503,15 @@ function IsoRound({
     }, 500);
 
     return () => window.clearTimeout(timer);
-  }, [gameOver, gameSceneReady, gameplayTutorialStep, renderError, settingsOpen, startCountdown]);
+  }, [
+    externallyPaused,
+    gameOver,
+    gameSceneReady,
+    gameplayTutorialStep,
+    renderError,
+    settingsOpen,
+    startCountdown,
+  ]);
   useEffect(() => {
     const seen = readInitialGameplayTutorialSeen();
     shownGameplayTutorialRef.current = seen;
@@ -510,24 +521,7 @@ function IsoRound({
   useEffect(() => {
     pickupTutorialReadyRef.current = false;
     pendingGameplayTutorialRef.current = [];
-    setGameplayTutorialTarget({
-      x: Math.round(window.innerWidth / 2),
-      y: Math.round(window.innerHeight / 2),
-      radius: 96,
-    });
-    const timer = window.setTimeout(() => {
-      pickupTutorialReadyRef.current = true;
-      const pending = pendingGameplayTutorialRef.current[0];
-      if (pending && gameplayTutorialStepRef.current === null) {
-        pendingGameplayTutorialRef.current.shift();
-        activateGameplayTutorial(pending.step, pending.target);
-      }
-    }, 2600);
-    return () => window.clearTimeout(timer);
-  }, [activateGameplayTutorial]);
-  useEffect(() => {
-    if (started) kickoffRef.current?.();
-  }, [started]);
+  }, []);
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -681,7 +675,7 @@ function IsoRound({
         });
       } catch (err) {
         console.error("[IsoGrid] Pixi init failed", err);
-        setRenderError("Game renderer could not start. Return to the level menu and try again.");
+        setRenderError("renderer");
         return;
       }
       appInitialized = true;
@@ -774,9 +768,9 @@ function IsoRound({
       const paintTutorialCellSet = () => {
         return [
           { gx: player.gx, gy: player.gy },
-          ...DIRECTIONS.map((direction) => nextGridPosition(player.gx, player.gy, direction)).filter(
-            (cell) => isInsideBoard(cell.gx, cell.gy),
-          ),
+          ...DIRECTIONS.map((direction) =>
+            nextGridPosition(player.gx, player.gy, direction),
+          ).filter((cell) => isInsideBoard(cell.gx, cell.gy)),
         ];
       };
       const restoreTutorialPaintTiles = () => {
@@ -784,8 +778,7 @@ function IsoRound({
           const owner = owners[cell.gx][cell.gy];
           if (owner) {
             tiles[cell.gx][cell.gy].paint(SKINS[owner], performance.now(), { immediate: true });
-          }
-          else tiles[cell.gx][cell.gy].resetToUnpainted();
+          } else tiles[cell.gx][cell.gy].resetToUnpainted();
         }
         paintTutorialCells = [];
         paintTutorialLastIndex = -1;
@@ -803,8 +796,7 @@ function IsoRound({
         }
         const nextIndex =
           Math.floor(
-            (nowMs % (paintTutorialCells.length * PAINT_TUTORIAL_STEP_MS)) /
-              PAINT_TUTORIAL_STEP_MS,
+            (nowMs % (paintTutorialCells.length * PAINT_TUTORIAL_STEP_MS)) / PAINT_TUTORIAL_STEP_MS,
           ) % paintTutorialCells.length;
         if (nextIndex === paintTutorialLastIndex) {
           for (const cell of paintTutorialCells) tiles[cell.gx][cell.gy].update(nowMs);
@@ -881,7 +873,7 @@ function IsoRound({
       const botRoutePlans = new WeakMap<Character, BotRoutePlan>();
       const nextMoveAt = new WeakMap<Character, number>();
       const botStrategies = new WeakMap<Character, BotStrategyId>();
-      const botStrategyLabels = new WeakMap<Character, Text>();
+      const botScoreTexts = new WeakMap<Character, Text>();
       // Hide all bot sprites until activated
       for (const e of allEnemies) {
         e.sprite.visible = false;
@@ -889,36 +881,35 @@ function IsoRound({
         e.stunStars.visible = false;
       }
 
-      const botStrategyEmoji = (strategy: BotStrategyId) => (strategy === "paint" ? "🎨" : "🧰");
-      const placeBotStrategyLabel = (c: Character) => {
-        const label = botStrategyLabels.get(c);
+      const placeBotScoreText = (c: Character) => {
+        const label = botScoreTexts.get(c);
         if (!label) return;
         label.x = c.sprite.x;
-        label.y = c.sprite.y - 124;
-        label.zIndex = c.sprite.zIndex + 0.05;
+        label.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
+        label.zIndex = c.sprite.zIndex + 0.02;
       };
-      const setBotStrategyLabel = (c: Character, strategy: BotStrategyId, visible: boolean) => {
-        let label = botStrategyLabels.get(c);
+      const setBotScoreText = (c: Character, score: number, visible: boolean) => {
+        let label = botScoreTexts.get(c);
         if (!label) {
           label = new Text({
             text: "",
             style: {
-              fontFamily: "system-ui, Apple Color Emoji, Segoe UI Emoji, sans-serif",
-              fontSize: 26,
+              fontFamily: "ui-rounded, system-ui, sans-serif",
+              fontSize: 22,
               fontWeight: "900",
               fill: 0xffffff,
-              stroke: { color: 0x111111, width: 4 },
+              stroke: { color: 0x111111, width: 5 },
               align: "center",
             },
           });
-          label.label = "bot-strategy-label";
+          label.label = "bot-score";
           label.anchor.set(0.5, 0.5);
           depthLayer.addChild(label);
-          botStrategyLabels.set(c, label);
+          botScoreTexts.set(c, label);
         }
-        label.text = botStrategyEmoji(strategy);
+        label.text = String(score);
         label.visible = visible;
-        placeBotStrategyLabel(c);
+        placeBotScoreText(c);
       };
 
       let gameTimeMs = 0;
@@ -1085,7 +1076,8 @@ function IsoRound({
           const availW = Math.max(100, app.screen.width - padX * 2);
           const availH = Math.max(100, app.screen.height - padY);
           const fit = Math.min(availW / rawW, availH / rawH);
-          const fitZoom = Math.max(0.3, Math.min(2, fit));
+          const initialZoom = fit * (isCoarseInput ? MOBILE_INITIAL_ZOOM_MULTIPLIER : 1);
+          const fitZoom = Math.max(0.3, Math.min(2, initialZoom));
           zoomRef.current = fitZoom;
           setZoom(fitZoom);
         }
@@ -1130,7 +1122,7 @@ function IsoRound({
           playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
           playerScoreText.zIndex = c.sprite.zIndex + 0.02;
         } else {
-          placeBotStrategyLabel(c);
+          placeBotScoreText(c);
         }
       };
 
@@ -1156,7 +1148,7 @@ function IsoRound({
           playerScoreText.y = c.sprite.y + PLAYER_SCORE_OFFSET_Y;
           playerScoreText.zIndex = c.sprite.zIndex + 0.02;
         } else {
-          placeBotStrategyLabel(c);
+          placeBotScoreText(c);
         }
 
         const stars = c.stunStars;
@@ -1186,15 +1178,24 @@ function IsoRound({
       };
 
       const rng = createSeededRng(seedFromParts("tile-turf", level, roundIndex));
-      const randomCell = () => ({ gx: rng.int(BOARD_SIZE), gy: rng.int(BOARD_SIZE) });
       const occupiedCharacters = () => [player, ...enemies];
-      const randomUnoccupiedCell = () => {
-        const cells = unoccupiedCells(occupiedCharacters());
-        return cells.length > 0 ? cells[rng.int(cells.length)] : randomCell();
+      const occupiedItemCells = () => [
+        ...bombs.map(({ gx, gy }) => ({ gx, gy })),
+        ...(boots ? [{ gx: boots.gx, gy: boots.gy }] : []),
+        ...(arrow ? [{ gx: arrow.gx, gy: arrow.gy }] : []),
+      ];
+      const randomAvailableItemCell = () => {
+        const cells = unoccupiedCells([
+          ...occupiedCharacters(),
+          { gx: chest.gx, gy: chest.gy },
+          ...occupiedItemCells(),
+        ]);
+        return cells.length > 0 ? cells[rng.int(cells.length)] : null;
       };
       const fairChestSpawnCell = () =>
         chooseFairSpawnCell({
           characters: occupiedCharacters(),
+          blockedCells: occupiedItemCells(),
           minDistance: CHEST_MIN_SPAWN_DISTANCE,
           maxDistanceDelta: CHEST_SPAWN_DISTANCE_DELTA,
           rng,
@@ -1277,7 +1278,7 @@ function IsoRound({
               t.resetToUnpainted();
               any = true;
             }
-        }
+          }
         if (any) minimapTilesDirty = true;
       };
 
@@ -1310,11 +1311,13 @@ function IsoRound({
 
       const tryCollectChest = (c: Character) => {
         if (c.gx !== chest.gx || c.gy !== chest.gy) return false;
+        void playGameSound("chest");
         const gained = countOwned(c.skin.id);
         if (gained > 0) {
           bankedScores = { ...bankedScores, [c.skin.id]: bankedScores[c.skin.id] + gained };
           setBanked(bankedScores);
           if (c === player) updatePlayerScoreText();
+          else setBotScoreText(c, bankedScores[c.skin.id], true);
           clearOwnedBy(c.skin.id);
         }
         spawnChest();
@@ -1337,6 +1340,7 @@ function IsoRound({
 
       const explodeBomb = (bomb: Bomb) => {
         if (gameOverRef.current || destroyed || bomb.detonated) return;
+        void playGameSound("bomb");
         for (const marker of bomb.dangerMarkers) removeAndDestroy(marker);
         bomb.dangerMarkers = [];
         bomb.phase = "explosion";
@@ -1358,7 +1362,7 @@ function IsoRound({
       };
 
       const spawnBombAt = (gx: number, gy: number, scheduleNext: boolean) => {
-        if (gameOverRef.current || destroyed || !startedRef.current) return;
+        if (gameOverRef.current || destroyed) return;
         const firstFrame = bombWarningFrames[0];
         const warning = createBombWarningSprite(firstFrame.texture, gx, gy, firstFrame.anchor);
         depthLayer.addChild(warning);
@@ -1385,7 +1389,12 @@ function IsoRound({
 
       function spawnBomb() {
         if (gameOverRef.current || destroyed || !startedRef.current) return;
-        const { gx, gy } = randomCell();
+        const spawnCell = randomAvailableItemCell();
+        if (!spawnCell) {
+          scheduleGame(spawnBomb, rng.range(5000, 8000));
+          return;
+        }
+        const { gx, gy } = spawnCell;
         spawnBombAt(gx, gy, true);
       }
 
@@ -1437,18 +1446,23 @@ function IsoRound({
       };
       const spawnBoots = () => {
         if (gameOverRef.current || destroyed || !startedRef.current || boots) return;
-        const { gx, gy } = randomCell();
+        const spawnCell = randomAvailableItemCell();
+        if (!spawnCell) {
+          scheduleGame(spawnBoots, rng.range(BOOTS_RESPAWN_MIN_MS, BOOTS_RESPAWN_MAX_MS));
+          return;
+        }
+        const { gx, gy } = spawnCell;
         placeBoots(gx, gy);
       };
 
       const tryCollectBoots = (c: Character) => {
         if (!boots) return;
         if (c.gx !== boots.gx || c.gy !== boots.gy) return;
-        if (gameNow() < c.boostUntil) return;
+        void playGameSound("boots");
         removeAndDestroy(boots.gfx);
         boots = null;
-        c.boostUntil = gameNow() + BOOST_DURATION;
-        if (level >= BOOTS_UNLOCK_LEVEL) {
+        c.boostUntil = Math.max(c.boostUntil, gameNow() + BOOST_DURATION);
+        if (isBootsUnlocked(level)) {
           scheduleGame(spawnBoots, rng.range(BOOTS_RESPAWN_MIN_MS, BOOTS_RESPAWN_MAX_MS));
         }
       };
@@ -1476,7 +1490,7 @@ function IsoRound({
       };
 
       const spawnArrowAt = (gx: number, gy: number, dir: number, scheduleNext: boolean) => {
-        if (gameOverRef.current || destroyed || !startedRef.current) return;
+        if (gameOverRef.current || destroyed) return;
         if (arrow) removeArrow();
         const gfx = createArrowGraphic(gx, gy, dir);
         depthLayer.addChild(gfx);
@@ -1488,7 +1502,12 @@ function IsoRound({
 
       function spawnArrow() {
         if (gameOverRef.current || destroyed || !startedRef.current) return;
-        const { gx, gy } = randomCell();
+        const spawnCell = randomAvailableItemCell();
+        if (!spawnCell) {
+          scheduleGame(spawnArrow, ARROW_RESPAWN_MS);
+          return;
+        }
+        const { gx, gy } = spawnCell;
         spawnArrowAt(gx, gy, 0, true);
       }
 
@@ -1532,6 +1551,7 @@ function IsoRound({
       const tryTriggerArrow = (c: Character) => {
         if (!arrow) return;
         if (c.gx !== arrow.gx || c.gy !== arrow.gy) return;
+        void playGameSound("arrow");
         const { dx, dy } = arrowPaintStep(arrow.dir);
         paintAt(c.gx, c.gy, c.skin);
         let x = c.gx + dx;
@@ -1554,19 +1574,19 @@ function IsoRound({
       const startLevelMechanics = () => {
         spawnChest();
 
-        if (level >= BOMB_UNLOCK_LEVEL) {
-          const { gx, gy } = randomUnoccupiedCell();
-          spawnBombAt(gx, gy, true);
+        if (isBombUnlocked(level, roundNumber)) {
+          const spawnCell = randomAvailableItemCell();
+          if (spawnCell) spawnBombAt(spawnCell.gx, spawnCell.gy, true);
         }
 
-        if (level >= BOOTS_UNLOCK_LEVEL) {
-          const { gx, gy } = randomUnoccupiedCell();
-          placeBoots(gx, gy);
+        if (isBootsUnlocked(level)) {
+          const spawnCell = randomAvailableItemCell();
+          if (spawnCell) placeBoots(spawnCell.gx, spawnCell.gy);
         }
 
-        if (level >= ARROW_UNLOCK_LEVEL) {
-          const { gx, gy } = randomUnoccupiedCell();
-          spawnArrowAt(gx, gy, 0, true);
+        if (isArrowUnlocked(level)) {
+          const spawnCell = randomAvailableItemCell();
+          if (spawnCell) spawnArrowAt(spawnCell.gx, spawnCell.gy, 0, true);
         }
       };
 
@@ -1625,22 +1645,19 @@ function IsoRound({
             miniEnemies.push(allMiniEnemies[i]);
             const strategy =
               BOT_STRATEGY_BY_SKIN_OVERRIDE[allEnemies[i].skin.id] ??
-                BOT_STRATEGY_BY_SLOT[i] ??
-                "chest";
+              BOT_STRATEGY_BY_SLOT[i] ??
+              "chest";
             botStrategies.set(allEnemies[i], strategy);
-            setBotStrategyLabel(allEnemies[i], strategy, true);
+            setBotScoreText(allEnemies[i], bankedScores[allEnemies[i].skin.id], true);
             land(allEnemies[i]);
           } else {
-            const strategy = botStrategies.get(allEnemies[i]) ?? "chest";
-            setBotStrategyLabel(allEnemies[i], strategy, false);
+            setBotScoreText(allEnemies[i], 0, false);
           }
         }
         updateMinimap();
         if (deterministicTestMode.enabled) applyDeterministicScenarioFixture();
         else startLevelMechanics();
       };
-      if (startedRef.current) kickoffRef.current();
-
       const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
       const moveCharacter = (c: Character, direction: Direction) => {
@@ -1675,6 +1692,7 @@ function IsoRound({
           elapsed: 0,
           duration: jumpDurationFor(c),
         };
+        if (c === player) void playGameSound("jump");
         return true;
       };
 
@@ -1790,7 +1808,7 @@ function IsoRound({
           const gx = c.anim.fromX + (c.anim.toX - c.anim.fromX) * t;
           const gy = c.anim.fromY + (c.anim.toY - c.anim.fromY) * t;
           const arc = Math.sin(linear * Math.PI);
-          const jumpOffset = arc * -55;
+          const jumpOffset = arc * -JUMP_HEIGHT_PX;
           const shadowScale = 1 - arc * 0.5;
           const bodyScale = characterJumpBodyScale(linear, arc);
           renderCharacterAt(c, gx, gy, jumpOffset, shadowScale, bodyScale);
@@ -1865,6 +1883,7 @@ function IsoRound({
             previousPlan: botRoutePlans.get(en),
             targetReactionUntil: botTargetReactionUntil,
             nowMs: gameNow(),
+            suboptimalRouteChance,
             rng,
           });
           if (!decision) continue;
@@ -1894,6 +1913,10 @@ function IsoRound({
 
       window.render_game_to_text = renderGameToText;
       window.advanceTime = advanceTime;
+      window.move_game_direction = (direction) => {
+        movePlayer(direction);
+        return renderGameToText();
+      };
 
       let lastAutoMoveTime = -Infinity;
       let lastDirectionVersion = directionVersionRef.current;
@@ -2025,10 +2048,18 @@ function IsoRound({
       gameSceneReadyRef.current = true;
       setGameSceneReady(true);
       activateInitialPaintTutorial();
+      kickoffRef.current?.();
+      pickupTutorialReadyRef.current = true;
+      if (gameplayTutorialStepRef.current === null) {
+        const pendingTutorial = pendingGameplayTutorialRef.current.shift();
+        if (pendingTutorial) {
+          activateGameplayTutorial(pendingTutorial.step, pendingTutorial.target);
+        }
+      }
     })().catch((err) => {
       if (destroyed) return;
       console.error("[IsoGrid] Pixi setup failed", err);
-      setRenderError("Game renderer could not start. Return to the level menu and try again.");
+      setRenderError("renderer");
     });
 
     return () => {
@@ -2045,9 +2076,19 @@ function IsoRound({
       }
       if (window.render_game_to_text) delete window.render_game_to_text;
       if (window.advanceTime) delete window.advanceTime;
+      if (window.move_game_direction) delete window.move_game_direction;
       destroyPixiApp();
     };
-  }, [activateGameplayTutorial, activateInitialPaintTutorial, level, roundIndex, roundDuration, selectDirection]);
+  }, [
+    activateGameplayTutorial,
+    activateInitialPaintTutorial,
+    level,
+    roundIndex,
+    roundNumber,
+    roundDuration,
+    selectDirection,
+    suboptimalRouteChance,
+  ]);
 
   const playerSkin = SKINS[PLAYER_SKIN];
   const mm = String(Math.floor(timeLeft / 60)).padStart(2, "0");
@@ -2059,6 +2100,12 @@ function IsoRound({
   );
   const topScore = banked[winner];
   const isTie = activeSkins.filter((id) => banked[id] === topScore).length > 1;
+  const roundOutcomeSoundPlayedRef = useRef(false);
+  useEffect(() => {
+    if (!gameOver || isTie || roundOutcomeSoundPlayedRef.current) return;
+    roundOutcomeSoundPlayedRef.current = true;
+    void playGameSound(winner === PLAYER_SKIN ? "win" : "lose");
+  }, [gameOver, isTie, winner]);
 
   const backgroundInertProps = inertBackgroundProps(modalOpen);
 
@@ -2082,7 +2129,7 @@ function IsoRound({
             role="alert"
             className="tt-dialog max-w-sm px-8 py-6 text-center text-[18px] font-bold"
           >
-            {renderError}
+            {messages.renderError}
           </div>
         </div>
       )}
@@ -2096,7 +2143,7 @@ function IsoRound({
           <div className="tt-dialog px-8 py-6 text-center">
             <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[rgba(112,98,80,0.22)] border-t-[var(--tt-text-primary)]" />
             <div className="mt-4 text-[18px] font-bold text-[var(--tt-text-primary)]">
-              Loading field
+              {messages.loadingField}
             </div>
           </div>
         </div>
@@ -2110,7 +2157,7 @@ function IsoRound({
         >
           <div className="text-center">
             <div className="text-[18px] font-bold uppercase tracking-[0.18em] text-[var(--tt-text-secondary)]">
-              Get ready
+              {messages.getReady}
             </div>
             <div
               key={startCountdown}
@@ -2190,13 +2237,16 @@ function IsoRound({
         }}
       >
         <div className="text-[12px] font-bold text-[var(--tt-text-secondary)]">
-          Lvl {level} · BO{WINS_TO_PASS * 2 - 1}
+          {messages.levelShort} {level} · {messages.bestOf}
+          {WINS_TO_PASS * 2 - 1}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span style={{ color: SKINS[PLAYER_SKIN].uiColor }}>You {matchWins[PLAYER_SKIN]}</span>
-          <span className="text-[var(--tt-text-secondary)]">vs</span>
+          <span style={{ color: SKINS[PLAYER_SKIN].uiColor }}>
+            {messages.you} {matchWins[PLAYER_SKIN]}
+          </span>
+          <span className="text-[var(--tt-text-secondary)]">{messages.versus}</span>
           <span className="text-[var(--tt-text-primary)]">
-            Bots {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))}
+            {messages.bots} {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))}
           </span>
           <span className="text-[var(--tt-text-secondary)]">/ {WINS_TO_PASS}</span>
         </div>
@@ -2206,23 +2256,25 @@ function IsoRound({
       {gameOver && (
         <div className="tt-overlay fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
-            className="tt-dialog min-w-[280px] px-8 py-7 text-center"
+            className="tt-dialog w-full max-w-md px-8 py-7 text-center"
             role="dialog"
             aria-modal="true"
             aria-labelledby="round-over-title"
           >
             <div className="text-[18px] font-semibold text-[var(--tt-text-secondary)]">
-              End of Round · Level {level}
+              {messages.endOfRound} · {messages.level} {level}
             </div>
             <div id="round-over-title" className="mt-2 text-[32px] font-bold">
               {isTie ? (
-                "It's a Tie!"
+                messages.roundTie
               ) : (
-                <span style={{ color: SKINS[winner].uiColor }}>{SKINS[winner].name} wins!</span>
+                <span style={{ color: SKINS[winner].uiColor }}>
+                  {skinName(messages, winner)} {messages.wins}
+                </span>
               )}
             </div>
             <div className="mt-6 text-left text-[18px] font-bold text-[var(--tt-text-secondary)]">
-              Match score (first to {WINS_TO_PASS})
+              {messages.matchScore} ({messages.firstTo} {WINS_TO_PASS})
             </div>
             <div className="mt-2 space-y-2 text-left">
               {activeSkins.map((id) => {
@@ -2238,12 +2290,12 @@ function IsoRound({
                         style={{ background: SKINS[id].uiColor }}
                       />
                       <span className="font-bold truncate" style={{ color: SKINS[id].uiColor }}>
-                        {SKINS[id].name}
+                        {skinName(messages, id)}
                       </span>
                     </span>
                     <span className="flex items-center gap-3">
                       <span className="text-[14px] font-semibold tabular-nums text-[var(--tt-text-secondary)]">
-                        {banked[id]} pts
+                        {banked[id]} {messages.pointsShort}
                       </span>
                       <span className="text-[22px] font-extrabold tabular-nums text-[var(--tt-text-primary)]">
                         {projectedWins}
@@ -2256,52 +2308,12 @@ function IsoRound({
                 );
               })}
             </div>
-            {history.length > 0 && (
-              <>
-                <div className="mt-6 text-left text-[18px] font-bold text-[var(--tt-text-secondary)]">
-                  Previous rounds
-                </div>
-                <div className="mt-2 space-y-1.5 text-left max-h-48 overflow-y-auto pr-1">
-                  {history.map((h, i) => (
-                    <div key={i} className="tt-panel px-4 py-2">
-                      <div className="flex items-center justify-between text-[14px] text-[var(--tt-text-secondary)]">
-                        <span className="font-bold">
-                          L{h.level} · R{h.round}
-                        </span>
-                        <span
-                          className="font-bold"
-                          style={{ color: h.winner ? SKINS[h.winner].uiColor : undefined }}
-                        >
-                          {h.winner ? `${SKINS[h.winner].name} won` : "Tie"}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                        {activeSkins.map((id) => (
-                          <span
-                            key={id}
-                            className="flex items-center gap-1 font-mono text-[11px] tabular-nums"
-                          >
-                            <span
-                              className="inline-block h-2 w-2 rounded-full"
-                              style={{ background: SKINS[id].uiColor }}
-                            />
-                            <span className="text-[var(--tt-text-primary)]">
-                              {h.scores[id] ?? 0}
-                            </span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
             <button
               type="button"
               onClick={() => onRoundEnd(isTie ? null : winner, banked)}
               className="tt-button tt-button-success mt-6 w-full"
             >
-              Continue
+              {messages.continue}
             </button>
           </div>
         </div>
@@ -2318,7 +2330,7 @@ function IsoRound({
         disabled={gameOver}
         className="tt-chip tt-settings-button fixed right-4 z-50 flex h-14 w-14 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
-        aria-label="Settings"
+        aria-label={messages.settings}
       >
         <Settings size={24} />
       </button>
@@ -2333,32 +2345,33 @@ function IsoRound({
 
       {/* Pause overlay */}
       {settingsOpen && !gameOver && (
-        <div
-          className="tt-overlay fixed inset-0 z-[95] flex items-center justify-center p-4"
-        >
+        <div className="tt-overlay fixed inset-0 z-[95] flex items-center justify-center p-4">
           <div
-            className="tt-dialog min-w-[280px] max-w-[90vw] px-8 py-7 text-center"
+            className="tt-dialog w-full max-w-md px-8 py-7 text-center"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pause-title"
           >
-            <div className="text-[18px] font-semibold text-[var(--tt-text-secondary)]">Paused</div>
+            <div className="text-[18px] font-semibold text-[var(--tt-text-secondary)]">
+              {messages.paused}
+            </div>
             <div id="pause-title" className="mt-1 text-[32px] font-bold">
-              Level {level}
+              {messages.level} {level}
             </div>
             <div className="mt-4 text-[18px] text-[var(--tt-text-secondary)]">
-              Bots: <span className="font-bold text-[var(--tt-text-primary)]">{botCount}</span> ·
-              Detour{" "}
+              {messages.bots}:{" "}
+              <span className="font-bold text-[var(--tt-text-primary)]">{botCount}</span> ·{" "}
+              {messages.detour}{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
-                {Math.round(BOT_SUBOPTIMAL_ROUTE_CHANCE * 100)}%
+                {Math.round(suboptimalRouteChance * 100)}%
               </span>{" "}
-              · React{" "}
+              · {messages.reaction}{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
                 {botTargetReactionDelayForLevel(level)}ms
               </span>
             </div>
             <div className="mt-3 text-[18px] text-[var(--tt-text-secondary)]">
-              Match: You {matchWins[PLAYER_SKIN]} — Bots{" "}
+              {messages.match}: {messages.you} {matchWins[PLAYER_SKIN]} — {messages.bots}{" "}
               {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))} / {WINS_TO_PASS}
             </div>
 
@@ -2370,19 +2383,17 @@ function IsoRound({
               }}
               className="tt-button tt-button-success mt-6 w-full gap-2"
             >
-              <Play size={16} fill="currentColor" /> Resume
+              <Play size={16} fill="currentColor" /> {messages.resume}
             </button>
             <button
               type="button"
               onClick={() => {
-                const confirmed = window.confirm(
-                  "Leave this match? Your current round wins and match history will be lost.",
-                );
+                const confirmed = window.confirm(messages.confirmExitMatch);
                 if (confirmed) onExitToLevelMenu();
               }}
               className="tt-button tt-button-secondary mt-3 w-full"
             >
-              Exit to Level Select
+              {messages.exitToLevelSelect}
             </button>
           </div>
         </div>
@@ -2402,30 +2413,31 @@ function IsoRound({
           value={zoom}
           onChange={(e) => setZoom(parseFloat(e.target.value))}
           className="w-32 accent-[var(--tt-accent-primary)]"
-          aria-label="Zoom"
+          aria-label={messages.zoom}
         />
       </div>
 
       <div
         {...backgroundInertProps}
-        className="tt-chip tt-direction-pad fixed left-1/2 z-50 h-36 w-36 -translate-x-1/2 grid-cols-3 grid-rows-3 place-items-center p-2"
+        className="tt-direction-pad fixed left-1/2 z-50 -translate-x-1/2"
         style={{ touchAction: "none" }}
-        aria-label="Movement direction"
+        aria-label={messages.movementDirection}
       >
-        {ISO_DIRECTION_CONTROLS.map(({ direction, label, Icon, className }) => {
+        {ISO_DIRECTION_CONTROLS.map(({ direction, labelKey, key, Icon, className }) => {
           const active = selectedDirection === direction;
           return (
             <button
               key={direction}
               type="button"
               onClick={() => selectDirection(direction)}
-              aria-label={label}
+              aria-label={messages[labelKey]}
               aria-pressed={active}
               className={`${className} tt-direction-button ${
                 active ? "tt-direction-button-active" : ""
               }`}
             >
-              <Icon size={26} aria-hidden="true" />
+              <Icon aria-hidden="true" preserveAspectRatio="none" />
+              <span aria-hidden="true">{key}</span>
             </button>
           );
         })}
@@ -2471,13 +2483,14 @@ function IsoRound({
 // ============= Level Manager Wrapper =============
 
 export function IsoGrid() {
+  const messages = useMessages();
   const [unlocked, setUnlocked] = useState<number>(1);
   const [level, setLevel] = useState<number>(1);
   const [matchWins, setMatchWins] = useState<Record<SkinId, number>>(() => zeroScores());
   const [phase, setPhase] = useState<"menu" | "playing" | "passed" | "failed">("menu");
   const [roundIdx, setRoundIdx] = useState(0);
-  const [lastWinnerName, setLastWinnerName] = useState<string>("");
   const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
+  const externallyPaused = useGamePlatformLifecycle(phase === "passed" || phase === "failed");
 
   const startLevel = useCallback((lv: number) => {
     setLevel(lv);
@@ -2522,8 +2535,6 @@ export function IsoGrid() {
     const bots = BOT_SKINS.slice(0, botsForLevel(level));
     const playerW = next[PLAYER_SKIN];
     const botMax = Math.max(0, ...bots.map((b) => next[b]));
-    setLastWinnerName(winner ? SKINS[winner].name : "Tie");
-
     const newHistory = [...history, { level, round: history.length + 1, winner, scores: banked }];
     setHistory(newHistory);
 
@@ -2550,6 +2561,7 @@ export function IsoGrid() {
         roundIndex={roundIdx}
         matchWins={matchWins}
         history={history}
+        externallyPaused={externallyPaused}
         onRoundEnd={handleRoundEnd}
         onExitToLevelMenu={showLevelMenu}
       />
@@ -2558,9 +2570,7 @@ export function IsoGrid() {
 
   return (
     <>
-      <div
-        className="tt-overlay fixed inset-0 z-[80] flex items-center justify-center p-4"
-      >
+      <div className="tt-overlay fixed inset-0 z-[80] flex items-center justify-center p-4">
         <div
           className="tt-window w-full max-w-md px-8 py-8 text-center"
           role="dialog"
@@ -2570,40 +2580,43 @@ export function IsoGrid() {
           {phase === "passed" && (
             <>
               <div className="text-[18px] font-bold text-[var(--tt-accent-success)]">
-                Level Passed
+                {messages.levelPassed}
               </div>
               <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
-                Level {level} ✓
+                {messages.level} {level} ✓
               </div>
               <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
-                You won {matchWins[PLAYER_SKIN]}–
-                {Math.max(0, ...BOT_SKINS.slice(0, botsForLevel(level)).map((b) => matchWins[b]))}.
+                {formatMessage(messages.levelPassedScore, {
+                  playerWins: matchWins[PLAYER_SKIN],
+                  botWins: Math.max(
+                    0,
+                    ...BOT_SKINS.slice(0, botsForLevel(level)).map((b) => matchWins[b]),
+                  ),
+                })}
               </p>
             </>
           )}
           {phase === "failed" && (
             <>
               <div className="text-[18px] font-bold text-[var(--tt-accent-error)]">
-                Level Failed
+                {messages.levelFailed}
               </div>
               <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
-                Level {level} ✗
+                {messages.level} {level} ✗
               </div>
               <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
-                A bot reached {WINS_TO_PASS} wins first. Try again!
+                {formatMessage(messages.levelFailedBody, { wins: WINS_TO_PASS })}
               </p>
             </>
           )}
           {phase === "menu" && (
             <>
-              <div className="text-[18px] font-bold text-[var(--tt-text-secondary)]">
-                Tile Turf
-              </div>
+              <div className="text-[18px] font-bold text-[var(--tt-text-secondary)]">Tile Turf</div>
               <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
-                Select Level
+                {messages.selectLevel}
               </div>
               <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
-                Pick an unlocked level or continue from the latest one.
+                {messages.pickLevel}
               </p>
             </>
           )}
@@ -2611,6 +2624,8 @@ export function IsoGrid() {
             {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map((lv) => {
               const locked = lv > unlocked;
               const isCurrent = lv === level && phase !== "menu";
+              const bots = botsForLevel(lv);
+              const botWord = bots === 1 ? messages.botSingular : messages.botPlural;
               return (
                 <button
                   key={lv}
@@ -2628,13 +2643,13 @@ export function IsoGrid() {
                   }`}
                   title={
                     locked
-                      ? "Locked"
-                      : `Level ${lv} · ${botsForLevel(lv)} bot${botsForLevel(lv) > 1 ? "s" : ""}`
+                      ? messages.levelLocked
+                      : formatMessage(messages.levelTitle, { level: lv, bots, botWord })
                   }
                   aria-label={
                     locked
-                      ? `Level ${lv} locked`
-                      : `Start level ${lv}, ${botsForLevel(lv)} bot${botsForLevel(lv) > 1 ? "s" : ""}`
+                      ? formatMessage(messages.levelLockedLabel, { level: lv })
+                      : formatMessage(messages.startLevelLabel, { level: lv, bots, botWord })
                   }
                 >
                   {locked ? "🔒" : lv}
@@ -2644,8 +2659,7 @@ export function IsoGrid() {
           </div>
 
           <div className="mt-6 text-[18px] text-[var(--tt-text-secondary)]">
-            Jump across neighboring tiles to paint them. Grab chests to turn your painted turf into
-            round points.
+            {messages.levelIntro}
           </div>
 
           <div className="mt-6 flex gap-3">
@@ -2655,11 +2669,13 @@ export function IsoGrid() {
                 onClick={() => startLevel(level + 1)}
                 className="tt-button tt-button-success flex-1"
               >
-                Next Level
+                {messages.nextLevel}
               </button>
             )}
             {phase === "passed" && level >= MAX_LEVEL && (
-              <div className="tt-button tt-button-warning flex-1">🏆 All Levels Cleared!</div>
+              <div className="tt-button tt-button-warning flex-1">
+                🏆 {messages.allLevelsCleared}
+              </div>
             )}
             {phase === "failed" && (
               <button
@@ -2667,7 +2683,7 @@ export function IsoGrid() {
                 onClick={() => startLevel(level)}
                 className="tt-button tt-button-error flex-1"
               >
-                Retry Level {level}
+                {formatMessage(messages.retryLevel, { level })}
               </button>
             )}
             {phase === "menu" && (
@@ -2676,7 +2692,7 @@ export function IsoGrid() {
                 onClick={() => startLevel(unlocked)}
                 className="tt-button tt-button-success flex-1"
               >
-                Play Level {unlocked}
+                {formatMessage(messages.playLevel, { level: unlocked })}
               </button>
             )}
           </div>
@@ -2695,25 +2711,62 @@ function GameplayTutorial({
   target: GameplayTutorialTarget;
   onConfirm: () => void;
 }) {
-  const copy = GAMEPLAY_TUTORIAL_COPY[step];
-  const viewportW = typeof window === "undefined" ? 1024 : window.innerWidth;
-  const viewportH = typeof window === "undefined" ? 768 : window.innerHeight;
-  const modalW = Math.min(340, Math.max(280, viewportW - 32));
-  const modalH = 190;
+  const messages = useMessages();
+  const copy = messages.tutorial[step];
+  const [viewport, setViewport] = useState(() => ({
+    width: typeof window === "undefined" ? 1024 : window.innerWidth,
+    height: typeof window === "undefined" ? 768 : window.innerHeight,
+  }));
+
+  useEffect(() => {
+    const updateViewport = () =>
+      setViewport({
+        width: window.visualViewport?.width ?? window.innerWidth,
+        height: window.visualViewport?.height ?? window.innerHeight,
+      });
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    window.visualViewport?.addEventListener("resize", updateViewport);
+    return () => {
+      window.removeEventListener("resize", updateViewport);
+      window.visualViewport?.removeEventListener("resize", updateViewport);
+    };
+  }, []);
+
+  const viewportW = viewport.width;
+  const viewportH = viewport.height;
+  const useMobileLayout =
+    viewportW <= 768 ||
+    (typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      (window.matchMedia("(pointer: coarse)").matches ||
+        window.matchMedia("(hover: none)").matches));
+  const viewportPadding = 16;
+  const modalW = Math.max(1, Math.min(340, viewportW - viewportPadding * 2));
+  const estimatedModalH = Math.min(230, Math.max(1, viewportH - viewportPadding * 2));
   const gap = 22;
   const targetX = target?.x ?? viewportW / 2;
   const targetY = target?.y ?? viewportH / 2;
   const radius = target?.radius ?? 96;
-  const modalLeft =
+  const preferredModalLeft =
     targetX + radius + modalW + gap < viewportW
       ? targetX + radius + gap
       : targetX - radius - modalW - gap > 0
         ? targetX - radius - modalW - gap
         : (viewportW - modalW) / 2;
+  const modalLeft = useMobileLayout
+    ? Math.max(viewportPadding, (viewportW - modalW) / 2)
+    : Math.min(
+        Math.max(viewportPadding, preferredModalLeft),
+        Math.max(viewportPadding, viewportW - modalW - viewportPadding),
+      );
   const modalTop = Math.min(
-    viewportH - modalH - 16,
-    Math.max(16, targetY - Math.round(modalH / 2)),
+    Math.max(viewportPadding, viewportH - estimatedModalH - viewportPadding),
+    Math.max(viewportPadding, targetY - Math.round(estimatedModalH / 2)),
   );
+  const modalMaxHeight = useMobileLayout
+    ? Math.max(1, viewportH - viewportPadding * 2)
+    : Math.max(1, viewportH - modalTop - viewportPadding);
 
   return (
     <div className="tt-no-select fixed inset-0 z-[92]" style={{ touchAction: "none" }}>
@@ -2735,8 +2788,13 @@ function GameplayTutorial({
         aria-labelledby="gameplay-tutorial-title"
         style={{
           left: modalLeft,
-          top: modalTop,
+          top: useMobileLayout ? undefined : modalTop,
+          bottom: useMobileLayout ? "calc(env(safe-area-inset-bottom, 0px) + 16px)" : undefined,
           width: modalW,
+          maxHeight: modalMaxHeight,
+          boxSizing: "border-box",
+          overflowY: "auto",
+          overscrollBehavior: "contain",
           boxShadow: "0 16px 36px rgba(0,0,0,0.34)",
         }}
       >
@@ -2751,8 +2809,12 @@ function GameplayTutorial({
           {copy.body}
         </div>
 
-        <button type="button" onClick={onConfirm} className="tt-button tt-button-warning mt-5 w-full">
-          Продолжить обучение
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="tt-button tt-button-warning mt-5 w-full"
+        >
+          {messages.tutorialContinue}
         </button>
       </div>
     </div>

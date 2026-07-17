@@ -4,11 +4,13 @@ declare global {
   interface Window {
     render_game_to_text?: () => string;
     advanceTime?: (ms: number) => string;
+    move_game_direction?: (direction: "UP" | "DOWN" | "LEFT" | "RIGHT") => string;
   }
 }
 
 const BOARD_SIZE = 8;
-const TUTORIAL_SEEN_KEY = "isogrid:tutorial:v1";
+const FIRST_LAUNCH_DONE_KEY = "isogrid:first-launch-done:v1";
+const GAMEPLAY_TUTORIAL_SEEN_KEY = "isogrid:gameplay-tutorial:v1";
 
 type Scenario = "chest" | "pause-bomb" | "bomb" | "arrow" | "bot";
 
@@ -24,7 +26,9 @@ const trackRuntimeErrors = (page: Page) => {
 const waitForGameHooks = async (page: Page, timeout = 10_000) => {
   await page.waitForFunction(
     () =>
-      typeof window.render_game_to_text === "function" && typeof window.advanceTime === "function",
+      typeof window.render_game_to_text === "function" &&
+      typeof window.advanceTime === "function" &&
+      typeof window.move_game_direction === "function",
     undefined,
     { timeout },
   );
@@ -36,9 +40,16 @@ const advanceGame = async (page: Page, ms: number) =>
   page.evaluate((duration) => window.advanceTime?.(duration) ?? "", ms);
 
 const startScenario = async (page: Page, scenario: Scenario) => {
-  await page.addInitScript((key) => {
-    window.localStorage.setItem(key, "1");
-  }, TUTORIAL_SEEN_KEY);
+  await page.addInitScript(
+    ({ firstLaunchDoneKey, tutorialSeenKey }) => {
+      window.localStorage.setItem(firstLaunchDoneKey, "1");
+      window.localStorage.setItem(tutorialSeenKey, "paint,chest,boots,bomb,arrow");
+    },
+    {
+      firstLaunchDoneKey: FIRST_LAUNCH_DONE_KEY,
+      tutorialSeenKey: GAMEPLAY_TUTORIAL_SEEN_KEY,
+    },
+  );
   await page.goto(`/?deterministic=1&scenario=${scenario}`);
   const playButton = page.getByRole("button", { name: "Play Level 1" });
   await expect(playButton).toBeVisible();
@@ -47,9 +58,13 @@ const startScenario = async (page: Page, scenario: Scenario) => {
     const ready = await waitForGameHooks(page, 2_000)
       .then(() => true)
       .catch(() => false);
-    if (ready) return;
+    if (ready) {
+      await expect(page.getByText("Get ready")).toBeHidden({ timeout: 5_000 });
+      return;
+    }
   }
   await waitForGameHooks(page);
+  await expect(page.getByText("Get ready")).toBeHidden({ timeout: 5_000 });
 };
 
 const valueLine = (text: string, key: string) => {
@@ -105,17 +120,39 @@ const moveAndAdvance = async (
   page: Page,
   key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight",
 ) => {
-  await page.keyboard.press(key);
+  const direction = {
+    ArrowUp: "UP",
+    ArrowDown: "DOWN",
+    ArrowLeft: "LEFT",
+    ArrowRight: "RIGHT",
+  } as const;
+  await page.evaluate(
+    (nextDirection) => window.move_game_direction?.(nextDirection),
+    direction[key],
+  );
   return advanceGame(page, 400);
 };
 
-test("fresh storage hydrates to level 1 and locked levels stay disabled", async ({ page }) => {
+test("fresh storage starts level 1 tutorial and locked levels stay disabled", async ({ page }) => {
   const errors = trackRuntimeErrors(page);
   await page.addInitScript(() => window.localStorage.clear());
 
   await page.goto("/");
-  await expect(page.getByRole("dialog", { name: "How to play" })).toBeVisible();
-  await page.getByRole("button", { name: "Got it" }).click();
+  await expect(page.getByRole("dialog", { name: "Paint tiles" })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate((key) => window.localStorage.getItem(key), FIRST_LAUNCH_DONE_KEY))
+    .toBe("1");
+  await page.evaluate(
+    ({ firstLaunchDoneKey, tutorialSeenKey }) => {
+      window.localStorage.setItem(firstLaunchDoneKey, "1");
+      window.localStorage.setItem(tutorialSeenKey, "paint,chest,boots,bomb,arrow");
+    },
+    {
+      firstLaunchDoneKey: FIRST_LAUNCH_DONE_KEY,
+      tutorialSeenKey: GAMEPLAY_TUTORIAL_SEEN_KEY,
+    },
+  );
+  await page.reload();
 
   await expect(page.getByRole("button", { name: "Play Level 1" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Level 2 locked" })).toBeDisabled();
@@ -200,7 +237,7 @@ test("seeded bot movement is deterministic", async ({ browser }) => {
   const runBotScenario = async (activeBrowser: Browser) => {
     const page = await activeBrowser.newPage();
     await startScenario(page, "bot");
-    expect(valueLine(await renderGame(page), "bots")).toContain("girl:7,7");
+    expect(valueLine(await renderGame(page), "bots")).toContain("banana:7,7");
     const text = await advanceGame(page, 2000);
     await page.close();
     return text;
@@ -211,5 +248,5 @@ test("seeded bot movement is deterministic", async ({ browser }) => {
 
   expect(valueLine(first, "bots")).toBe(valueLine(second, "bots"));
   expect(first).toBe(second);
-  expect(valueLine(first, "bots")).not.toContain("girl:7,7");
+  expect(valueLine(first, "bots")).not.toContain("banana:7,7");
 });
