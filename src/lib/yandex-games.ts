@@ -25,6 +25,8 @@ type YandexGamesSdk = {
     LoadingAPI?: LoadingApi;
     GameplayAPI?: GameplayApi;
   };
+  on?: (event: "game_api_pause" | "game_api_resume", callback: () => void) => void;
+  off?: (event: "game_api_pause" | "game_api_resume", callback: () => void) => void;
   getPlayer?: (options?: { scopes?: boolean }) => Promise<YandexPlayer>;
 };
 
@@ -53,11 +55,24 @@ let sdkPromise: Promise<YandexGamesSdk | null> | null = null;
 let playerPromise: Promise<YandexPlayer | null> | null = null;
 let loadingReadySent = false;
 let gameplayActive = false;
+let platformPaused = false;
+const platformPauseListeners = new Set<(paused: boolean) => void>();
 let saveChain = Promise.resolve();
 let cachedProgress: YandexProgress = {};
 
 const warn = (message: string, error: unknown) => {
   if (import.meta.env.DEV) console.warn(message, error);
+};
+
+const setPlatformPaused = (paused: boolean) => {
+  if (platformPaused === paused) return;
+  platformPaused = paused;
+  for (const listener of platformPauseListeners) listener(paused);
+};
+
+const attachPlatformPauseEvents = (sdk: YandexGamesSdk) => {
+  sdk.on?.("game_api_pause", () => setPlatformPaused(true));
+  sdk.on?.("game_api_resume", () => setPlatformPaused(false));
 };
 
 export const getYandexSdk = () => {
@@ -67,6 +82,7 @@ export const getYandexSdk = () => {
       await window.__yandexSdkScriptReady;
       if (!window.YaGames) throw new Error("Yandex Games SDK is not available.");
       const sdk = await window.YaGames.init();
+      attachPlatformPauseEvents(sdk);
       const lang = sdk.environment?.i18n?.lang;
       if (lang) setAppLocale(resolveLocale(lang));
       return sdk;
@@ -158,6 +174,21 @@ export const useYandexGameplay = (active: boolean) => {
     setYandexGameplayActive(active && visible);
     return () => setYandexGameplayActive(false);
   }, [active, visible]);
+};
+
+export const useYandexPlatformPaused = () => {
+  const [paused, setPaused] = useState(platformPaused);
+
+  useEffect(() => {
+    platformPauseListeners.add(setPaused);
+    setPaused(platformPaused);
+    void getYandexSdk();
+    return () => {
+      platformPauseListeners.delete(setPaused);
+    };
+  }, []);
+
+  return paused;
 };
 
 export const usePreventYandexContextMenu = (enabled: boolean) => {

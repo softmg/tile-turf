@@ -106,6 +106,13 @@ import {
 } from "@/game/pixi-factories";
 import { createSceneLayers, removeAndDestroy } from "@/game/scene-layers";
 import { getDeterministicTestMode } from "@/game/test-mode";
+import {
+  installGameAudioLifecycle,
+  playGameSound,
+  setGameAudioSuspended,
+  setGameMusicBlocked,
+} from "@/game/audio";
+import { useYandexGameplay, useYandexPlatformPaused } from "@/lib/yandex-games";
 
 type InertProps = { "aria-hidden"?: true; inert?: boolean };
 type GameplayTutorialStep = "paint" | "chest" | "boots" | "bomb" | "arrow";
@@ -184,6 +191,7 @@ interface IsoRoundProps {
   roundIndex: number;
   matchWins: Record<SkinId, number>;
   history: RoundHistoryEntry[];
+  externallyPaused: boolean;
   onRoundEnd: (winner: SkinId | null, banked: Record<SkinId, number>) => void;
   onExitToLevelMenu: () => void;
 }
@@ -324,6 +332,7 @@ function IsoRound({
   roundIndex,
   matchWins,
   history,
+  externallyPaused,
   onRoundEnd,
   onExitToLevelMenu,
 }: IsoRoundProps) {
@@ -396,6 +405,7 @@ function IsoRound({
     startCountdown !== null ||
     gameSceneLoading;
   const modalOpenRef = useRef(modalOpen);
+  useYandexGameplay(started && !paused && !externallyPaused && !gameOver);
   const shownGameplayTutorialRef = useRef<Record<GameplayTutorialStep, boolean>>(
     createGameplayTutorialSeenState(new Set()),
   );
@@ -476,8 +486,12 @@ function IsoRound({
     startedRef.current = started;
   }, [started]);
   useEffect(() => {
-    pausedRef.current = paused;
-  }, [paused]);
+    pausedRef.current = paused || externallyPaused;
+  }, [externallyPaused, paused]);
+  useEffect(() => {
+    setGameMusicBlocked("round-over", gameOver);
+    return () => setGameMusicBlocked("round-over", false);
+  }, [gameOver]);
   useEffect(() => {
     gameplayTutorialStepRef.current = gameplayTutorialStep;
   }, [gameplayTutorialStep]);
@@ -1305,6 +1319,7 @@ function IsoRound({
 
       const tryCollectChest = (c: Character) => {
         if (c.gx !== chest.gx || c.gy !== chest.gy) return false;
+        void playGameSound("chest");
         const gained = countOwned(c.skin.id);
         if (gained > 0) {
           bankedScores = { ...bankedScores, [c.skin.id]: bankedScores[c.skin.id] + gained };
@@ -1333,6 +1348,7 @@ function IsoRound({
 
       const explodeBomb = (bomb: Bomb) => {
         if (gameOverRef.current || destroyed || bomb.detonated) return;
+        void playGameSound("bomb");
         for (const marker of bomb.dangerMarkers) removeAndDestroy(marker);
         bomb.dangerMarkers = [];
         bomb.phase = "explosion";
@@ -1450,6 +1466,7 @@ function IsoRound({
       const tryCollectBoots = (c: Character) => {
         if (!boots) return;
         if (c.gx !== boots.gx || c.gy !== boots.gy) return;
+        void playGameSound("boots");
         removeAndDestroy(boots.gfx);
         boots = null;
         c.boostUntil = Math.max(c.boostUntil, gameNow() + BOOST_DURATION);
@@ -1542,6 +1559,7 @@ function IsoRound({
       const tryTriggerArrow = (c: Character) => {
         if (!arrow) return;
         if (c.gx !== arrow.gx || c.gy !== arrow.gy) return;
+        void playGameSound("arrow");
         const { dx, dy } = arrowPaintStep(arrow.dir);
         paintAt(c.gx, c.gy, c.skin);
         let x = c.gx + dx;
@@ -1682,6 +1700,7 @@ function IsoRound({
           elapsed: 0,
           duration: jumpDurationFor(c),
         };
+        if (c === player) void playGameSound("jump");
         return true;
       };
 
@@ -2084,6 +2103,12 @@ function IsoRound({
   );
   const topScore = banked[winner];
   const isTie = activeSkins.filter((id) => banked[id] === topScore).length > 1;
+  const roundOutcomeSoundPlayedRef = useRef(false);
+  useEffect(() => {
+    if (!gameOver || isTie || roundOutcomeSoundPlayedRef.current) return;
+    roundOutcomeSoundPlayedRef.current = true;
+    void playGameSound(winner === PLAYER_SKIN ? "win" : "lose");
+  }, [gameOver, isTie, winner]);
 
   const backgroundInertProps = inertBackgroundProps(modalOpen);
 
@@ -2463,6 +2488,26 @@ export function IsoGrid() {
   const [roundIdx, setRoundIdx] = useState(0);
   const [lastWinnerName, setLastWinnerName] = useState<string>("");
   const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
+  const [pageHidden, setPageHidden] = useState(false);
+  const yandexPaused = useYandexPlatformPaused();
+  const externallyPaused = pageHidden || yandexPaused;
+
+  useEffect(() => installGameAudioLifecycle(), []);
+  useEffect(() => {
+    const syncVisibility = () => setPageHidden(document.visibilityState === "hidden");
+    document.addEventListener("visibilitychange", syncVisibility);
+    syncVisibility();
+    return () => document.removeEventListener("visibilitychange", syncVisibility);
+  }, []);
+  useEffect(() => {
+    setGameAudioSuspended("yandex-platform", yandexPaused);
+    return () => setGameAudioSuspended("yandex-platform", false);
+  }, [yandexPaused]);
+  useEffect(() => {
+    const isMatchOver = phase === "passed" || phase === "failed";
+    setGameMusicBlocked("match-over", isMatchOver);
+    return () => setGameMusicBlocked("match-over", false);
+  }, [phase]);
 
   const startLevel = useCallback((lv: number) => {
     setLevel(lv);
@@ -2535,6 +2580,7 @@ export function IsoGrid() {
         roundIndex={roundIdx}
         matchWins={matchWins}
         history={history}
+        externallyPaused={externallyPaused}
         onRoundEnd={handleRoundEnd}
         onExitToLevelMenu={showLevelMenu}
       />
