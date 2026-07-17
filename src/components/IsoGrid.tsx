@@ -106,13 +106,10 @@ import {
 } from "@/game/pixi-factories";
 import { createSceneLayers, removeAndDestroy } from "@/game/scene-layers";
 import { getDeterministicTestMode } from "@/game/test-mode";
-import {
-  installGameAudioLifecycle,
-  playGameSound,
-  setGameAudioSuspended,
-  setGameMusicBlocked,
-} from "@/game/audio";
-import { useYandexGameplay, useYandexPlatformPaused } from "@/lib/yandex-games";
+import { playGameSound, setGameMusicBlocked } from "@/game/audio";
+import { useGamePlatformLifecycle } from "@/game/use-game-platform-lifecycle";
+import { formatMessage, skinName, useMessages } from "@/lib/i18n";
+import { useYandexGameplay } from "@/lib/yandex-games";
 
 type InertProps = { "aria-hidden"?: true; inert?: boolean };
 type GameplayTutorialStep = "paint" | "chest" | "boots" | "bomb" | "arrow";
@@ -120,29 +117,6 @@ type GameplayTutorialTarget = { x: number; y: number; radius: number } | null;
 
 const inertBackgroundProps = (isInert: boolean): InertProps =>
   isInert ? { "aria-hidden": true, inert: true } : {};
-
-const GAMEPLAY_TUTORIAL_COPY: Record<GameplayTutorialStep, { title: string; body: string }> = {
-  paint: {
-    title: "Закрашивай клетки",
-    body: "Прыгай по соседним клеткам. Твой цвет приносит очки.",
-  },
-  chest: {
-    title: "Бери сундук",
-    body: "Он превращает закрашенные клетки в очки раунда.",
-  },
-  boots: {
-    title: "Бери ботинки",
-    body: "Они ненадолго ускоряют прыжки.",
-  },
-  bomb: {
-    title: "Остерегайся бомб",
-    body: "Взрыв оглушает и сбрасывает твой цвет.",
-  },
-  arrow: {
-    title: "Лови стрелку",
-    body: "Она закрашивает целый ряд клеток.",
-  },
-};
 
 const PAINT_TUTORIAL_STEP_MS = 520;
 const GAMEPLAY_TUTORIAL_STEPS: GameplayTutorialStep[] = [
@@ -182,6 +156,7 @@ declare global {
   interface Window {
     render_game_to_text?: () => string;
     advanceTime?: (ms: number) => string;
+    move_game_direction?: (direction: Direction) => string;
     __HOP_AND_FILL_MANUAL_TICKER__?: boolean;
   }
 }
@@ -299,35 +274,35 @@ const arrowPaintStep = (dir: number) => {
 const ISO_DIRECTION_CONTROLS = [
   {
     direction: "LEFT",
-    label: "Turn up-left",
+    labelKey: "turnUpLeft",
     key: "A",
     Icon: ArrowUpLeft,
     className: "tt-direction-button-up-left",
   },
   {
     direction: "UP",
-    label: "Turn up-right",
+    labelKey: "turnUpRight",
     key: "W",
     Icon: ArrowUpRight,
     className: "tt-direction-button-up-right",
   },
   {
     direction: "DOWN",
-    label: "Turn down-left",
+    labelKey: "turnDownLeft",
     key: "S",
     Icon: ArrowDownLeft,
     className: "tt-direction-button-down-left",
   },
   {
     direction: "RIGHT",
-    label: "Turn down-right",
+    labelKey: "turnDownRight",
     key: "D",
     Icon: ArrowDownRight,
     className: "tt-direction-button-down-right",
   },
 ] satisfies Array<{
   direction: Direction;
-  label: string;
+  labelKey: "turnUpLeft" | "turnUpRight" | "turnDownLeft" | "turnDownRight";
   key: string;
   Icon: typeof ArrowUpLeft;
   className: string;
@@ -342,11 +317,12 @@ function IsoRound({
   onRoundEnd,
   onExitToLevelMenu,
 }: IsoRoundProps) {
+  const messages = useMessages();
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const [zoom, setZoom] = useState(1);
   const debug = import.meta.env.DEV && DEBUG_HUD_ENABLED;
-  const [renderError, setRenderError] = useState<string | null>(null);
+  const [renderError, setRenderError] = useState<"renderer" | null>(null);
   const canShowDebug = debug;
   const debugRef = useRef(false);
   const [stats, setStats] = useState({
@@ -392,7 +368,9 @@ function IsoRound({
   const botCountRef = useRef(botCount);
   const levelRef = useRef(level);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [gameplayTutorialStep, setGameplayTutorialStep] = useState<GameplayTutorialStep | null>(null);
+  const [gameplayTutorialStep, setGameplayTutorialStep] = useState<GameplayTutorialStep | null>(
+    null,
+  );
   const [gameplayTutorialTarget, setGameplayTutorialTarget] =
     useState<GameplayTutorialTarget>(null);
   const gameplayTutorialStepRef = useRef<GameplayTutorialStep | null>(null);
@@ -503,6 +481,7 @@ function IsoRound({
   }, [gameplayTutorialStep]);
   useEffect(() => {
     if (
+      externallyPaused ||
       startCountdown === null ||
       !gameSceneReady ||
       settingsOpen ||
@@ -524,7 +503,15 @@ function IsoRound({
     }, 500);
 
     return () => window.clearTimeout(timer);
-  }, [gameOver, gameSceneReady, gameplayTutorialStep, renderError, settingsOpen, startCountdown]);
+  }, [
+    externallyPaused,
+    gameOver,
+    gameSceneReady,
+    gameplayTutorialStep,
+    renderError,
+    settingsOpen,
+    startCountdown,
+  ]);
   useEffect(() => {
     const seen = readInitialGameplayTutorialSeen();
     shownGameplayTutorialRef.current = seen;
@@ -688,7 +675,7 @@ function IsoRound({
         });
       } catch (err) {
         console.error("[IsoGrid] Pixi init failed", err);
-        setRenderError("Game renderer could not start. Return to the level menu and try again.");
+        setRenderError("renderer");
         return;
       }
       appInitialized = true;
@@ -781,9 +768,9 @@ function IsoRound({
       const paintTutorialCellSet = () => {
         return [
           { gx: player.gx, gy: player.gy },
-          ...DIRECTIONS.map((direction) => nextGridPosition(player.gx, player.gy, direction)).filter(
-            (cell) => isInsideBoard(cell.gx, cell.gy),
-          ),
+          ...DIRECTIONS.map((direction) =>
+            nextGridPosition(player.gx, player.gy, direction),
+          ).filter((cell) => isInsideBoard(cell.gx, cell.gy)),
         ];
       };
       const restoreTutorialPaintTiles = () => {
@@ -791,8 +778,7 @@ function IsoRound({
           const owner = owners[cell.gx][cell.gy];
           if (owner) {
             tiles[cell.gx][cell.gy].paint(SKINS[owner], performance.now(), { immediate: true });
-          }
-          else tiles[cell.gx][cell.gy].resetToUnpainted();
+          } else tiles[cell.gx][cell.gy].resetToUnpainted();
         }
         paintTutorialCells = [];
         paintTutorialLastIndex = -1;
@@ -810,8 +796,7 @@ function IsoRound({
         }
         const nextIndex =
           Math.floor(
-            (nowMs % (paintTutorialCells.length * PAINT_TUTORIAL_STEP_MS)) /
-              PAINT_TUTORIAL_STEP_MS,
+            (nowMs % (paintTutorialCells.length * PAINT_TUTORIAL_STEP_MS)) / PAINT_TUTORIAL_STEP_MS,
           ) % paintTutorialCells.length;
         if (nextIndex === paintTutorialLastIndex) {
           for (const cell of paintTutorialCells) tiles[cell.gx][cell.gy].update(nowMs);
@@ -1293,7 +1278,7 @@ function IsoRound({
               t.resetToUnpainted();
               any = true;
             }
-        }
+          }
         if (any) minimapTilesDirty = true;
       };
 
@@ -1660,8 +1645,8 @@ function IsoRound({
             miniEnemies.push(allMiniEnemies[i]);
             const strategy =
               BOT_STRATEGY_BY_SKIN_OVERRIDE[allEnemies[i].skin.id] ??
-                BOT_STRATEGY_BY_SLOT[i] ??
-                "chest";
+              BOT_STRATEGY_BY_SLOT[i] ??
+              "chest";
             botStrategies.set(allEnemies[i], strategy);
             setBotScoreText(allEnemies[i], bankedScores[allEnemies[i].skin.id], true);
             land(allEnemies[i]);
@@ -1928,6 +1913,10 @@ function IsoRound({
 
       window.render_game_to_text = renderGameToText;
       window.advanceTime = advanceTime;
+      window.move_game_direction = (direction) => {
+        movePlayer(direction);
+        return renderGameToText();
+      };
 
       let lastAutoMoveTime = -Infinity;
       let lastDirectionVersion = directionVersionRef.current;
@@ -2070,7 +2059,7 @@ function IsoRound({
     })().catch((err) => {
       if (destroyed) return;
       console.error("[IsoGrid] Pixi setup failed", err);
-      setRenderError("Game renderer could not start. Return to the level menu and try again.");
+      setRenderError("renderer");
     });
 
     return () => {
@@ -2087,6 +2076,7 @@ function IsoRound({
       }
       if (window.render_game_to_text) delete window.render_game_to_text;
       if (window.advanceTime) delete window.advanceTime;
+      if (window.move_game_direction) delete window.move_game_direction;
       destroyPixiApp();
     };
   }, [
@@ -2139,7 +2129,7 @@ function IsoRound({
             role="alert"
             className="tt-dialog max-w-sm px-8 py-6 text-center text-[18px] font-bold"
           >
-            {renderError}
+            {messages.renderError}
           </div>
         </div>
       )}
@@ -2153,7 +2143,7 @@ function IsoRound({
           <div className="tt-dialog px-8 py-6 text-center">
             <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-[rgba(112,98,80,0.22)] border-t-[var(--tt-text-primary)]" />
             <div className="mt-4 text-[18px] font-bold text-[var(--tt-text-primary)]">
-              Loading field
+              {messages.loadingField}
             </div>
           </div>
         </div>
@@ -2167,7 +2157,7 @@ function IsoRound({
         >
           <div className="text-center">
             <div className="text-[18px] font-bold uppercase tracking-[0.18em] text-[var(--tt-text-secondary)]">
-              Get ready
+              {messages.getReady}
             </div>
             <div
               key={startCountdown}
@@ -2247,13 +2237,16 @@ function IsoRound({
         }}
       >
         <div className="text-[12px] font-bold text-[var(--tt-text-secondary)]">
-          Lvl {level} · BO{WINS_TO_PASS * 2 - 1}
+          {messages.levelShort} {level} · {messages.bestOf}
+          {WINS_TO_PASS * 2 - 1}
         </div>
         <div className="flex items-center gap-2 mt-0.5">
-          <span style={{ color: SKINS[PLAYER_SKIN].uiColor }}>You {matchWins[PLAYER_SKIN]}</span>
-          <span className="text-[var(--tt-text-secondary)]">vs</span>
+          <span style={{ color: SKINS[PLAYER_SKIN].uiColor }}>
+            {messages.you} {matchWins[PLAYER_SKIN]}
+          </span>
+          <span className="text-[var(--tt-text-secondary)]">{messages.versus}</span>
           <span className="text-[var(--tt-text-primary)]">
-            Bots {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))}
+            {messages.bots} {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))}
           </span>
           <span className="text-[var(--tt-text-secondary)]">/ {WINS_TO_PASS}</span>
         </div>
@@ -2269,17 +2262,19 @@ function IsoRound({
             aria-labelledby="round-over-title"
           >
             <div className="text-[18px] font-semibold text-[var(--tt-text-secondary)]">
-              End of Round · Level {level}
+              {messages.endOfRound} · {messages.level} {level}
             </div>
             <div id="round-over-title" className="mt-2 text-[32px] font-bold">
               {isTie ? (
-                "It's a Tie!"
+                messages.roundTie
               ) : (
-                <span style={{ color: SKINS[winner].uiColor }}>{SKINS[winner].name} wins!</span>
+                <span style={{ color: SKINS[winner].uiColor }}>
+                  {skinName(messages, winner)} {messages.wins}
+                </span>
               )}
             </div>
             <div className="mt-6 text-left text-[18px] font-bold text-[var(--tt-text-secondary)]">
-              Match score (first to {WINS_TO_PASS})
+              {messages.matchScore} ({messages.firstTo} {WINS_TO_PASS})
             </div>
             <div className="mt-2 space-y-2 text-left">
               {activeSkins.map((id) => {
@@ -2295,12 +2290,12 @@ function IsoRound({
                         style={{ background: SKINS[id].uiColor }}
                       />
                       <span className="font-bold truncate" style={{ color: SKINS[id].uiColor }}>
-                        {SKINS[id].name}
+                        {skinName(messages, id)}
                       </span>
                     </span>
                     <span className="flex items-center gap-3">
                       <span className="text-[14px] font-semibold tabular-nums text-[var(--tt-text-secondary)]">
-                        {banked[id]} pts
+                        {banked[id]} {messages.pointsShort}
                       </span>
                       <span className="text-[22px] font-extrabold tabular-nums text-[var(--tt-text-primary)]">
                         {projectedWins}
@@ -2318,7 +2313,7 @@ function IsoRound({
               onClick={() => onRoundEnd(isTie ? null : winner, banked)}
               className="tt-button tt-button-success mt-6 w-full"
             >
-              Continue
+              {messages.continue}
             </button>
           </div>
         </div>
@@ -2335,7 +2330,7 @@ function IsoRound({
         disabled={gameOver}
         className="tt-chip tt-settings-button fixed right-4 z-50 flex h-14 w-14 items-center justify-center text-[var(--tt-text-primary)] active:scale-95 disabled:opacity-40"
         style={{ touchAction: "none", top: "calc(env(safe-area-inset-top, 0px) + 16px)" }}
-        aria-label="Settings"
+        aria-label={messages.settings}
       >
         <Settings size={24} />
       </button>
@@ -2350,32 +2345,33 @@ function IsoRound({
 
       {/* Pause overlay */}
       {settingsOpen && !gameOver && (
-        <div
-          className="tt-overlay fixed inset-0 z-[95] flex items-center justify-center p-4"
-        >
+        <div className="tt-overlay fixed inset-0 z-[95] flex items-center justify-center p-4">
           <div
             className="tt-dialog w-full max-w-md px-8 py-7 text-center"
             role="dialog"
             aria-modal="true"
             aria-labelledby="pause-title"
           >
-            <div className="text-[18px] font-semibold text-[var(--tt-text-secondary)]">Paused</div>
+            <div className="text-[18px] font-semibold text-[var(--tt-text-secondary)]">
+              {messages.paused}
+            </div>
             <div id="pause-title" className="mt-1 text-[32px] font-bold">
-              Level {level}
+              {messages.level} {level}
             </div>
             <div className="mt-4 text-[18px] text-[var(--tt-text-secondary)]">
-              Bots: <span className="font-bold text-[var(--tt-text-primary)]">{botCount}</span> ·
-              Detour{" "}
+              {messages.bots}:{" "}
+              <span className="font-bold text-[var(--tt-text-primary)]">{botCount}</span> ·{" "}
+              {messages.detour}{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
                 {Math.round(suboptimalRouteChance * 100)}%
               </span>{" "}
-              · React{" "}
+              · {messages.reaction}{" "}
               <span className="font-bold text-[var(--tt-text-primary)]">
                 {botTargetReactionDelayForLevel(level)}ms
               </span>
             </div>
             <div className="mt-3 text-[18px] text-[var(--tt-text-secondary)]">
-              Match: You {matchWins[PLAYER_SKIN]} — Bots{" "}
+              {messages.match}: {messages.you} {matchWins[PLAYER_SKIN]} — {messages.bots}{" "}
               {Math.max(0, ...activeBotSkins.map((b) => matchWins[b]))} / {WINS_TO_PASS}
             </div>
 
@@ -2387,19 +2383,17 @@ function IsoRound({
               }}
               className="tt-button tt-button-success mt-6 w-full gap-2"
             >
-              <Play size={16} fill="currentColor" /> Resume
+              <Play size={16} fill="currentColor" /> {messages.resume}
             </button>
             <button
               type="button"
               onClick={() => {
-                const confirmed = window.confirm(
-                  "Leave this match? Your current round wins and match history will be lost.",
-                );
+                const confirmed = window.confirm(messages.confirmExitMatch);
                 if (confirmed) onExitToLevelMenu();
               }}
               className="tt-button tt-button-secondary mt-3 w-full"
             >
-              Exit to Level Select
+              {messages.exitToLevelSelect}
             </button>
           </div>
         </div>
@@ -2419,7 +2413,7 @@ function IsoRound({
           value={zoom}
           onChange={(e) => setZoom(parseFloat(e.target.value))}
           className="w-32 accent-[var(--tt-accent-primary)]"
-          aria-label="Zoom"
+          aria-label={messages.zoom}
         />
       </div>
 
@@ -2427,16 +2421,16 @@ function IsoRound({
         {...backgroundInertProps}
         className="tt-direction-pad fixed left-1/2 z-50 -translate-x-1/2"
         style={{ touchAction: "none" }}
-        aria-label="Movement direction"
+        aria-label={messages.movementDirection}
       >
-        {ISO_DIRECTION_CONTROLS.map(({ direction, label, key, Icon, className }) => {
+        {ISO_DIRECTION_CONTROLS.map(({ direction, labelKey, key, Icon, className }) => {
           const active = selectedDirection === direction;
           return (
             <button
               key={direction}
               type="button"
               onClick={() => selectDirection(direction)}
-              aria-label={label}
+              aria-label={messages[labelKey]}
               aria-pressed={active}
               className={`${className} tt-direction-button ${
                 active ? "tt-direction-button-active" : ""
@@ -2489,33 +2483,14 @@ function IsoRound({
 // ============= Level Manager Wrapper =============
 
 export function IsoGrid() {
+  const messages = useMessages();
   const [unlocked, setUnlocked] = useState<number>(1);
   const [level, setLevel] = useState<number>(1);
   const [matchWins, setMatchWins] = useState<Record<SkinId, number>>(() => zeroScores());
   const [phase, setPhase] = useState<"menu" | "playing" | "passed" | "failed">("menu");
   const [roundIdx, setRoundIdx] = useState(0);
-  const [lastWinnerName, setLastWinnerName] = useState<string>("");
   const [history, setHistory] = useState<RoundHistoryEntry[]>([]);
-  const [pageHidden, setPageHidden] = useState(false);
-  const yandexPaused = useYandexPlatformPaused();
-  const externallyPaused = pageHidden || yandexPaused;
-
-  useEffect(() => installGameAudioLifecycle(), []);
-  useEffect(() => {
-    const syncVisibility = () => setPageHidden(document.visibilityState === "hidden");
-    document.addEventListener("visibilitychange", syncVisibility);
-    syncVisibility();
-    return () => document.removeEventListener("visibilitychange", syncVisibility);
-  }, []);
-  useEffect(() => {
-    setGameAudioSuspended("yandex-platform", yandexPaused);
-    return () => setGameAudioSuspended("yandex-platform", false);
-  }, [yandexPaused]);
-  useEffect(() => {
-    const isMatchOver = phase === "passed" || phase === "failed";
-    setGameMusicBlocked("match-over", isMatchOver);
-    return () => setGameMusicBlocked("match-over", false);
-  }, [phase]);
+  const externallyPaused = useGamePlatformLifecycle(phase === "passed" || phase === "failed");
 
   const startLevel = useCallback((lv: number) => {
     setLevel(lv);
@@ -2560,8 +2535,6 @@ export function IsoGrid() {
     const bots = BOT_SKINS.slice(0, botsForLevel(level));
     const playerW = next[PLAYER_SKIN];
     const botMax = Math.max(0, ...bots.map((b) => next[b]));
-    setLastWinnerName(winner ? SKINS[winner].name : "Tie");
-
     const newHistory = [...history, { level, round: history.length + 1, winner, scores: banked }];
     setHistory(newHistory);
 
@@ -2597,9 +2570,7 @@ export function IsoGrid() {
 
   return (
     <>
-      <div
-        className="tt-overlay fixed inset-0 z-[80] flex items-center justify-center p-4"
-      >
+      <div className="tt-overlay fixed inset-0 z-[80] flex items-center justify-center p-4">
         <div
           className="tt-window w-full max-w-md px-8 py-8 text-center"
           role="dialog"
@@ -2609,40 +2580,43 @@ export function IsoGrid() {
           {phase === "passed" && (
             <>
               <div className="text-[18px] font-bold text-[var(--tt-accent-success)]">
-                Level Passed
+                {messages.levelPassed}
               </div>
               <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
-                Level {level} ✓
+                {messages.level} {level} ✓
               </div>
               <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
-                You won {matchWins[PLAYER_SKIN]}–
-                {Math.max(0, ...BOT_SKINS.slice(0, botsForLevel(level)).map((b) => matchWins[b]))}.
+                {formatMessage(messages.levelPassedScore, {
+                  playerWins: matchWins[PLAYER_SKIN],
+                  botWins: Math.max(
+                    0,
+                    ...BOT_SKINS.slice(0, botsForLevel(level)).map((b) => matchWins[b]),
+                  ),
+                })}
               </p>
             </>
           )}
           {phase === "failed" && (
             <>
               <div className="text-[18px] font-bold text-[var(--tt-accent-error)]">
-                Level Failed
+                {messages.levelFailed}
               </div>
               <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
-                Level {level} ✗
+                {messages.level} {level} ✗
               </div>
               <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
-                A bot reached {WINS_TO_PASS} wins first. Try again!
+                {formatMessage(messages.levelFailedBody, { wins: WINS_TO_PASS })}
               </p>
             </>
           )}
           {phase === "menu" && (
             <>
-              <div className="text-[18px] font-bold text-[var(--tt-text-secondary)]">
-                Tile Turf
-              </div>
+              <div className="text-[18px] font-bold text-[var(--tt-text-secondary)]">Tile Turf</div>
               <div id="level-menu-title" className="mt-1 text-[32px] font-bold">
-                Select Level
+                {messages.selectLevel}
               </div>
               <p className="mt-2 text-[18px] text-[var(--tt-text-secondary)]">
-                Pick an unlocked level or continue from the latest one.
+                {messages.pickLevel}
               </p>
             </>
           )}
@@ -2650,6 +2624,8 @@ export function IsoGrid() {
             {Array.from({ length: MAX_LEVEL }, (_, i) => i + 1).map((lv) => {
               const locked = lv > unlocked;
               const isCurrent = lv === level && phase !== "menu";
+              const bots = botsForLevel(lv);
+              const botWord = bots === 1 ? messages.botSingular : messages.botPlural;
               return (
                 <button
                   key={lv}
@@ -2667,13 +2643,13 @@ export function IsoGrid() {
                   }`}
                   title={
                     locked
-                      ? "Locked"
-                      : `Level ${lv} · ${botsForLevel(lv)} bot${botsForLevel(lv) > 1 ? "s" : ""}`
+                      ? messages.levelLocked
+                      : formatMessage(messages.levelTitle, { level: lv, bots, botWord })
                   }
                   aria-label={
                     locked
-                      ? `Level ${lv} locked`
-                      : `Start level ${lv}, ${botsForLevel(lv)} bot${botsForLevel(lv) > 1 ? "s" : ""}`
+                      ? formatMessage(messages.levelLockedLabel, { level: lv })
+                      : formatMessage(messages.startLevelLabel, { level: lv, bots, botWord })
                   }
                 >
                   {locked ? "🔒" : lv}
@@ -2683,8 +2659,7 @@ export function IsoGrid() {
           </div>
 
           <div className="mt-6 text-[18px] text-[var(--tt-text-secondary)]">
-            Jump across neighboring tiles to paint them. Grab chests to turn your painted turf into
-            round points.
+            {messages.levelIntro}
           </div>
 
           <div className="mt-6 flex gap-3">
@@ -2694,11 +2669,13 @@ export function IsoGrid() {
                 onClick={() => startLevel(level + 1)}
                 className="tt-button tt-button-success flex-1"
               >
-                Next Level
+                {messages.nextLevel}
               </button>
             )}
             {phase === "passed" && level >= MAX_LEVEL && (
-              <div className="tt-button tt-button-warning flex-1">🏆 All Levels Cleared!</div>
+              <div className="tt-button tt-button-warning flex-1">
+                🏆 {messages.allLevelsCleared}
+              </div>
             )}
             {phase === "failed" && (
               <button
@@ -2706,7 +2683,7 @@ export function IsoGrid() {
                 onClick={() => startLevel(level)}
                 className="tt-button tt-button-error flex-1"
               >
-                Retry Level {level}
+                {formatMessage(messages.retryLevel, { level })}
               </button>
             )}
             {phase === "menu" && (
@@ -2715,7 +2692,7 @@ export function IsoGrid() {
                 onClick={() => startLevel(unlocked)}
                 className="tt-button tt-button-success flex-1"
               >
-                Play Level {unlocked}
+                {formatMessage(messages.playLevel, { level: unlocked })}
               </button>
             )}
           </div>
@@ -2734,7 +2711,8 @@ function GameplayTutorial({
   target: GameplayTutorialTarget;
   onConfirm: () => void;
 }) {
-  const copy = GAMEPLAY_TUTORIAL_COPY[step];
+  const messages = useMessages();
+  const copy = messages.tutorial[step];
   const [viewport, setViewport] = useState(() => ({
     width: typeof window === "undefined" ? 1024 : window.innerWidth,
     height: typeof window === "undefined" ? 768 : window.innerHeight,
@@ -2811,9 +2789,7 @@ function GameplayTutorial({
         style={{
           left: modalLeft,
           top: useMobileLayout ? undefined : modalTop,
-          bottom: useMobileLayout
-            ? "calc(env(safe-area-inset-bottom, 0px) + 16px)"
-            : undefined,
+          bottom: useMobileLayout ? "calc(env(safe-area-inset-bottom, 0px) + 16px)" : undefined,
           width: modalW,
           maxHeight: modalMaxHeight,
           boxSizing: "border-box",
@@ -2833,8 +2809,12 @@ function GameplayTutorial({
           {copy.body}
         </div>
 
-        <button type="button" onClick={onConfirm} className="tt-button tt-button-warning mt-5 w-full">
-          Продолжить обучение
+        <button
+          type="button"
+          onClick={onConfirm}
+          className="tt-button tt-button-warning mt-5 w-full"
+        >
+          {messages.tutorialContinue}
         </button>
       </div>
     </div>

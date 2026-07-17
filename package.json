@@ -14,7 +14,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "validate:yandex": "node scripts/validate-yandex-build.js",
-    "package:yandex": "npm run typecheck && npm run build:yandex && npm run validate:yandex && node scripts/package-yandex.js && node scripts/validate-yandex-archive.js"
+    "package:yandex": "node scripts/run-yandex-package.js"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

@@ -6,10 +6,14 @@ import process from "node:process";
 const isWindows = process.platform === "win32";
 
 const resolveCommand = (command) => {
-  const result = spawnSync(isWindows ? "where" : "command", isWindows ? [command] : ["-v", command], {
-    encoding: "utf8",
-    shell: !isWindows,
-  });
+  const result = spawnSync(
+    isWindows ? "where" : "command",
+    isWindows ? [command] : ["-v", command],
+    {
+      encoding: "utf8",
+      shell: !isWindows,
+    },
+  );
   if (result.status !== 0) return null;
   return result.stdout
     .split(/\r?\n/)
@@ -22,10 +26,10 @@ const npmCommand = resolveCommand(isWindows ? "npm.cmd" : "npm");
 const npmCli = npmCommand
   ? path.join(path.dirname(npmCommand), "node_modules", "npm", "bin", "npm-cli.js")
   : null;
-const scriptRunner = bunCommand ?? (npmCli && existsSync(npmCli) ? process.execPath : npmCommand);
-const scriptRunnerPrefix = bunCommand ? [] : npmCli && existsSync(npmCli) ? [npmCli] : [];
+const npmCliAvailable = Boolean(npmCli && existsSync(npmCli));
+const windowsCommandProcessor = process.env.ComSpec ?? "cmd.exe";
 
-if (!scriptRunner) {
+if (!bunCommand && !npmCliAvailable && !npmCommand) {
   console.error("Neither bun nor npm was found in PATH.");
   process.exit(1);
 }
@@ -41,10 +45,28 @@ const run = (command, args, options = {}) => {
   if (result.status !== 0) process.exit(result.status ?? 1);
 };
 
+const quoteWindowsCommandArgument = (value) => `"${value.replaceAll('"', '""')}"`;
+const runPackageScript = (scriptName) => {
+  if (bunCommand) {
+    run(bunCommand, ["run", scriptName]);
+    return;
+  }
+  if (npmCliAvailable) {
+    run(process.execPath, [npmCli, "run", scriptName]);
+    return;
+  }
+  if (isWindows && npmCommand) {
+    const commandLine = `${quoteWindowsCommandArgument(npmCommand)} run ${quoteWindowsCommandArgument(scriptName)}`;
+    run(windowsCommandProcessor, ["/d", "/s", "/c", commandLine]);
+    return;
+  }
+  run(npmCommand, ["run", scriptName]);
+};
+
 console.log(`Packaging Yandex build with ${scriptRunnerLabel}.`);
 
-run(scriptRunner, [...scriptRunnerPrefix, "run", "typecheck"]);
-run(scriptRunner, [...scriptRunnerPrefix, "run", "build:yandex"]);
-run(scriptRunner, [...scriptRunnerPrefix, "run", "validate:yandex"]);
+runPackageScript("typecheck");
+runPackageScript("build:yandex");
+runPackageScript("validate:yandex");
 run(process.execPath, ["scripts/package-yandex.js"]);
 run(process.execPath, ["scripts/validate-yandex-archive.js"]);

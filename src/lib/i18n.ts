@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useSyncExternalStore } from "react";
+import type { SkinId } from "@/game/game-constants";
 
 export type Locale = "en" | "ru";
 
-type SkinId = "plush" | "banana" | "dragon" | "cat";
 type TutorialStep = "paint" | "chest" | "boots" | "bomb" | "arrow";
 
 export interface Messages {
@@ -36,9 +36,11 @@ export interface Messages {
   settings: string;
   paused: string;
   detour: string;
+  reaction: string;
   match: string;
   resume: string;
   exitToLevelSelect: string;
+  confirmExitMatch: string;
   zoom: string;
   movementDirection: string;
   turnUpLeft: string;
@@ -68,23 +70,15 @@ export interface Messages {
   tutorial: Record<TutorialStep, { title: string; body: string }>;
 }
 
-const localeChangeEvent = "tile-turf:locale-change";
 const isYandexBuild = import.meta.env.MODE === "yandex";
+const localeListeners = new Set<() => void>();
 
 export const resolveLocale = (value: string | undefined | null): Locale => {
   const normalized = value?.toLowerCase() ?? "";
   return normalized.startsWith("ru") ? "ru" : "en";
 };
 
-const initialLocale = (): Locale => {
-  if (typeof document !== "undefined") {
-    const htmlLang = document.documentElement.lang;
-    if (htmlLang) return resolveLocale(htmlLang);
-  }
-  return "en";
-};
-
-let currentLocale = initialLocale();
+let currentLocale: Locale = "en";
 if (typeof document !== "undefined") document.documentElement.lang = currentLocale;
 
 export const setAppLocale = (locale: Locale) => {
@@ -94,25 +88,26 @@ export const setAppLocale = (locale: Locale) => {
   }
   currentLocale = locale;
   if (typeof document !== "undefined") document.documentElement.lang = locale;
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(localeChangeEvent));
+  for (const listener of localeListeners) listener();
 };
 
 export const getAppLocale = () => currentLocale;
 
 export const useLocale = () => {
-  const [locale, setLocale] = useState(currentLocale);
-
   useEffect(() => {
     if (!isYandexBuild && typeof navigator !== "undefined") {
       setAppLocale(resolveLocale(navigator.language));
-      setLocale(currentLocale);
     }
-    const onLocaleChange = () => setLocale(currentLocale);
-    window.addEventListener(localeChangeEvent, onLocaleChange);
-    return () => window.removeEventListener(localeChangeEvent, onLocaleChange);
   }, []);
 
-  return locale;
+  return useSyncExternalStore(
+    (listener) => {
+      localeListeners.add(listener);
+      return () => localeListeners.delete(listener);
+    },
+    getAppLocale,
+    (): Locale => "en",
+  );
 };
 
 const messages: Record<Locale, Messages> = {
@@ -147,9 +142,11 @@ const messages: Record<Locale, Messages> = {
     settings: "Settings",
     paused: "Paused",
     detour: "Detour",
+    reaction: "Reaction",
     match: "Match",
     resume: "Resume",
     exitToLevelSelect: "Exit to Level Select",
+    confirmExitMatch: "Leave this match? Your current round wins and match history will be lost.",
     zoom: "Zoom",
     movementDirection: "Movement direction",
     turnUpLeft: "Turn up-left",
@@ -236,9 +233,11 @@ const messages: Record<Locale, Messages> = {
     settings: "Настройки",
     paused: "Пауза",
     detour: "Обход",
+    reaction: "Реакция",
     match: "Матч",
     resume: "Продолжить",
     exitToLevelSelect: "К выбору уровня",
+    confirmExitMatch: "Выйти из матча? Победы в текущем матче и история раундов будут потеряны.",
     zoom: "Масштаб",
     movementDirection: "Направление движения",
     turnUpLeft: "Повернуть вверх-влево",

@@ -26,12 +26,14 @@ const SOUND_URLS: Record<GameSound, string> = {
 const buffers = new Map<GameSound, AudioBuffer>();
 const bufferPromises = new Map<GameSound, Promise<AudioBuffer>>();
 const activeSources = new Set<AudioBufferSourceNode>();
+const sourceGains = new WeakMap<AudioBufferSourceNode, GainNode>();
 const suspensionReasons = new Set<string>();
 const musicBlockReasons = new Set<string>();
 
 let context: AudioContext | null = null;
 let loopSource: AudioBufferSourceNode | null = null;
 let unlocked = false;
+let lifecycleUsers = 0;
 
 const getAudioContext = () => {
   if (context || typeof window === "undefined") return context;
@@ -80,6 +82,7 @@ const stopSource = (source: AudioBufferSourceNode) => {
     // A source can already be stopped by its natural onended callback.
   }
   source.disconnect();
+  sourceGains.get(source)?.disconnect();
   activeSources.delete(source);
 };
 
@@ -92,22 +95,29 @@ const canPlay = () => unlocked && context?.state === "running" && suspensionReas
 
 const startLoop = async () => {
   if (!canPlay() || musicBlockReasons.size > 0 || loopSource) return;
-  const buffer = await loadBuffer("loop");
-  if (!canPlay() || musicBlockReasons.size > 0 || loopSource || !context) return;
+  try {
+    const buffer = await loadBuffer("loop");
+    if (!canPlay() || musicBlockReasons.size > 0 || loopSource || !context) return;
 
-  const source = context.createBufferSource();
-  const gain = context.createGain();
-  source.buffer = buffer;
-  source.loop = true;
-  gain.gain.value = AUDIO_VOLUMES.master * AUDIO_VOLUMES.loop;
-  source.connect(gain).connect(context.destination);
-  source.onended = () => {
-    activeSources.delete(source);
-    if (loopSource === source) loopSource = null;
-  };
-  activeSources.add(source);
-  loopSource = source;
-  source.start();
+    const source = context.createBufferSource();
+    const gain = context.createGain();
+    source.buffer = buffer;
+    source.loop = true;
+    gain.gain.value = AUDIO_VOLUMES.master * AUDIO_VOLUMES.loop;
+    source.connect(gain).connect(context.destination);
+    sourceGains.set(source, gain);
+    source.onended = () => {
+      activeSources.delete(source);
+      if (loopSource === source) loopSource = null;
+      source.disconnect();
+      gain.disconnect();
+    };
+    activeSources.add(source);
+    loopSource = source;
+    source.start();
+  } catch (error) {
+    if (import.meta.env.DEV) console.warn("[Audio] Could not play loop", error);
+  }
 };
 
 const resumeAudio = () => {
@@ -140,9 +150,11 @@ export const playGameSound = async (sound: Exclude<GameSound, "loop">) => {
     source.buffer = buffer;
     gain.gain.value = AUDIO_VOLUMES.master * AUDIO_VOLUMES[sound];
     source.connect(gain).connect(context.destination);
+    sourceGains.set(source, gain);
     source.onended = () => {
       activeSources.delete(source);
       source.disconnect();
+      gain.disconnect();
     };
     activeSources.add(source);
     source.start();
@@ -184,6 +196,7 @@ const isInterfaceControl = (target: EventTarget | null) =>
   );
 
 export const installGameAudioLifecycle = () => {
+  lifecycleUsers += 1;
   const unlock = () => unlockGameAudio();
   const onInterfaceClick = (event: MouseEvent) => {
     unlockGameAudio();
@@ -210,5 +223,18 @@ export const installGameAudioLifecycle = () => {
     document.removeEventListener("visibilitychange", syncVisibility);
     window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("pageshow", onPageShow);
+    lifecycleUsers = Math.max(0, lifecycleUsers - 1);
+    if (lifecycleUsers > 0) return;
+
+    stopAllSources();
+    suspensionReasons.clear();
+    musicBlockReasons.clear();
+    unlocked = false;
+
+    const audioContext = context;
+    context = null;
+    if (audioContext && audioContext.state !== "closed") {
+      void audioContext.close().catch(() => undefined);
+    }
   };
 };
