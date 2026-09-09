@@ -4,10 +4,8 @@ import { routeTree } from "./routeTree.gen";
 
 export const getRouter = () => {
   const queryClient = new QueryClient();
-  const history =
-    import.meta.env.MODE === "yandex"
-      ? createMemoryHistory({ initialEntries: ["/"] })
-      : undefined;
+  const isEmbeddedBuild = import.meta.env.MODE === "yandex" || import.meta.env.MODE === "web";
+  const history = isEmbeddedBuild ? createMemoryHistory({ initialEntries: ["/"] }) : undefined;
 
   const router = createRouter({
     routeTree,

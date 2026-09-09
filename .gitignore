@@ -10,6 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-static
+dist-web
 dist-yandex
 dist-ssr
 .output
