@@ -67,7 +67,7 @@ function stripYandexReleaseUrlsPlugin(): PluginOption {
 }
 
 export default defineConfig(({ mode }) => ({
-  base: mode === "yandex" ? "./" : "/",
+  base: mode === "yandex" ? "./" : mode === "web" ? "/games/tile-turf/" : "/",
   plugins: [
     react(),
     tailwindcss(),

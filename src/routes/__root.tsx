@@ -59,7 +59,10 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             {messages.tryAgain}
           </button>
           <a
-            href="/"
+            // Встроенная сборка живёт по /games/tile-turf/, поэтому «на главную»
+            // ведёт на базовый путь сборки: href="/" увёл бы игрока с игры на
+            // лендинг студии, а внутри iframe — загрузил бы сайт внутрь игры.
+            href={import.meta.env.BASE_URL}
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
             {messages.goHome}
